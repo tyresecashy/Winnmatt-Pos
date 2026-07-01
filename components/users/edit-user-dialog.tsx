@@ -70,11 +70,14 @@ export function EditUserDialog({ open, user, onOpenChange, onUserUpdated }: Edit
   // Update form when user changes
   useEffect(() => {
     if (user) {
-      setFullName(user.full_name)
-      setRole(user.role as 'admin' | 'manager' | 'cashier')
-      setBranchId(user.branch_id || '')
-      setError(null)
-      setSuccess(false)
+      const timer = setTimeout(() => {
+        setFullName(user.full_name)
+        setRole(user.role as 'admin' | 'manager' | 'cashier')
+        setBranchId(user.branch_id || '')
+        setError(null)
+        setSuccess(false)
+      })
+      return () => clearTimeout(timer)
     }
   }, [user, open])
 

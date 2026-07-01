@@ -74,7 +74,8 @@ export default function ProductsPage() {
 
   // Reset to page 1 when filters change
   useEffect(() => {
-    setCurrentPage(1)
+    const timer = setTimeout(() => setCurrentPage(1))
+    return () => clearTimeout(timer)
   }, [deferredSearchTerm, selectedCategory])
 
   // Dialog states
@@ -519,7 +520,7 @@ export default function ProductsPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Product?</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete "{productToDelete?.name}"? This action cannot be undone.
+               Are you sure you want to delete &quot;{productToDelete?.name}&quot;? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="grid grid-cols-2 gap-4">

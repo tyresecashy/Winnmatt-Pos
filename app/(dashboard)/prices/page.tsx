@@ -40,7 +40,7 @@ export default async function PriceAuditPage() {
             All prices must be reviewed and approved before CSV imports continue
           </li>
           <li>
-            Protected prices (marked "high trust") cannot be overwritten by imports
+            Protected prices (marked &quot;high trust&quot;) cannot be overwritten by imports
           </li>
           <li>
             Critical anomalies (cost &gt; selling, extremely high prices) must be corrected

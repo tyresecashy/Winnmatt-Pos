@@ -49,12 +49,6 @@ export function StockMovementsDialog({
   const [movements, setMovements] = useState<Movement[]>([])
   const [isLoading, setIsLoading] = useState(false)
 
-  useEffect(() => {
-    if (isOpen) {
-      loadMovements()
-    }
-  }, [isOpen, product.id, branchId])
-
   const loadMovements = async () => {
     setIsLoading(true)
     try {
@@ -66,6 +60,13 @@ export function StockMovementsDialog({
       setIsLoading(false)
     }
   }
+
+  useEffect(() => {
+    if (isOpen) {
+      const timer = setTimeout(() => void loadMovements())
+      return () => clearTimeout(timer)
+    }
+  }, [isOpen, product.id, branchId])
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>

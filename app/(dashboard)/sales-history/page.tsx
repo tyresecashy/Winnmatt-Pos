@@ -71,7 +71,7 @@ export default function SalesHistoryPage() {
   }, [profile?.branch_id])
 
   useEffect(() => {
-    void loadSales({ force: true })
+    const timer = setTimeout(() => void loadSales({ force: true }))
 
     const intervalId = window.setInterval(() => {
       void loadSales({ minIntervalMs: 30000 })
@@ -84,6 +84,7 @@ export default function SalesHistoryPage() {
     window.addEventListener('focus', handleFocus)
 
     return () => {
+      clearTimeout(timer)
       window.clearInterval(intervalId)
       window.removeEventListener('focus', handleFocus)
     }

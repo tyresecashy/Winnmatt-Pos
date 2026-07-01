@@ -28,6 +28,4 @@ jobs:
 
       - run: npm test
 
-      - name: Lint check (non-blocking)
-        run: npm run lint || echo "Lint found issues — fix before merging for clean CI"
-        continue-on-error: true
+      - run: npm run lint

@@ -48,12 +48,6 @@ export function CustomerDetailsDialog({
   const [purchases, setPurchases] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(false)
 
-  useEffect(() => {
-    if (isOpen && customer?.id) {
-      loadPurchases()
-    }
-  }, [isOpen, customer?.id])
-
   const loadPurchases = async () => {
     setIsLoading(true)
     try {
@@ -65,6 +59,13 @@ export function CustomerDetailsDialog({
       setIsLoading(false)
     }
   }
+
+  useEffect(() => {
+    if (isOpen && customer?.id) {
+      const timer = setTimeout(() => void loadPurchases())
+      return () => clearTimeout(timer)
+    }
+  }, [isOpen, customer?.id])
 
   const colorScheme = customerTypeColors[customer.type] || customerTypeColors.retail
 

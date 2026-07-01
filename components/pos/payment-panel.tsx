@@ -100,15 +100,19 @@ export function PaymentPanel({
     if (!showPayment) return
 
     if (fullSaleData && isReceiptPayloadValid(fullSaleData)) {
-      setShowReceipt(true)
-      onShowPayment(false)
+      const timer = setTimeout(() => {
+        setShowReceipt(true)
+        onShowPayment(false)
+      })
+      return () => clearTimeout(timer)
     }
   }, [fullSaleData, showPayment, onShowPayment])
 
   useEffect(() => {
     if (!customer?.phone) return
 
-    setMpesaPhone((currentPhone) => currentPhone || customer.phone)
+    const timer = setTimeout(() => setMpesaPhone((currentPhone) => currentPhone || customer.phone))
+    return () => clearTimeout(timer)
   }, [customer?.phone])
 
   useEffect(() => {

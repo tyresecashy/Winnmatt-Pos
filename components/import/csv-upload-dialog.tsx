@@ -201,7 +201,7 @@ export function CSVUploadDialog({ onImportComplete }: CSVUploadDialogProps) {
             <div className="bg-blue-50 border border-blue-200 rounded p-3 text-xs text-blue-800">
               <p className="font-semibold mb-1">Required CSV Columns:</p>
               <ul className="list-disc list-inside space-y-1">
-                <li>source_name (e.g., "jumia")</li>
+                <li>source_name (e.g., &quot;jumia&quot;)</li>
                 <li>source_product_id (unique ID from source)</li>
                 <li>scraped_name (product name)</li>
               </ul>

@@ -48,10 +48,6 @@ export function ShiftOperations({ branchId, cashierId, cashierName }: ShiftOpera
   const { toast } = useToast()
 
   // Load active shift on mount
-  useEffect(() => {
-    loadActiveShift()
-  }, [])
-
   async function loadActiveShift() {
     try {
       setShiftLoading(true)
@@ -63,6 +59,11 @@ export function ShiftOperations({ branchId, cashierId, cashierName }: ShiftOpera
       setShiftLoading(false)
     }
   }
+
+  useEffect(() => {
+    const timer = setTimeout(() => void loadActiveShift())
+    return () => clearTimeout(timer)
+  }, [])
 
   // OPEN SHIFT
   async function handleOpenShift() {
@@ -232,7 +233,7 @@ export function ShiftOperations({ branchId, cashierId, cashierName }: ShiftOpera
                     step="100"
                   />
                   <p className="text-xs text-slate-400">
-                    This is the cash you're starting with in the register.
+                    This is the cash you&apos;re starting with in the register.
                   </p>
                 </div>
 

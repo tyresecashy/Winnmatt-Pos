@@ -76,7 +76,8 @@ export default function TransfersPage() {
   }, [authState, canManageTransfers, needsBranchAssignment, profile])
 
   useEffect(() => {
-    void loadTransfers()
+    const timer = setTimeout(() => void loadTransfers())
+    return () => clearTimeout(timer)
   }, [loadTransfers])
 
   const stats = useMemo(() => {

@@ -190,11 +190,12 @@ export default function PurchasesPage() {
     } finally {
       setLoading(false)
     }
-  }, [profile?.branch_id, toast])
+  }, [profile, toast])
 
   // Load data on mount
   useEffect(() => {
-    void loadData()
+    const timer = setTimeout(() => void loadData())
+    return () => clearTimeout(timer)
   }, [loadData])
 
   const filteredOrders = purchaseOrders.filter((order) => {

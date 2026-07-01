@@ -18,12 +18,18 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (authState === 'authenticated') {
-      setIsLoading(false)
-      router.push('/dashboard')
+      const timer = setTimeout(() => {
+        setIsLoading(false)
+        router.push('/dashboard')
+      })
+      return () => clearTimeout(timer)
     } else if (authState === 'provisioning_error') {
-      setIsLoading(false)
-      setError('Your account is not provisioned. Redirecting...')
-      router.push('/not-provisioned')
+      const timer = setTimeout(() => {
+        setIsLoading(false)
+        setError('Your account is not provisioned. Redirecting...')
+        router.push('/not-provisioned')
+      })
+      return () => clearTimeout(timer)
     }
   }, [authState, router])
 

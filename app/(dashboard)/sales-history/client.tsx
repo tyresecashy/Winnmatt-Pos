@@ -132,14 +132,16 @@ export function SalesHistoryClient({
 
   // Reset to page 1 when filters change
   useEffect(() => {
-    setCurrentPage(1)
+    const timer = setTimeout(() => setCurrentPage(1))
+    return () => clearTimeout(timer)
   }, [branchFilter, deferredSearchTerm, paymentFilter])
 
   const getNormalizedSaleStatus = (sale: Sale) =>
     sale.sale_status || (sale.payment_status === 'failed' ? 'voided' : 'completed')
 
   useEffect(() => {
-    setSales(initialSales)
+    const timer = setTimeout(() => setSales(initialSales))
+    return () => clearTimeout(timer)
   }, [initialSales])
 
   // Filter sales on client

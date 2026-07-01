@@ -80,21 +80,24 @@ export function CustomerFormDialog({
   } | null>(null)
 
   useEffect(() => {
-    if (customer) {
-      setName(customer.name)
-      setPhone(customer.phone || "")
-      setEmail(customer.email || "")
-      setType(customer.type as any)
-      setCreditLimit(customer.credit_limit || 0)
-    } else {
-      // Reset for new customer
-      setName("")
-      setPhone("")
-      setEmail("")
-      setType("retail")
-      setCreditLimit(0)
-    }
-    setDuplicateWarning(null)
+    const timer = setTimeout(() => {
+      if (customer) {
+        setName(customer.name)
+        setPhone(customer.phone || "")
+        setEmail(customer.email || "")
+        setType(customer.type as any)
+        setCreditLimit(customer.credit_limit || 0)
+      } else {
+        // Reset for new customer
+        setName("")
+        setPhone("")
+        setEmail("")
+        setType("retail")
+        setCreditLimit(0)
+      }
+      setDuplicateWarning(null)
+    })
+    return () => clearTimeout(timer)
   }, [customer, isOpen])
 
   const handleSave = async () => {

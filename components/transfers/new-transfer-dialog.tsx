@@ -137,104 +137,110 @@ export function NewTransferDialog({ open, onOpenChange, onSuccess }: NewTransfer
   }
 
   useEffect(() => {
-    if (!open) {
-      return
-    }
-
-    if (!canManageTransfers) {
-      setBranches([])
-      setBranchesError('Transfers are limited to owners, admins, and managers.')
-      return
-    }
-
-    if (sourceBranchLocked && !lockedSourceBranchId) {
-      setBranches([])
-      setBranchesError('Your account must be assigned to a branch before transfers can be created.')
-      return
-    }
-
-    if (sourceBranchLocked && lockedSourceBranchId) {
-      setSourceBranch(lockedSourceBranchId)
-      setDestinationBranch('')
-    }
-
-    if (branchesCacheRef.current && branchesCacheRef.current.length > 0) {
-      setBranches(branchesCacheRef.current)
-      setLoadingBranches(false)
-      return
-    }
-
-    async function loadBranches() {
-      setLoadingBranches(true)
-      setBranchesError('')
-      try {
-        const fetchedBranches = await getAllBranches()
-
-        if (!fetchedBranches || fetchedBranches.length === 0) {
-          setBranches([])
-          setBranchesError('No branches found in the database.')
-          return
-        }
-
-        setBranches(fetchedBranches)
-        branchesCacheRef.current = fetchedBranches
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Failed to load branches'
-        setBranches([])
-        setBranchesError(errorMessage)
-      } finally {
-        setLoadingBranches(false)
-      }
-    }
-
-    void loadBranches()
-  }, [canManageTransfers, lockedSourceBranchId, open, sourceBranchLocked])
-
-  useEffect(() => {
-    if (!sourceBranch) {
-      setSourceProducts([])
-      setProductsError('')
-      setProductSearch('')
-      setProductOpen(false)
-      return
-    }
-
-    async function loadProducts() {
-      const cachedProducts = productsCacheRef.current[sourceBranch]
-      if (cachedProducts) {
-        setSourceProducts(cachedProducts)
-        setProductsError('')
-        setLoadingProducts(false)
+    const timer = setTimeout(() => {
+      if (!open) {
         return
       }
 
-      setLoadingProducts(true)
-      setProductsError('')
-      setProductSearch('')
-      setProductOpen(false)
+      if (!canManageTransfers) {
+        setBranches([])
+        setBranchesError('Transfers are limited to owners, admins, and managers.')
+        return
+      }
 
-      try {
-        const products = await getProductsAtBranch(sourceBranch)
+      if (sourceBranchLocked && !lockedSourceBranchId) {
+        setBranches([])
+        setBranchesError('Your account must be assigned to a branch before transfers can be created.')
+        return
+      }
 
-        if (!products || products.length === 0) {
-          setSourceProducts([])
-          setProductsError('No products with available stock were found for this branch.')
+      if (sourceBranchLocked && lockedSourceBranchId) {
+        setSourceBranch(lockedSourceBranchId)
+        setDestinationBranch('')
+      }
+
+      if (branchesCacheRef.current && branchesCacheRef.current.length > 0) {
+        setBranches(branchesCacheRef.current)
+        setLoadingBranches(false)
+        return
+      }
+
+      async function loadBranches() {
+        setLoadingBranches(true)
+        setBranchesError('')
+        try {
+          const fetchedBranches = await getAllBranches()
+
+          if (!fetchedBranches || fetchedBranches.length === 0) {
+            setBranches([])
+            setBranchesError('No branches found in the database.')
+            return
+          }
+
+          setBranches(fetchedBranches)
+          branchesCacheRef.current = fetchedBranches
+        } catch (err) {
+          const errorMessage = err instanceof Error ? err.message : 'Failed to load branches'
+          setBranches([])
+          setBranchesError(errorMessage)
+        } finally {
+          setLoadingBranches(false)
+        }
+      }
+
+      void loadBranches()
+    })
+    return () => clearTimeout(timer)
+  }, [canManageTransfers, lockedSourceBranchId, open, sourceBranchLocked])
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (!sourceBranch) {
+        setSourceProducts([])
+        setProductsError('')
+        setProductSearch('')
+        setProductOpen(false)
+        return
+      }
+
+      async function loadProducts() {
+        const cachedProducts = productsCacheRef.current[sourceBranch]
+        if (cachedProducts) {
+          setSourceProducts(cachedProducts)
+          setProductsError('')
+          setLoadingProducts(false)
           return
         }
 
-        const validProducts = products.filter((p): p is Product => p.product !== null)
-        setSourceProducts(validProducts)
-        productsCacheRef.current[sourceBranch] = validProducts
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Failed to load products'
-        setSourceProducts([])
-        setProductsError(errorMessage)
-      } finally {
-        setLoadingProducts(false)
-      }
-    }
+        setLoadingProducts(true)
+        setProductsError('')
+        setProductSearch('')
+        setProductOpen(false)
 
-    void loadProducts()
+        try {
+          const products = await getProductsAtBranch(sourceBranch)
+
+          if (!products || products.length === 0) {
+            setSourceProducts([])
+            setProductsError('No products with available stock were found for this branch.')
+            return
+          }
+
+          const validProducts = products.filter((p): p is Product => p.product !== null)
+          setSourceProducts(validProducts)
+          productsCacheRef.current[sourceBranch] = validProducts
+        } catch (err) {
+          const errorMessage = err instanceof Error ? err.message : 'Failed to load products'
+          setSourceProducts([])
+          setProductsError(errorMessage)
+        } finally {
+          setLoadingProducts(false)
+        }
+      }
+
+      void loadProducts()
+    })
+    return () => clearTimeout(timer)
   }, [sourceBranch])
 
   const handleSourceBranchChange = (branchId: string) => {

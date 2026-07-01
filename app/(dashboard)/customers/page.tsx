@@ -75,7 +75,8 @@ export default function CustomersPage() {
   }, [])
 
   useEffect(() => {
-    void loadCustomers()
+    const timer = setTimeout(() => void loadCustomers())
+    return () => clearTimeout(timer)
   }, [loadCustomers])
 
   const filteredCustomers = useMemo(() => {

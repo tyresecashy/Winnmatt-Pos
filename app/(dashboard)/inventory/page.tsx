@@ -79,10 +79,11 @@ export default function InventoryPage() {
         setIsLoading(false)
       }
     }
-  }, [profile?.branch_id])
+  }, [profile])
 
   useEffect(() => {
-    void loadInventory()
+    const timer = setTimeout(() => void loadInventory())
+    return () => clearTimeout(timer)
   }, [loadInventory])
 
   const lowStockItems = useMemo(

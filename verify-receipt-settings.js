@@ -23,31 +23,6 @@ try {
 }
 
 const SUPABASE_URL = 'https://hohxhazfysfiuqizyvay.supabase.co';
-
-Do not redesign the UI.
-
-I want the POS to use the real customers database.
-
-Requirements:
-1. Customer lookup/search in POS must use real customers from the database
-2. Cashier should be able to:
-   - keep walk-in customer
-   - search/select an existing customer
-   - clear the selected customer
-3. Completed sales should save the selected customer_id to the sales record
-4. After a sale, that customer’s purchase history and totals should reflect the sale
-5. Keep the flow fast for cashiers
-6. Do not leave any mock customer data in POS
-
-Then tell me:
-- exact files changed
-- exact root causes in the current POS customer flow
-- exact schema/tables involved
-- before and after code
-- exact browser test steps
-}
-
-const SUPABASE_URL = 'https://hohxhazfysfiuqizyvay.supabase.co';
 // Use SERVICE ROLE KEY to bypass RLS policies (not anon key which is subject to RLS)
 const SUPABASE_KEY = serviceRoleKey;
 const BUSINESS_SETTINGS_ID = 'f47ac10b-58cc-4372-a567-0e02b2c3d479';
