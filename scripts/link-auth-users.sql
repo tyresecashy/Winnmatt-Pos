@@ -1,0 +1,4 @@
+-- ============================================================================
+--  PART 10: CREATE APP USERS (after Supabase Auth is set up)
+--  ⚠️  RUN THIS SEPARATELY after creating Auth users in the dashboard
+--  ⚠️  Or run it twice — it will silently skip rows with NULL id

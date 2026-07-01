@@ -1,0 +1,19 @@
+source_name,source_product_id,source_url,scraped_name,brand,pack_size,unit,category,listed_price,currency,barcode,image_url
+jumia,JUMIA_COCA_001,https://jumia.co.ke/coca-cola-500ml,Coca Cola Original 500ml,Coca Cola,500,ml,Beverages,150,KES,5000112345001,https://images.jumia.co.ke/coca-500ml.jpg
+jumia,JUMIA_SPRITE_001,https://jumia.co.ke/sprite-500ml,Sprite Lemon 500ml,Sprite,500,ml,Beverages,150,KES,5000112345002,https://images.jumia.co.ke/sprite-500ml.jpg
+jumia,JUMIA_FANTA_001,https://jumia.co.ke/fanta-orange-350ml,Fanta Orange 350ml,Fanta,350,ml,Beverages,120,KES,5000112345003,
+nairobi_wholesalers,NW_RICE_001,https://nawi.co.ke/eddoe-rice-2kg,Eddoe Rice Premium 2kg,,2,kg,Grains,450,KES,5000112345004,https://nawi.co.ke/eddoe-2kg.jpg
+nairobi_wholesalers,NW_MAIZE_001,https://nawi.co.ke/kimbo-maize-1kg,Kimbo Maize Flour 1kg,Kimbo,1,kg,Grains,80,KES,5000112345005,https://nawi.co.ke/kimbo-1kg.jpg
+direct_supplier,SUP_BREAD_001,,Nakumatt White Bread Loaf 500g,Nakumatt Bakery,500,g,Bakery,50,KES,5000112345006,
+csv_import,CSV_TOMATO_001,,Local Tomato Paste 200g,,200,g,Condiments,65,KES,5000112345007,
+jumia,JUMIA_BLUE_BAND_001,https://jumia.co.ke/blue-band-margarine-500g,Blue Band Margarine 500g,Blue Band,500,g,Dairy,180,KES,5000112345008,https://images.jumia.co.ke/blue-band.jpg
+nairobi_wholesalers,NW_ROYCO_001,https://nawi.co.ke/royco-seasoning-6g,Royco Seasoning Cube Box 6 pack,Royco,6,pcs,Condiments,45,KES,5000112345009,
+jumia,JUMIA_COCA_002,https://jumia.co.ke/coca-cola-500ml-duplicate,Coca-Cola 500 ml Bottle,Coca Cola,500,ml,Beverages,148,KES,5000112345010,https://images.jumia.co.ke/coca-bottle.jpg
+csv_import,CSV_MILK_001,,Brookside Fresh Milk 500ml,Brookside,500,ml,Dairy,95,KES,5000112345011,https://example.com/brookside.jpg
+jumia,JUMIA_SUGAR_001,https://jumia.co.ke/sugar-2kg,Milly Sugar 2kg White Crystal,Milly,2,kg,Grains,280,KES,5000112345012,
+nairobi_wholesalers,NW_OIL_001,https://nawi.co.ke/bidco-cooking-oil,Bidco Cooking Oil 1 Liter,Bidco,1,l,Oils,320,KES,5000112345013,https://nawi.co.ke/bidco-oil.jpg
+csv_import,CSV_SOAP_001,,Dettol Antibacterial Bar Soap 175g,Dettol,175,g,Toiletries,85,KES,5000112345014,
+jumia,JUMIA_INSTANT_001,https://jumia.co.ke/nescafe-instant-coffee,Nescafe Classic Instant Coffee 50g,Nescafe,50,g,Beverages,250,KES,5000112345015,https://images.jumia.co.ke/nescafe.jpg
+csv_import,CSV_RICE_ANOMALY_001,,Generic White Rice 5kg Bag,White Rice Co,5,kg,Grains,8,KES,5000112345016,
+csv_import,CSV_SALT_ANOMALY_001,,Table Salt 1kg Iodized Bulk,Salt Brand,1,kg,Condiments,999999,KES,5000112345017,
+jumia,JUMIA_SODA_001,https://jumia.co.ke/tusker-soda,Tusker Soda 330ml Bottle,Tusker,330,ml,Beverages,95,KES,5000112345018,https://images.jumia.co.ke/tusker.jpg
