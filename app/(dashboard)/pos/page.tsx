@@ -707,7 +707,7 @@ export default function POSPage() {
                   paymentMethod: 'cash',
                   customerId: selectedCustomer?.id,
                   cartDiscount,
-                  receiptSettings: receiptSettings ?? {},
+                  receiptSettings: (receiptSettings ?? {}) as Record<string, unknown>,
                   redemptionPoints: options?.redemption?.pointsToRedeem || undefined,
                   redemptionDiscount: options?.redemption?.discountApplied || undefined,
                 })

@@ -2,6 +2,8 @@
 
 import { supabaseAdmin } from '@/lib/supabase-server'
 import { createClient } from '@supabase/supabase-js'
+import { logger } from '@/lib/logger'
+import type { Database } from '@/lib/db.types'
 
 function requireEnv(name: string, value: string | undefined): string {
   if (!value || value.includes('placeholder')) {
@@ -29,7 +31,7 @@ export async function getProducts() {
     if (error) throw error
     return data || []
   } catch (error) {
-    console.error('Error fetching products:', error)
+    logger.error('Error fetching products:', error)
     return []
   }
 }
@@ -43,11 +45,11 @@ export async function authenticateUser(email: string, password: string) {
 
     if (error) throw error
     return { success: true, user: data.user, session: data.session }
-  } catch (error: any) {
-    console.error('Authentication error:', error)
+  } catch (error: unknown) {
+    logger.error('Authentication error:', error)
     return { 
       success: false, 
-      error: error.message || 'Authentication failed' 
+      error: error instanceof Error ? error.message : 'Authentication failed' 
     }
   }
 }
@@ -63,7 +65,7 @@ export async function getProductsByCategory(categoryId: string) {
     if (error) throw error
     return data || []
   } catch (error) {
-    console.error('Error fetching products by category:', error)
+    logger.error('Error fetching products by category:', error)
     return []
   }
 }
@@ -81,7 +83,7 @@ export async function getInventory(branchId: string) {
     if (error) throw error
     return data || []
   } catch (error) {
-    console.error('Error fetching inventory:', error)
+    logger.error('Error fetching inventory:', error)
     return []
   }
 }
@@ -96,7 +98,7 @@ export async function getCategories() {
     if (error) throw error
     return data || []
   } catch (error) {
-    console.error('Error fetching categories:', error)
+    logger.error('Error fetching categories:', error)
     return []
   }
 }
@@ -111,7 +113,7 @@ export async function getCustomers() {
     if (error) throw error
     return data || []
   } catch (error) {
-    console.error('Error fetching customers:', error)
+    logger.error('Error fetching customers:', error)
     return []
   }
 }
@@ -126,7 +128,7 @@ export async function getSuppliers() {
     if (error) throw error
     return data || []
   } catch (error) {
-    console.error('Error fetching suppliers:', error)
+    logger.error('Error fetching suppliers:', error)
     return []
   }
 }
@@ -141,7 +143,7 @@ export async function getBranches() {
     if (error) throw error
     return data || []
   } catch (error) {
-    console.error('Error fetching branches:', error)
+    logger.error('Error fetching branches:', error)
     return []
   }
 }
@@ -162,12 +164,12 @@ export async function getSales(branchId: string, limit: number = 50) {
     if (error) throw error
     return data || []
   } catch (error) {
-    console.error('Error fetching sales:', error)
+    logger.error('Error fetching sales:', error)
     return []
   }
 }
 
-export async function createSale(saleData: any) {
+export async function createSale(saleData: Database['public']['Tables']['sales']['Insert']) {
   try {
     const { data, error } = await supabaseAdmin
       .from('sales')
@@ -177,12 +179,12 @@ export async function createSale(saleData: any) {
     if (error) throw error
     return data?.[0] || null
   } catch (error) {
-    console.error('Error creating sale:', error)
+    logger.error('Error creating sale:', error)
     return null
   }
 }
 
-export async function createSaleItems(items: any[]) {
+export async function createSaleItems(items: Database['public']['Tables']['sale_items']['Insert'][]) {
   try {
     const { data, error } = await supabaseAdmin
       .from('sale_items')
@@ -192,7 +194,7 @@ export async function createSaleItems(items: any[]) {
     if (error) throw error
     return data || []
   } catch (error) {
-    console.error('Error creating sale items:', error)
+    logger.error('Error creating sale items:', error)
     return []
   }
 }
@@ -202,7 +204,7 @@ export async function reduceInventory(productId: string, branchId: string, quant
     // Use rpc to call a PostgreSQL function or use increment
     const { data, error } = await supabaseAdmin
       .from('inventory')
-      .update({ quantity: supabaseAdmin.rpc('increment', { quantity }) } as any)
+      .update({ quantity: supabaseAdmin.rpc('increment', { quantity }) } as unknown as Record<string, unknown>)
       .eq('product_id', productId)
       .eq('branch_id', branchId)
       .select()
@@ -232,12 +234,12 @@ export async function reduceInventory(productId: string, branchId: string, quant
     }
     return data?.[0] || null
   } catch (error) {
-    console.error('Error reducing inventory:', error)
+    logger.error('Error reducing inventory:', error)
     return null
   }
 }
 
-export async function recordStockMovement(movement: any) {
+export async function recordStockMovement(movement: Database['public']['Tables']['stock_movements']['Insert']) {
   try {
     const { data, error } = await supabaseAdmin
       .from('stock_movements')
@@ -247,7 +249,7 @@ export async function recordStockMovement(movement: any) {
     if (error) throw error
     return data?.[0] || null
   } catch (error) {
-    console.error('Error recording stock movement:', error)
+    logger.error('Error recording stock movement:', error)
     return null
   }
 }
