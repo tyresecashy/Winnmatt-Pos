@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 import { NextResponse } from 'next/server'
 
 export function badRequest(errors: { field: string; message: string }[]) {
@@ -13,6 +14,6 @@ export function notFound(msg = 'Not found') {
 }
 
 export function serverError(error: unknown) {
-  console.error('[API]', error instanceof Error ? error.message : error)
+  logger.error('[API]', error instanceof Error ? error.message : error)
   return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
 }

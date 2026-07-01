@@ -1,4 +1,5 @@
 'use client'
+import { logger } from '@/lib/logger';
 
 import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '@/contexts/auth-context'
@@ -57,7 +58,7 @@ export function BranchComparison() {
             lastFetchAtRef.current = Date.now()
           }
         } catch (error) {
-          console.error('Error loading branch data:', error)
+          logger.error('Error loading branch data:', error)
           if (!cancelled) setError('Failed to load branch data')
         } finally {
           if (!cancelled && shouldShowLoading) {

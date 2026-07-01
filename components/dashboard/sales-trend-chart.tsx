@@ -1,4 +1,5 @@
 'use client'
+import { logger } from '@/lib/logger';
 
 import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '@/contexts/auth-context'
@@ -63,7 +64,7 @@ export function SalesTrendChart() {
             lastFetchAtRef.current = Date.now()
           }
         } catch (error) {
-          console.error('Error loading sales trend:', error)
+          logger.error('Error loading sales trend:', error)
           if (!cancelled) setError('Failed to load sales trend')
         } finally {
           if (!cancelled && shouldShowLoading) {

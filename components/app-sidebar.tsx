@@ -1,4 +1,5 @@
 "use client"
+import { logger } from '@/lib/logger';
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -72,7 +73,7 @@ export function AppSidebar() {
       await signOut()
       router.push('/login')
     } catch (error) {
-      console.error('Logout failed:', error)
+      logger.error('Logout failed:', error)
     }
   }
 

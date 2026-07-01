@@ -1,4 +1,5 @@
 'use client'
+import { logger } from '@/lib/logger';
 
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
@@ -59,21 +60,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
    * Admin users will need to explicitly provision app profiles via an admin interface.
    */
   const loadUserProfile = async (userId: string, userEmail: string): Promise<boolean> => {
-    console.log('[AUTH] loadUserProfile called for:', userEmail, 'userId:', userId)
+    logger.info('[AUTH] loadUserProfile called for:', { userEmail, userId })
     try {
       const response = await fetch('/api/auth/profile', {
         method: 'GET',
       })
 
-      console.log('[AUTH] Profile API response status:', response.status)
+      logger.info('[AUTH] Profile API response status:', { status: response.status })
 
       if (response.ok) {
         const data = await response.json()
-        console.log('✅ [AUTH] User profile loaded:', data.profile?.email, data.profile?.role, 'at', data.profile?.branch?.name)
+        logger.info('✅ [AUTH] User profile loaded:', {
+          email: data.profile?.email,
+          role: data.profile?.role,
+          branch: data.profile?.branch?.name,
+        })
         
         // Check if user is active
         if (data.profile?.status === 'inactive') {
-          console.warn('⚠️  [AUTH] User account is inactive:', data.profile?.email)
+          logger.warn('⚠️  [AUTH] User account is inactive:', { email: data.profile?.email })
           setProfile(null)
           setAuthState('provisioning_error')
           setProvisioningError(
@@ -91,9 +96,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (response.status === 404) {
         // User is authenticated but not provisioned in app
-        console.warn('⚠️  [AUTH] User profile not found (404) for', userEmail)
-        console.warn('📋 [AUTH] This user has Supabase auth but no app profile in custom users table')
-        console.warn('🔒 [AUTH] Access denied - account not provisioned')
+        logger.warn('⚠️  [AUTH] User profile not found (404) for:', { userEmail })
+        logger.warn('📋 [AUTH] This user has Supabase auth but no app profile in custom users table')
+        logger.warn('🔒 [AUTH] Access denied - account not provisioned')
         
         setProfile(null)
         setAuthState('provisioning_error')
@@ -105,7 +110,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (response.status === 403) {
-        console.warn('⚠️  [AUTH] User account is inactive:', userEmail)
+        logger.warn('⚠️  [AUTH] User account is inactive:', { userEmail })
         setProfile(null)
         setAuthState('provisioning_error')
         setProvisioningError(
@@ -117,13 +122,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (response.status === 500) {
         const errorData = await response.json().catch(() => ({}))
-        console.error('[AUTH] Profile API error (500):', errorData)
+        logger.error('[AUTH] Profile API error (500):', errorData)
       }
 
-      console.error('[AUTH] Unexpected response status:', response.status)
+      logger.error('[AUTH] Unexpected response status:', response.status)
       throw new Error('Failed to load user profile')
     } catch (error) {
-      console.error('❌ [AUTH] Error loading profile:', error)
+      logger.error('❌ [AUTH] Error loading profile:', error)
       setProfile(null)
       setAuthState('provisioning_error')
       setProvisioningError('Failed to load your account profile. Please try again.')
@@ -148,7 +153,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setProvisioningError(null)
         }
       } catch (error) {
-        console.error('Error getting session:', error)
+        logger.error('Error getting session:', error)
         setAuthState('unauthenticated')
       }
     }
@@ -232,7 +237,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setProvisioningError(null)
       setSession(null)
     } catch (error) {
-      console.error('Error signing out:', error)
+      logger.error('Error signing out:', error)
       throw error
     }
   }

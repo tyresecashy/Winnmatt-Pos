@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server'
 import { csvImportSchema } from '@/lib/api-schemas'
 import { badRequest } from '@/lib/api-errors'
@@ -26,7 +27,7 @@ export async function POST(request: NextRequest) {
       { status: 503 }
     )
   } catch (error) {
-    console.error('[CSV Import] Unhandled error:', error instanceof Error ? error.message : String(error))
+    logger.error('[CSV Import] Unhandled error:', error instanceof Error ? error.message : String(error))
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

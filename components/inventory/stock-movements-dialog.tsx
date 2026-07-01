@@ -1,4 +1,5 @@
 "use client"
+import { logger } from '@/lib/logger';
 
 import { useState, useEffect } from "react"
 import {
@@ -55,7 +56,7 @@ export function StockMovementsDialog({
       const data = await getStockMovements(product.id, branchId)
       setMovements(data)
     } catch (error) {
-      console.error("Failed to load stock movements:", error)
+      logger.error("Failed to load stock movements:", error)
     } finally {
       setIsLoading(false)
     }
@@ -66,6 +67,7 @@ export function StockMovementsDialog({
       const timer = setTimeout(() => void loadMovements())
       return () => clearTimeout(timer)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, product.id, branchId])
 
   return (

@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 // API endpoint: GET /api/prices/review
 // Returns products flagged for price review
 // Admin only
@@ -56,7 +57,7 @@ export async function GET(request: Request) {
     .order('created_at', { ascending: false })
 
   if (error) {
-    console.error('Error fetching anomalies:', error)
+    logger.error('Error fetching anomalies:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 

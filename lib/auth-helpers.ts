@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 /**
  * Server-side auth helpers
  *
@@ -44,13 +45,13 @@ export function extractDebugUserId(request: Request): string | null {
     }
 
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)) {
-      console.warn('[AUTH] Ignoring invalid debug X-User-ID header:', userId)
+      logger.warn('[AUTH] Ignoring invalid debug X-User-ID header:', { userId })
       return null
     }
 
     return userId
   } catch (error) {
-    console.error('[AUTH] Error extracting debug user ID:', error)
+    logger.error('[AUTH] Error extracting debug user ID:', error)
     return null
   }
 }
@@ -71,7 +72,7 @@ export async function getAuthenticatedSupabaseUser(request: Request): Promise<{
     } = await supabase.auth.getUser()
 
     if (error) {
-      console.warn('[AUTH] Supabase user verification failed:', error.message)
+      logger.warn('[AUTH] Supabase user verification failed:', { error: error.message })
       return {
         user: null,
         error: 'Unauthorized: Invalid or missing Supabase session',
@@ -92,7 +93,7 @@ export async function getAuthenticatedSupabaseUser(request: Request): Promise<{
       },
     }
   } catch (error) {
-    console.error('[AUTH] Failed to verify Supabase session:', error)
+    logger.error('[AUTH] Failed to verify Supabase session:', error)
     return {
       user: null,
       error: 'Unauthorized: Failed to verify Supabase session',
@@ -132,7 +133,7 @@ export async function loadUserProfileResult(userId: string): Promise<{
 
     if (!error && data) {
       if (data.status === 'inactive') {
-        console.warn('[AUTH] User is inactive:', data.email)
+        logger.warn('[AUTH] User is inactive:', { email: data.email })
         return {
           profile: null,
           reason: 'inactive',
@@ -148,7 +149,7 @@ export async function loadUserProfileResult(userId: string): Promise<{
     }
 
     if (error?.code === 'PGRST116') {
-      console.warn('[AUTH] User profile not found for verified user:', userId)
+      logger.warn('[AUTH] User profile not found for verified user:', { userId })
       return {
         profile: null,
         reason: 'missing',
@@ -156,7 +157,7 @@ export async function loadUserProfileResult(userId: string): Promise<{
     }
 
     if (error?.message?.includes('relation') || error?.message?.includes('branch')) {
-      console.warn('[AUTH] Branch relation failed, retrying profile load without relation')
+      logger.warn('[AUTH] Branch relation failed, retrying profile load without relation')
 
       const { data: fallbackProfile, error: fallbackError } = await supabaseAdmin
         .from('users')
@@ -174,7 +175,7 @@ export async function loadUserProfileResult(userId: string): Promise<{
         .single()
 
       if (fallbackError || !fallbackProfile) {
-        console.warn('[AUTH] Fallback profile load error:', {
+        logger.warn('[AUTH] Fallback profile load error:', {
           code: fallbackError?.code,
           message: fallbackError?.message,
         })
@@ -185,7 +186,7 @@ export async function loadUserProfileResult(userId: string): Promise<{
       }
 
       if (fallbackProfile.status === 'inactive') {
-        console.warn('[AUTH] User is inactive:', fallbackProfile.email)
+        logger.warn('[AUTH] User is inactive:', { email: fallbackProfile.email })
         return {
           profile: null,
           reason: 'inactive',
@@ -205,7 +206,7 @@ export async function loadUserProfileResult(userId: string): Promise<{
         .single()
 
       if (branchError) {
-        console.warn('[AUTH] Branch lookup failed during fallback profile load:', branchError.message)
+        logger.warn('[AUTH] Branch lookup failed during fallback profile load:', { error: branchError.message })
         return {
           profile: fallbackProfile,
         }
@@ -219,12 +220,12 @@ export async function loadUserProfileResult(userId: string): Promise<{
       }
     }
 
-    console.warn('[AUTH] Profile load error:', { code: error?.code, message: error?.message })
+    logger.warn('[AUTH] Profile load error:', { code: error?.code, message: error?.message })
     return {
       profile: null,
     }
   } catch (error) {
-    console.error('[AUTH] Failed to load profile:', error)
+    logger.error('[AUTH] Failed to load profile:', error)
     return {
       profile: null,
     }
@@ -257,7 +258,7 @@ export async function loadCheckoutUserProfileResult(userId: string): Promise<{
 
     if (!error && data) {
       if (data.status === 'inactive') {
-        console.warn('[AUTH] User is inactive:', data.email)
+        logger.warn('[AUTH] User is inactive:', { email: data.email })
         return {
           profile: null,
           reason: 'inactive',
@@ -270,19 +271,19 @@ export async function loadCheckoutUserProfileResult(userId: string): Promise<{
     }
 
     if (error?.code === 'PGRST116') {
-      console.warn('[AUTH] User profile not found for verified user:', userId)
+      logger.warn('[AUTH] User profile not found for verified user:', { userId })
       return {
         profile: null,
         reason: 'missing',
       }
     }
 
-    console.warn('[AUTH] Checkout profile load error:', { code: error?.code, message: error?.message })
+    logger.warn('[AUTH] Checkout profile load error:', { code: error?.code, message: error?.message })
     return {
       profile: null,
     }
   } catch (error) {
-    console.error('[AUTH] Failed to load checkout profile:', error)
+    logger.error('[AUTH] Failed to load checkout profile:', error)
     return {
       profile: null,
     }
@@ -310,7 +311,7 @@ export async function authenticateRequest(request: Request): Promise<{
 
   const debugUserId = extractDebugUserId(request)
   if (debugUserId && debugUserId !== authUserResult.user.id) {
-    console.warn('[AUTH] Ignoring mismatched X-User-ID header', {
+    logger.warn('[AUTH] Ignoring mismatched X-User-ID header', {
       debugUserId,
       authenticatedUserId: authUserResult.user.id,
     })
@@ -369,7 +370,7 @@ export async function getAuthenticatedServerActionUser(): Promise<{
     }
 
     if (claimsResult.error) {
-      console.warn('[AUTH] Server action JWT claims verification fell back to getUser:', claimsResult.error.message)
+      logger.warn('[AUTH] Server action JWT claims verification fell back to getUser:', { error: claimsResult.error.message })
     }
 
     const {
@@ -378,7 +379,7 @@ export async function getAuthenticatedServerActionUser(): Promise<{
     } = await authVerifier.auth.getUser(accessToken)
 
     if (error) {
-      console.warn('[AUTH] Server action Supabase user verification failed:', error.message)
+      logger.warn('[AUTH] Server action Supabase user verification failed:', { error: error.message })
       return {
         user: null,
         error: 'Unauthorized: Invalid or missing Supabase session',
@@ -399,7 +400,7 @@ export async function getAuthenticatedServerActionUser(): Promise<{
       },
     }
   } catch (error) {
-    console.error('[AUTH] Failed to verify Supabase session for server action:', error)
+    logger.error('[AUTH] Failed to verify Supabase session for server action:', error)
     return {
       user: null,
       error: 'Unauthorized: Failed to verify Supabase session',
@@ -542,7 +543,7 @@ export function resolveAuthorizedBranchId(
   }
 
   if (requestedBranchId && requestedBranchId !== profile.branch_id) {
-    console.warn('[AUTH] Cross-branch POS request denied', {
+    logger.warn('[AUTH] Cross-branch POS request denied', {
       userId: profile.id,
       userBranch: profile.branch_id,
       requestedBranchId,
@@ -595,7 +596,7 @@ export async function verifySaleAccess(
     }
 
     if (sale.branch_id !== profile.branch_id) {
-      console.warn('[AUTH] Cross-branch access attempt', {
+      logger.warn('[AUTH] Cross-branch access attempt', {
         userId: profile.id,
         userBranch: profile.branch_id,
         saleBranch: sale.branch_id,
@@ -609,7 +610,7 @@ export async function verifySaleAccess(
 
     return { authorized: true }
   } catch (error) {
-    console.error('[AUTH] Error verifying sale access:', error)
+    logger.error('[AUTH] Error verifying sale access:', error)
     return {
       authorized: false,
       error: 'Internal error',

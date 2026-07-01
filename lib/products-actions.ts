@@ -1,4 +1,5 @@
 'use server'
+import { logger } from '@/lib/logger';
 
 import {
   authenticateServerAction,
@@ -18,7 +19,7 @@ export async function getCategories() {
     if (error) throw error
     return data || []
   } catch (error) {
-    console.error('Error fetching categories:', error)
+    logger.error('Error fetching categories:', error)
     return []
   }
 }
@@ -27,7 +28,7 @@ export async function getProductsForPOS(branchId: string) {
   try {
     const authResult = await authenticateServerAction()
     if (!authResult.success || !authResult.profile) {
-      console.warn('[POS] Product fetch denied:', authResult.error)
+      logger.warn('[POS] Product fetch denied:', { error: authResult.error })
       return []
     }
 
@@ -36,7 +37,7 @@ export async function getProductsForPOS(branchId: string) {
       profile.role === 'owner' ? branchId : profile.branch_id
 
     if (!effectiveBranchId) {
-      console.warn('[POS] Product fetch denied: no branch context', {
+      logger.warn('[POS] Product fetch denied: no branch context', {
         userId: profile.id,
         role: profile.role,
         requestedBranchId: branchId || null,
@@ -45,7 +46,7 @@ export async function getProductsForPOS(branchId: string) {
     }
 
     if (profile.role !== 'owner' && branchId && branchId !== profile.branch_id) {
-      console.warn('[POS] Ignoring mismatched branch id for product fetch', {
+      logger.warn('[POS] Ignoring mismatched branch id for product fetch', {
         userId: profile.id,
         requestedBranchId: branchId,
         authenticatedBranchId: profile.branch_id,
@@ -76,7 +77,7 @@ export async function getProductsForPOS(branchId: string) {
       quantity: product.inventory?.[0]?.quantity || 0,
     })) || []
   } catch (error) {
-    console.error('Error fetching products for POS:', error)
+    logger.error('Error fetching products for POS:', error)
     return []
   }
 }
@@ -95,7 +96,7 @@ export async function getProductById(productId: string) {
     if (error) throw error
     return data
   } catch (error) {
-    console.error('Error fetching product:', error)
+    logger.error('Error fetching product:', error)
     return null
   }
 }
@@ -104,19 +105,19 @@ export async function getInventoryForBranch(branchId: string) {
   try {
     const authResult = await authenticateServerAction()
     if (!authResult.success || !authResult.profile) {
-      console.warn('[INVENTORY] Inventory fetch denied:', authResult.error)
+      logger.warn('[INVENTORY] Inventory fetch denied:', { error: authResult.error })
       return []
     }
 
     const posAccess = authorizePOSProfile(authResult.profile)
     if (!posAccess.authorized) {
-      console.warn('[INVENTORY] Inventory fetch POS access denied:', posAccess.error)
+      logger.warn('[INVENTORY] Inventory fetch POS access denied:', { error: posAccess.error })
       return []
     }
 
     const branchScope = resolveAuthorizedBranchId(authResult.profile, branchId)
     if (!branchScope.authorized || !branchScope.branchId) {
-      console.warn('[INVENTORY] Inventory fetch branch denied:', branchScope.error)
+      logger.warn('[INVENTORY] Inventory fetch branch denied:', { error: branchScope.error })
       return []
     }
 
@@ -146,7 +147,7 @@ export async function getInventoryForBranch(branchId: string) {
       .order('product(name)')
 
     if (error) {
-      console.warn('[INVENTORY] Attempt 1 failed:', error.message)
+      logger.warn('[INVENTORY] Attempt 1 failed:', { error: error.message })
       
       // APPROACH 2: Fallback - fetch without category relation
       const { data: data2, error: error2 } = await supabaseAdmin
@@ -171,7 +172,7 @@ export async function getInventoryForBranch(branchId: string) {
         .eq('branch_id', effectiveBranchId)
 
       if (error2) {
-        console.error('[INVENTORY] Attempt 2 also failed:', error2.message)
+        logger.error('[INVENTORY] Attempt 2 also failed:', error2.message)
         
         // APPROACH 3: Last resort - fetch raw inventory, then products separately
         const { data: inventoryRows, error: error3 } = await supabaseAdmin
@@ -181,8 +182,8 @@ export async function getInventoryForBranch(branchId: string) {
           .order('product_id')
 
         if (error3) {
-          console.error('[INVENTORY] Attempt 3 failed:', error3.message)
-          console.error('[INVENTORY] Error details:', { code: error3.code, message: error3.message, details: error3.details })
+          logger.error('[INVENTORY] Attempt 3 failed:', error3.message)
+          logger.error('[INVENTORY] Error details:', { code: error3.code, message: error3.message, details: error3.details })
           return []
         }
 
@@ -198,7 +199,7 @@ export async function getInventoryForBranch(branchId: string) {
           .in('id', productIds)
 
         if (productError) {
-          console.error('[INVENTORY] Failed to fetch products:', productError.message)
+          logger.error('[INVENTORY] Failed to fetch products:', productError.message)
           // Return inventory without product details as fallback
           return (inventoryRows as any[]).map(row => ({ ...row, product: null }))
         }
@@ -221,7 +222,7 @@ export async function getInventoryForBranch(branchId: string) {
 
     return data || []
   } catch (error) {
-    console.error('[INVENTORY] Unexpected error:', error)
+    logger.error('[INVENTORY] Unexpected error:', error)
     return []
   }
 }
@@ -239,7 +240,7 @@ export async function getInventoryForProduct(productId: string) {
     if (error) throw error
     return data || []
   } catch (error) {
-    console.error('Error fetching inventory for product:', error)
+    logger.error('Error fetching inventory for product:', error)
     return []
   }
 }
@@ -257,7 +258,7 @@ export async function updateInventory(productId: string, branchId: string, quant
     if (error) throw error
     return data
   } catch (error) {
-    console.error('Error updating inventory:', error)
+    logger.error('Error updating inventory:', error)
     return null
   }
 }
@@ -287,7 +288,7 @@ export async function createStockMovement(
     if (error) throw error
     return data
   } catch (error) {
-    console.error('Error creating stock movement:', error)
+    logger.error('Error creating stock movement:', error)
     return null
   }
 }
@@ -318,7 +319,7 @@ export async function getAllProducts() {
     
     return data || []
   } catch (error) {
-    console.error('Error fetching all products:', error)
+    logger.error('Error fetching all products:', error)
     return []
   }
 }
@@ -370,7 +371,7 @@ export async function createProduct(
 
     // Step 2: Validate branchId is not empty
     if (!branchId || branchId.trim() === '') {
-      console.error('Error: branchId is required for inventory creation')
+      logger.error('Error: branchId is required for inventory creation')
       return { success: false, error: 'Branch ID is required to create product inventory' }
     }
 
@@ -384,13 +385,13 @@ export async function createProduct(
       })
 
     if (inventoryError) {
-      console.error('Error creating inventory row:', inventoryError)
+      logger.error('Error creating inventory row:', inventoryError)
       return { success: false, error: 'Product created but inventory row could not be created' }
     }
 
     return { success: true, data: productData }
   } catch (error) {
-    console.error('Error creating product:', error)
+    logger.error('Error creating product:', error)
     return { success: false, error: error instanceof Error ? error.message : 'Failed to create product' }
   }
 }
@@ -440,7 +441,7 @@ export async function updateProduct(
     if (error) throw error
     return { success: true, data }
   } catch (error) {
-    console.error('Error updating product:', error)
+    logger.error('Error updating product:', error)
     return { success: false, error: error instanceof Error ? error.message : 'Failed to update product' }
   }
 }
@@ -481,7 +482,7 @@ export async function deleteProduct(productId: string) {
     if (deleteError) throw deleteError
     return { success: true }
   } catch (error) {
-    console.error('Error deleting product:', error)
+    logger.error('Error deleting product:', error)
     return { success: false, error: error instanceof Error ? error.message : 'Failed to delete product' }
   }
 }
@@ -571,7 +572,7 @@ export async function adjustStockQuantity(
       message: `Stock adjusted by ${appliedAdjustment > 0 ? '+' : ''}${appliedAdjustment} units`,
     }
   } catch (error) {
-    console.error('Error adjusting stock:', error)
+    logger.error('Error adjusting stock:', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to adjust stock',

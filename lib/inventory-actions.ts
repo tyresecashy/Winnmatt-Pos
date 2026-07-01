@@ -1,4 +1,5 @@
 'use server'
+import { logger } from '@/lib/logger';
 
 import {
   authenticateServerAction,
@@ -14,19 +15,19 @@ export async function getStockMovements(productId: string, branchId: string, lim
   try {
     const authResult = await authenticateServerAction()
     if (!authResult.success || !authResult.profile) {
-      console.warn('[INVENTORY] Stock movement fetch denied:', authResult.error)
+      logger.warn('[INVENTORY] Stock movement fetch denied:', { error: authResult.error })
       return []
     }
 
     const posAccess = authorizePOSProfile(authResult.profile)
     if (!posAccess.authorized) {
-      console.warn('[INVENTORY] Stock movement fetch POS access denied:', posAccess.error)
+      logger.warn('[INVENTORY] Stock movement fetch POS access denied:', { error: posAccess.error })
       return []
     }
 
     const branchScope = resolveAuthorizedBranchId(authResult.profile, branchId)
     if (!branchScope.authorized || !branchScope.branchId) {
-      console.warn('[INVENTORY] Stock movement fetch branch denied:', branchScope.error)
+      logger.warn('[INVENTORY] Stock movement fetch branch denied:', { error: branchScope.error })
       return []
     }
 
@@ -43,7 +44,7 @@ export async function getStockMovements(productId: string, branchId: string, lim
     if (error) throw error
     return data || []
   } catch (error) {
-    console.error('Error fetching stock movements:', error)
+    logger.error('Error fetching stock movements:', error)
     return []
   }
 }
@@ -73,7 +74,7 @@ export async function adjustInventoryStock(
 
     return result
   } catch (error) {
-    console.error('Error adjusting inventory:', error)
+    logger.error('Error adjusting inventory:', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to adjust inventory',

@@ -1,4 +1,5 @@
 'use client'
+import { logger } from '@/lib/logger';
 
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -73,11 +74,13 @@ export function ShiftDashboard({ branchId, userId, userRole }: ShiftDashboardPro
   // Load shifts on mount
   useEffect(() => {
     loadShifts()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Filter shifts when filters change
   useEffect(() => {
     filterShifts()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shifts, dateRange, statusFilter])
 
   async function loadShifts() {
@@ -86,7 +89,7 @@ export function ShiftDashboard({ branchId, userId, userRole }: ShiftDashboardPro
       const data = await getShiftHistory(branchId, 50)
       setShifts(data)
     } catch (error) {
-      console.error('Error loading shifts:', error)
+      logger.error('Error loading shifts:', error)
       toast({
         title: 'Error',
         description: 'Failed to load shifts',

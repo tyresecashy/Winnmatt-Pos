@@ -1,4 +1,5 @@
 'use server'
+import { logger } from '@/lib/logger';
 
 import { authenticateServerAction, authorizePOSProfile, resolveAuthorizedBranchId } from '@/lib/auth-helpers'
 import { getNairobiDateKey, getNairobiDayRange, getNairobiWeekdayLabel } from '@/lib/date-time'
@@ -7,19 +8,19 @@ import { supabaseAdmin } from '@/lib/supabase-server'
 async function getAuthorizedDashboardBranch(branchId: string) {
   const authResult = await authenticateServerAction()
   if (!authResult.success || !authResult.profile) {
-    console.warn('[DASHBOARD] Branch-scoped query denied:', authResult.error)
+    logger.warn('[DASHBOARD] Branch-scoped query denied:', { error: authResult.error })
     return null
   }
 
   const posAccess = authorizePOSProfile(authResult.profile)
   if (!posAccess.authorized) {
-    console.warn('[DASHBOARD] Branch-scoped POS access denied:', posAccess.error)
+    logger.warn('[DASHBOARD] Branch-scoped POS access denied:', { error: posAccess.error })
     return null
   }
 
   const branchScope = resolveAuthorizedBranchId(authResult.profile, branchId)
   if (!branchScope.authorized || !branchScope.branchId) {
-    console.warn('[DASHBOARD] Branch-scoped branch denied:', branchScope.error)
+    logger.warn('[DASHBOARD] Branch-scoped branch denied:', { error: branchScope.error })
     return null
   }
 
@@ -73,7 +74,7 @@ export async function getTodayDashboardStats(branchId: string) {
       activeCustomers,
     }
   } catch (error) {
-    console.error('Error fetching today dashboard stats:', error)
+    logger.error('Error fetching today dashboard stats:', error)
     return {
       totalSales: 0,
       transactionCount: 0,
@@ -139,7 +140,7 @@ export async function getWeeklySalesTrend(branchId: string) {
 
     return trendData
   } catch (error) {
-    console.error('Error fetching weekly sales trend:', error)
+    logger.error('Error fetching weekly sales trend:', error)
     return []
   }
 }
@@ -151,13 +152,13 @@ export async function getBranchPerformanceToday(startDate?: Date, endDate?: Date
   try {
     const authResult = await authenticateServerAction()
     if (!authResult.success || !authResult.profile) {
-      console.warn('[DASHBOARD] Branch performance denied:', authResult.error)
+      logger.warn('[DASHBOARD] Branch performance denied:', { error: authResult.error })
       return []
     }
 
     const posAccess = authorizePOSProfile(authResult.profile)
     if (!posAccess.authorized) {
-      console.warn('[DASHBOARD] Branch performance POS access denied:', posAccess.error)
+      logger.warn('[DASHBOARD] Branch performance POS access denied:', { error: posAccess.error })
       return []
     }
 
@@ -226,7 +227,7 @@ export async function getBranchPerformanceToday(startDate?: Date, endDate?: Date
       percentage: totalSales > 0 ? (b.sales / totalSales) * 100 : 0,
     }))
   } catch (error) {
-    console.error('Error fetching branch performance:', error)
+    logger.error('Error fetching branch performance:', error)
     return []
   }
 }
@@ -293,7 +294,7 @@ export async function getTopProductsToday(branchId: string, limit: number = 5) {
       .sort((a, b) => b.revenue - a.revenue)
       .slice(0, limit)
   } catch (error) {
-    console.error('Error fetching top products:', error)
+    logger.error('Error fetching top products:', error)
     return []
   }
 }
@@ -349,7 +350,7 @@ export async function getPaymentBreakdownToday(branchId: string) {
         value: amount,
       }))
   } catch (error) {
-    console.error('Error fetching payment breakdown:', error)
+    logger.error('Error fetching payment breakdown:', error)
     return []
   }
 }
@@ -405,7 +406,7 @@ export async function getLowStockAlertsForBranch(branchId: string, limit: number
 
     return alerts
   } catch (error) {
-    console.error('Error fetching low stock alerts:', error)
+    logger.error('Error fetching low stock alerts:', error)
     return []
   }
 }
@@ -486,7 +487,7 @@ export async function getRecentTransactions(branchId: string, limit: number = 5)
       timestamp: sale.created_at,
     }))
   } catch (error) {
-    console.error('Error fetching recent transactions:', error)
+    logger.error('Error fetching recent transactions:', error)
     return []
   }
 }
@@ -564,7 +565,7 @@ export async function getSeasonalInsights(branchId: string) {
       retailVsWholesale,
     }
   } catch (error) {
-    console.error('Error fetching seasonal insights:', error)
+    logger.error('Error fetching seasonal insights:', error)
     return {
       currentMonth: new Date().toLocaleDateString('en-US', { month: 'long' }),
       projection: 0,

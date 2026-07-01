@@ -1,4 +1,5 @@
 'use server'
+import { logger } from '@/lib/logger';
 
 import {
   authenticateServerAction,
@@ -50,7 +51,7 @@ export async function getAllBranches() {
     return data || []
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error)
-    console.error('[TRANSFER] Failed to fetch branches:', errorMsg)
+    logger.error('[TRANSFER] Failed to fetch branches:', errorMsg)
     throw new Error(`Failed to fetch branches: ${errorMsg}`)
   }
 }
@@ -75,7 +76,7 @@ export async function getStockAtBranch(productId: string, branchId: string) {
     if (error) throw error
     return { quantity: data?.quantity || 0, exists: true }
   } catch (error) {
-    console.error('Error fetching stock:', error)
+    logger.error('Error fetching stock:', error)
     return { quantity: 0, exists: false }
   }
 }
@@ -219,7 +220,7 @@ export async function getProductsAtBranch(branchId: string) {
       errorMsg = 'Unknown error occurred'
     }
     
-    console.error('[TRANSFER] Failed to load products for transfer:', {
+    logger.error('[TRANSFER] Failed to load products for transfer:', {
       branchId,
       error: errorMsg,
     })
@@ -252,13 +253,13 @@ export async function getTransfers(limit: number = 50) {
   try {
     const authResult = await authenticateServerAction()
     if (!authResult.success || !authResult.profile) {
-      console.warn('[TRANSFER] Transfer history denied:', authResult.error)
+      logger.warn('[TRANSFER] Transfer history denied:', { error: authResult.error })
       return []
     }
 
     const transferAccess = authorizeTransferProfile(authResult.profile)
     if (!transferAccess.authorized) {
-      console.warn('[TRANSFER] Transfer history access denied:', transferAccess.error)
+      logger.warn('[TRANSFER] Transfer history access denied:', { error: transferAccess.error })
       return []
     }
 
@@ -375,7 +376,7 @@ export async function getTransfers(limit: number = 50) {
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, safeLimit)
   } catch (error) {
-    console.error('Error fetching transfers:', error)
+    logger.error('Error fetching transfers:', error)
     return []
   }
 }
@@ -631,7 +632,7 @@ export async function createStockTransfer(
       message: `Transfer completed for ${createdMovements.length / 2} product(s)`,
     }
   } catch (error) {
-    console.error('Error creating stock transfer:', error)
+    logger.error('Error creating stock transfer:', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to create transfer',

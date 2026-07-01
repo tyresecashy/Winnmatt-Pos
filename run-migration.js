@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * Migration runner for receipt settings tables
  * Applies SQL migrations to Supabase database

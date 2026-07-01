@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 /**
  * Pricing Analyzer Service
  * Detects price anomalies and calculates pricing suggestions
@@ -304,7 +305,7 @@ export async function analyzeAndPriceBatch(batchId: string): Promise<{
     }
   }
 
-  console.log(
+  logger.info(
     `Analysis complete: ${anomalyCount} anomalies, ${withPriceCount} with suggested prices`
   )
 

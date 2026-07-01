@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 import { z } from 'zod'
 
 const envSchema = z.object({
@@ -24,9 +25,9 @@ const envSchema = z.object({
 const parsed = envSchema.safeParse(process.env)
 
 if (!parsed.success) {
-  console.error('❌ Invalid environment variables:')
+  logger.error('❌ Invalid environment variables:')
   for (const issue of parsed.error.issues) {
-    console.error(`  - ${issue.path.join('.')}: ${issue.message}`)
+    logger.error(`  - ${issue.path.join('.')}: ${issue.message}`)
   }
   throw new Error('Invalid environment variables — check logs above')
 }

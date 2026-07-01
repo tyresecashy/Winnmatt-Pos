@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'

@@ -1,4 +1,5 @@
 "use client"
+import { logger } from '@/lib/logger';
 
 import { useEffect, useMemo, useState } from "react"
 import { useAuth } from "@/contexts/auth-context"
@@ -120,7 +121,7 @@ export default function SettingsPage() {
           return
         }
 
-        console.error("Failed to load settings:", error)
+        logger.error("Failed to load settings:", error)
         setReceiptSaveState("error")
         setReceiptMessage("Failed to load the current settings.")
       } finally {
@@ -194,7 +195,7 @@ export default function SettingsPage() {
         receipt_header_text: existing?.receipt_header_text || "",
       })
     } catch (error) {
-      console.error("Failed to load branch overrides:", error)
+      logger.error("Failed to load branch overrides:", error)
       setBranchOverrides({})
       setBranchSaveState("error")
       setBranchMessage("Failed to load existing branch overrides.")

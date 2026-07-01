@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 'use server'
 
 import { supabaseAdmin } from '@/lib/supabase-server'
@@ -125,7 +126,7 @@ export async function openShift(
       message: `Shift ${shiftNumber} opened successfully`,
     }
   } catch (error) {
-    console.error('Error opening shift:', error)
+    logger.error('Error opening shift:', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to open shift',
@@ -156,7 +157,7 @@ export async function getActiveShift(branchId: string, cashierId: string) {
 
     return data || null
   } catch (error) {
-    console.error('Error fetching active shift:', error)
+    logger.error('Error fetching active shift:', error)
     return null
   }
 }
@@ -312,7 +313,7 @@ export async function closeShift(
       message: `Shift closed successfully. ${difference === 0 ? 'Perfect reconciliation!' : difference > 0 ? `Over by KShs ${(difference / 100).toFixed(2)}` : `Short by KShs ${(Math.abs(difference) / 100).toFixed(2)}`}`,
     }
   } catch (error) {
-    console.error('Error closing shift:', error)
+    logger.error('Error closing shift:', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to close shift',
@@ -355,7 +356,7 @@ export async function getShiftSummary(shiftId: string) {
       auditLog: auditLog || [],
     }
   } catch (error) {
-    console.error('Error fetching shift summary:', error)
+    logger.error('Error fetching shift summary:', error)
     return null
   }
 }
@@ -376,7 +377,7 @@ export async function getShiftHistory(branchId: string, limit: number = 20) {
 
     return data || []
   } catch (error) {
-    console.error('Error fetching shift history:', error)
+    logger.error('Error fetching shift history:', error)
     return []
   }
 }
@@ -451,7 +452,7 @@ export async function reopenShift(
       message: `Shift ${shift.shift_number} reopened by management`,
     }
   } catch (error) {
-    console.error('Error reopening shift:', error)
+    logger.error('Error reopening shift:', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to reopen shift',
@@ -480,7 +481,7 @@ export async function getShiftsForDateRange(
 
     return data || []
   } catch (error) {
-    console.error('Error fetching shifts for range:', error)
+    logger.error('Error fetching shifts for range:', error)
     return []
   }
 }

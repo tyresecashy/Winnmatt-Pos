@@ -1,4 +1,5 @@
 'use server'
+import { logger } from '@/lib/logger';
 
 import { createCashSaveTimingTracker } from '@/lib/cash-save-timing'
 import type { SaleItem, SaleReceiptSeed } from '@/lib/sales-actions'
@@ -171,7 +172,7 @@ export async function completePaymentAction(
       })
 
       if (request.branchId && request.branchId !== effectiveBranchId) {
-        console.warn('[completePaymentAction] Ignoring mismatched client branch id', {
+        logger.warn('[completePaymentAction] Ignoring mismatched client branch id', {
           userId: profile.id,
           requestedBranchId: request.branchId,
           authenticatedBranchId: effectiveBranchId,
@@ -179,7 +180,7 @@ export async function completePaymentAction(
       }
 
       if (request.cashierId && request.cashierId !== profile.id) {
-        console.warn('[completePaymentAction] Ignoring mismatched client cashier id', {
+        logger.warn('[completePaymentAction] Ignoring mismatched client cashier id', {
           requestedCashierId: request.cashierId,
           authenticatedCashierId: profile.id,
         })
@@ -345,13 +346,13 @@ export async function completePaymentAction(
         )
 
         if (!redemptionResult) {
-          console.warn('[completePaymentAction] Loyalty redemption did not complete', {
+          logger.warn('[completePaymentAction] Loyalty redemption did not complete', {
             customerId: redemptionCustomerId,
             saleId,
           })
         }
       } catch (error) {
-        console.warn('[completePaymentAction] Loyalty redemption failed after sale save', {
+        logger.warn('[completePaymentAction] Loyalty redemption failed after sale save', {
           saleId,
           error: String(error),
         })
@@ -471,7 +472,7 @@ export async function completePaymentAction(
       itemCount: request.items.length,
       customerType,
     })
-    console.error('[completePaymentAction] Unhandled error', { error: errorMsg })
+    logger.error('[completePaymentAction] Unhandled error', { error: errorMsg })
     return {
       success: false,
       error: `Failed at: UNKNOWN STAGE - ${errorMsg}`

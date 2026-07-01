@@ -1,4 +1,5 @@
 'use client'
+import { logger } from '@/lib/logger';
 
 import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '@/contexts/auth-context'
@@ -61,7 +62,7 @@ export function LowStockAlerts() {
             lastFetchAtRef.current = Date.now()
           }
         } catch (error) {
-          console.error('Error loading low stock alerts:', error)
+          logger.error('Error loading low stock alerts:', error)
           if (!cancelled) setError('Failed to load low stock alerts')
         } finally {
           if (!cancelled && shouldShowLoading) {

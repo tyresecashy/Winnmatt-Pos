@@ -1,4 +1,5 @@
 'use client'
+import { logger } from '@/lib/logger';
 
 import { useEffect, useState, useDeferredValue } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -71,7 +72,7 @@ export default function SuppliersPage() {
         const data = await getSuppliers()
         setSuppliers(data)
       } catch (error) {
-        console.error('Failed to load suppliers:', error)
+        logger.error('Failed to load suppliers:', error)
         toast({
           title: 'Error',
           description: 'Failed to load suppliers',

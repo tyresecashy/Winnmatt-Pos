@@ -1,4 +1,5 @@
 'use server'
+import { logger } from '@/lib/logger';
 
 import { supabaseAdmin } from '@/lib/supabase-server'
 import type { UserProfile } from '@/lib/db.types'
@@ -24,7 +25,7 @@ export async function getBranches(): Promise<Array<{
     .order('name', { ascending: true })
 
   if (error) {
-    console.error('[USER-MANAGEMENT] Failed to fetch branches:', error)
+    logger.error('[USER-MANAGEMENT] Failed to fetch branches:', error)
     throw new Error(`Failed to fetch branches: ${error.message}`)
   }
 
@@ -53,7 +54,7 @@ export async function getUsers(userRole: string): Promise<UserProfile[]> {
     .order('created_at', { ascending: false })
 
   if (error) {
-    console.error('[USER-MANAGEMENT] Failed to fetch users:', error)
+    logger.error('[USER-MANAGEMENT] Failed to fetch users:', error)
     throw new Error(`Failed to fetch users: ${error.message}`)
   }
 
@@ -105,7 +106,7 @@ export async function getUserById(userId: string, userRole: string): Promise<Use
     if (error.code === 'PGRST116') {
       return null // Not found
     }
-    console.error('[USER-MANAGEMENT] Failed to fetch user:', error)
+    logger.error('[USER-MANAGEMENT] Failed to fetch user:', error)
     throw new Error(`Failed to fetch user: ${error.message}`)
   }
 
@@ -202,7 +203,7 @@ export async function createUser(
     })
 
     if (authError) {
-      console.error('[USER-MANAGEMENT] Auth creation error:', authError)
+      logger.error('[USER-MANAGEMENT] Auth creation error:', authError)
       throw new Error(`Failed to create auth account: ${authError.message}`)
     }
 
@@ -236,18 +237,18 @@ export async function createUser(
       .single()
 
     if (profileError) {
-      console.error('[USER-MANAGEMENT] Profile creation error:', profileError)
+      logger.error('[USER-MANAGEMENT] Profile creation error:', profileError)
       // Try to clean up auth user if profile fails
       try {
         await supabaseAdmin.auth.admin.deleteUser(newUserId)
       } catch (deleteError) {
-        console.error('[USER-MANAGEMENT] Could not delete orphaned auth user:', deleteError)
+        logger.error('[USER-MANAGEMENT] Could not delete orphaned auth user:', deleteError)
       }
       throw new Error(`Failed to create user profile: ${profileError.message}`)
     }
 
     const branch = profileData.branch as any
-    console.log(`[USER-MANAGEMENT] Created user: ${email} with role ${role}`)
+    logger.info(`[USER-MANAGEMENT] Created user: ${email} with role ${role}`)
     
     return {
       user: {
@@ -267,7 +268,7 @@ export async function createUser(
       },
     }
   } catch (error) {
-    console.error('[USER-MANAGEMENT] Create user error:', error)
+    logger.error('[USER-MANAGEMENT] Create user error:', error)
     throw error
   }
 }
@@ -346,7 +347,7 @@ export async function updateUser(
     .single()
 
   if (error) {
-    console.error('[USER-MANAGEMENT] Update user error:', error)
+    logger.error('[USER-MANAGEMENT] Update user error:', error)
     throw new Error(`Failed to update user: ${error.message}`)
   }
 
@@ -412,11 +413,11 @@ export async function deactivateUser(
     .single()
 
   if (error) {
-    console.error('[USER-MANAGEMENT] Deactivate user error:', error)
+    logger.error('[USER-MANAGEMENT] Deactivate user error:', error)
     throw new Error(`Failed to deactivate user: ${error.message}`)
   }
 
-  console.log('[USER-MANAGEMENT] Deactivated user:', userId)
+  logger.info('[USER-MANAGEMENT] Deactivated user:', { userId })
   return { success: true, message: 'User deactivated successfully' }
 }
 
@@ -460,7 +461,7 @@ export async function resetUserPassword(
   })
 
   if (updateError) {
-    console.error('[USER-MANAGEMENT] Password reset error:', updateError)
+    logger.error('[USER-MANAGEMENT] Password reset error:', updateError)
     throw new Error(`Failed to reset password: ${updateError.message}`)
   }
 
@@ -505,7 +506,7 @@ export async function deleteUser(
     .eq('id', userId)
 
   if (error) {
-    console.error('[USER-MANAGEMENT] Delete user error:', error)
+    logger.error('[USER-MANAGEMENT] Delete user error:', error)
     throw new Error(`Failed to delete user: ${error.message}`)
   }
 
@@ -528,7 +529,7 @@ export async function reactivateUser(userId: string, userRole: string) {
     .single()
 
   if (error) {
-    console.error('[USER-MANAGEMENT] Reactivate error:', error)
+    logger.error('[USER-MANAGEMENT] Reactivate error:', error)
     throw new Error(`Failed to reactivate user: ${error.message}`)
   }
 

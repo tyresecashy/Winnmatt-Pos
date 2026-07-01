@@ -1,4 +1,5 @@
 'use server'
+import { logger } from '@/lib/logger';
 
 import { authenticateServerAction } from '@/lib/auth-helpers'
 import { supabaseAdmin } from '@/lib/supabase-server'
@@ -20,12 +21,12 @@ export async function getReceiptSettingBranches(): Promise<
   const authResult = await authenticateServerAction()
 
   if (!authResult.success || !authResult.profile) {
-    console.warn('[receipt-settings] Branch list denied:', authResult.error)
+    logger.warn('[receipt-settings] Branch list denied:', { error: authResult.error })
     return []
   }
 
   if (!['admin', 'owner'].includes(authResult.profile.role)) {
-    console.warn('[receipt-settings] Branch list forbidden for role:', authResult.profile.role)
+    logger.warn('[receipt-settings] Branch list forbidden for role:', { role: authResult.profile.role })
     return []
   }
 
@@ -35,7 +36,7 @@ export async function getReceiptSettingBranches(): Promise<
     .order('name')
 
   if (error) {
-    console.error('[receipt-settings] Failed to fetch branches:', error)
+    logger.error('[receipt-settings] Failed to fetch branches:', error)
     return []
   }
 
@@ -53,7 +54,7 @@ export async function getBusinessSettings(): Promise<BusinessSettings | null> {
     .single()
 
   if (error) {
-    console.error('[receipt-settings] Failed to fetch business settings:', error)
+    logger.error('[receipt-settings] Failed to fetch business settings:', error)
     return null
   }
 
@@ -75,7 +76,7 @@ export async function getBranchReceiptSettings(
   // No error is fine - it just means no override exists for this branch
   if (error && error.code !== 'PGRST116') {
     // PGRST116 = no rows found (expected case)
-    console.error('[receipt-settings] Failed to fetch branch settings:', error)
+    logger.error('[receipt-settings] Failed to fetch branch settings:', error)
     return null
   }
 

@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 export interface CashSaveTimingStep {
   name: string
   durationMs: number
@@ -33,7 +34,7 @@ export function createCashSaveTimingTracker(label: string, enabled: boolean = is
         name,
         durationMs,
       })
-      console.info(`[CASH_SAVE_TIMING] ${label}.${name} ${durationMs}ms`)
+      logger.info(`[CASH_SAVE_TIMING] ${label}.${name} ${durationMs}ms`)
     }
   }
 
@@ -46,7 +47,7 @@ export function createCashSaveTimingTracker(label: string, enabled: boolean = is
       name,
       durationMs,
     })
-    console.info(`[CASH_SAVE_TIMING] ${label}.${name} ${durationMs}ms`)
+    logger.info(`[CASH_SAVE_TIMING] ${label}.${name} ${durationMs}ms`)
   }
 
   function buildSummary(status: 'success' | 'failure', context: CashSaveTimingSummaryContext = {}) {
@@ -83,8 +84,8 @@ export function createCashSaveTimingTracker(label: string, enabled: boolean = is
     }
 
     const summary = buildSummary(status, context)
-    const logger = status === 'success' ? console.info : console.warn
-    logger(`[CASH_SAVE_TIMING] ${label}`, summary)
+    const logFn = status === 'success' ? logger.info : logger.warn
+    logFn(`[CASH_SAVE_TIMING] ${label}`, summary)
   }
 
   return {

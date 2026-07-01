@@ -1,4 +1,5 @@
 "use client"
+import { logger } from '@/lib/logger';
 
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/auth-context'
@@ -56,7 +57,7 @@ export function EditUserDialog({ open, user, onOpenChange, onUserUpdated }: Edit
         const data = await getBranches()
         setBranches(data)
       } catch (err) {
-        console.error('Failed to fetch branches:', err)
+        logger.error('Failed to fetch branches:', err)
       } finally {
         setBranchesLoading(false)
       }

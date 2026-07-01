@@ -1,4 +1,5 @@
 'use client'
+import { logger } from '@/lib/logger';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '@/contexts/auth-context'
@@ -64,7 +65,7 @@ export default function TransfersPage() {
       const data = await getTransfers()
       setTransfers(data)
     } catch (error) {
-      console.error('Error fetching transfers:', error)
+      logger.error('Error fetching transfers:', error)
       if (!options?.background) {
         setTransfers([])
       }

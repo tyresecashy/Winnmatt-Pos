@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 type Level = 'debug' | 'info' | 'warn' | 'error'
 
 interface LogEntry {

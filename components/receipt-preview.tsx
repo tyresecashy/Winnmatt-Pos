@@ -1,4 +1,5 @@
 'use client'
+import { logger } from '@/lib/logger';
 
 import { Button } from '@/components/ui/button'
 import { formatKSh } from '@/lib/currency'
@@ -163,7 +164,7 @@ export function ReceiptPreview({
       }
     }
   } catch (error) {
-    console.error('Failed to parse receipt date:', error)
+    logger.error('Failed to parse receipt date:', error)
   }
 
   const safeTotals = {

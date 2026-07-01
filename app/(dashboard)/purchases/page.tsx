@@ -1,4 +1,5 @@
 'use client'
+import { logger } from '@/lib/logger';
 
 import { useCallback, useEffect, useState, useDeferredValue } from 'react'
 import { useAuth } from '@/contexts/auth-context'
@@ -181,7 +182,7 @@ export default function PurchasesPage() {
       setProducts(prods)
       setStats(poStats)
     } catch (error) {
-      console.error('Failed to load data:', error)
+      logger.error('Failed to load data:', error)
       toast({
         title: 'Error',
         description: 'Failed to load data',

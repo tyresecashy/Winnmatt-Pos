@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { SUPABASE_AUTH_STORAGE_KEY } from '@/lib/supabase'

@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 /**
  * Product Deduplication Service
  * Identifies duplicate products using deterministic and fuzzy matching
@@ -306,7 +307,7 @@ export async function dedupImportBatch(batchId: string): Promise<{
     .update({ status: 'reviewing' })
     .eq('id', batchId)
 
-  console.log(
+  logger.info(
     `Deduplication complete: ${deterministicCount} deterministic, ${fuzzyCount} fuzzy`
   )
 

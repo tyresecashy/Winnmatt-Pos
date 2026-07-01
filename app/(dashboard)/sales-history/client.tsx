@@ -1,4 +1,5 @@
 'use client'
+import { logger } from '@/lib/logger';
 
 import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -188,7 +189,7 @@ export function SalesHistoryClient({
       const trail = await serverGetSaleAuditTrail(saleId)
       setAuditTrail(trail || [])
     } catch (error) {
-      console.error('Failed to load audit trail:', error)
+      logger.error('Failed to load audit trail:', error)
       setAuditTrail([])
     }
   }
@@ -256,7 +257,7 @@ export function SalesHistoryClient({
         })
       }
     } catch (error) {
-      console.error('Error voiding sale:', error)
+      logger.error('Error voiding sale:', error)
       toast({
         title: 'Void failed',
         description: 'An error occurred while voiding the sale.',

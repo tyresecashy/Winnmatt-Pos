@@ -10,6 +10,15 @@ const config = [
       'no-console': 'warn',
     },
   },
+  {
+    ignores: [
+      'scripts/*.js',
+      'scripts/*.mjs',
+      '*.js',
+      '*.mjs',
+      'tests/*.mjs',
+    ],
+  },
 ]
 
 export default config

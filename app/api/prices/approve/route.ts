@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 // API endpoint: POST /api/prices/approve
 // Approves, corrects, or protects a flagged price anomaly
 // Admin only
@@ -69,7 +70,7 @@ export async function POST(request: Request) {
           .eq('id', productId)
 
         if (productError) {
-          console.error('Error updating product:', productError)
+          logger.error('Error updating product:', productError)
           return NextResponse.json({ error: productError.message }, { status: 500 })
         }
 
@@ -90,7 +91,7 @@ export async function POST(request: Request) {
           .eq('status', 'flagged')
 
         if (anomalyError) {
-          console.error('Error updating anomaly:', anomalyError)
+          logger.error('Error updating anomaly:', anomalyError)
           return NextResponse.json({ error: anomalyError.message }, { status: 500 })
         }
 
@@ -112,7 +113,7 @@ export async function POST(request: Request) {
           .eq('id', productId)
 
         if (productError) {
-          console.error('Error protecting product:', productError)
+          logger.error('Error protecting product:', productError)
           return NextResponse.json({ error: productError.message }, { status: 500 })
         }
 
@@ -131,7 +132,7 @@ export async function POST(request: Request) {
           .eq('status', 'flagged')
 
         if (anomalyError) {
-          console.error('Error updating anomaly:', anomalyError)
+          logger.error('Error updating anomaly:', anomalyError)
           return NextResponse.json({ error: anomalyError.message }, { status: 500 })
         }
 
@@ -146,7 +147,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
     }
   } catch (error: unknown) {
-    console.error('Price approval error:', error)
+    logger.error('Price approval error:', error)
     const errorMessage = error instanceof Error ? error.message : 'Internal server error'
     return NextResponse.json({ error: errorMessage }, { status: 500 })
   }

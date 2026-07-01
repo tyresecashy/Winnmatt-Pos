@@ -1,4 +1,5 @@
 'use server'
+import { logger } from '@/lib/logger';
 
 import { supabaseAdmin } from '@/lib/supabase-server'
 
@@ -84,7 +85,7 @@ export async function createPurchaseOrder(input: CreatePurchaseOrderInput) {
       message: `Purchase order created successfully`,
     }
   } catch (error) {
-    console.error('Error creating purchase order:', error)
+    logger.error('Error creating purchase order:', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to create purchase order',
@@ -119,7 +120,7 @@ export async function getPurchaseOrders(branchId: string, limit: number = 50) {
     if (error) throw error
     return data || []
   } catch (error) {
-    console.error('Error fetching purchase orders:', error)
+    logger.error('Error fetching purchase orders:', error)
     return []
   }
 }
@@ -150,7 +151,7 @@ export async function getPurchaseOrderById(poId: string) {
     if (error) throw error
     return data
   } catch (error) {
-    console.error('Error fetching purchase order:', error)
+    logger.error('Error fetching purchase order:', error)
     return null
   }
 }
@@ -277,7 +278,7 @@ export async function receivePurchaseOrder(poId: string, partial?: boolean) {
       message: 'Purchase order received and inventory updated successfully',
     }
   } catch (error) {
-    console.error('Error receiving purchase order:', error)
+    logger.error('Error receiving purchase order:', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to receive purchase order',
@@ -313,7 +314,7 @@ export async function updatePurchaseOrderStatus(poId: string, status: 'draft' | 
       message: `Purchase order status updated to ${status}`,
     }
   } catch (error) {
-    console.error('Error updating purchase order status:', error)
+    logger.error('Error updating purchase order status:', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to update purchase order status',
@@ -344,7 +345,7 @@ export async function cancelPurchaseOrder(poId: string, reason?: string) {
       message: 'Purchase order cancelled',
     }
   } catch (error) {
-    console.error('Error cancelling purchase order:', error)
+    logger.error('Error cancelling purchase order:', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to cancel purchase order',
@@ -383,7 +384,7 @@ export async function getPurchaseStats(branchId: string) {
 
     return stats
   } catch (error) {
-    console.error('Error fetching purchase stats:', error)
+    logger.error('Error fetching purchase stats:', error)
     return { total_orders: 0, total_spent: 0, draft: 0, pending: 0, received: 0, cancelled: 0 }
   }
 }

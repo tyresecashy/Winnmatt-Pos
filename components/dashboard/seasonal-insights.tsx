@@ -1,4 +1,5 @@
 "use client"
+import { logger } from '@/lib/logger';
 
 import { useEffect, useState } from "react"
 import { useAuth } from "@/contexts/auth-context"
@@ -38,7 +39,7 @@ export function SeasonalInsights() {
         setError(null)
         setInsights(data)
       } catch (error) {
-        console.error('Error fetching seasonal insights:', error)
+        logger.error('Error fetching seasonal insights:', error)
         setError('Failed to load seasonal insights')
       } finally {
         setLoading(false)

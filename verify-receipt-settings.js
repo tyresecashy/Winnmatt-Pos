@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * Runtime verification script for receipt settings architecture
  * Tests:

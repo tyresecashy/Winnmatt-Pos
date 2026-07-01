@@ -1,4 +1,5 @@
 'use client'
+import { logger } from '@/lib/logger';
 
 import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '@/contexts/auth-context'
@@ -61,7 +62,7 @@ export function TopProducts() {
             lastFetchAtRef.current = Date.now()
           }
         } catch (error) {
-          console.error('Error loading top products:', error)
+          logger.error('Error loading top products:', error)
           if (!cancelled) setError('Failed to load top products')
         } finally {
           if (!cancelled && shouldShowLoading) {

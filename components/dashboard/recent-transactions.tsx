@@ -1,4 +1,5 @@
 "use client"
+import { logger } from '@/lib/logger';
 
 import { useEffect, useRef, useState } from "react"
 import { useAuth } from "@/contexts/auth-context"
@@ -84,7 +85,7 @@ export function RecentTransactions() {
             lastFetchAtRef.current = Date.now()
           }
         } catch (error) {
-          console.error('Error fetching recent transactions:', error)
+          logger.error('Error fetching recent transactions:', error)
           if (!cancelled) setError('Failed to load recent transactions')
           if (!cancelled && !hasLoadedRef.current) {
             setTransactions([])

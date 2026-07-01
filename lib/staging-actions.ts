@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 /**
  * Staging Actions
  * Server actions for admin staging review and publish workflow
@@ -37,15 +38,15 @@ export async function processBatch(batchId: string) {
     }
 
     // Step 1: Normalize
-    console.log('Step 1: Normalizing...')
+    logger.info('Step 1: Normalizing...')
     const normalizedCount = await normalizeImportBatch(batchId)
 
     // Step 2: Deduplicate
-    console.log('Step 2: Deduplicating...')
+    logger.info('Step 2: Deduplicating...')
     const dedup = await dedupImportBatch(batchId)
 
     // Step 3: Analyze & Price
-    console.log('Step 3: Analyzing prices...')
+    logger.info('Step 3: Analyzing prices...')
     const pricing = await analyzeAndPriceBatch(batchId)
 
     // Update batch status to ready for review
@@ -65,7 +66,7 @@ export async function processBatch(batchId: string) {
       pricing: pricing,
     }
   } catch (error: any) {
-    console.error('Batch processing failed:', error)
+    logger.error('Batch processing failed:', error)
 
     // Mark batch as failed
     await supabase
@@ -294,7 +295,7 @@ export async function publishBatchToLive(batchId: string, publisherUserId: strin
       success: true,
     }
   } catch (error: any) {
-    console.error('Publish failed:', error)
+    logger.error('Publish failed:', error)
     throw new Error(`Publish failed: ${error.message}`)
   }
 }

@@ -1,4 +1,5 @@
 'use client'
+import { logger } from '@/lib/logger';
 
 import { useEffect, useState } from 'react'
 import { useAuth } from '@/contexts/auth-context'
@@ -143,7 +144,7 @@ export default function ReportsPage() {
         setLowStockProducts(lowStock)
         setError(null)
       } catch (err) {
-        console.error('Error loading reports:', err)
+        logger.error('Error loading reports:', err)
         setError('Failed to load reports. The server may be unavailable.')
       } finally {
         setLoading(false)

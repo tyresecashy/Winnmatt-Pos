@@ -1,4 +1,5 @@
 'use server'
+import { logger } from '@/lib/logger';
 
 import { supabaseAdmin } from '@/lib/supabase-server'
 
@@ -47,7 +48,7 @@ export async function getSalesStats(branchId: string, startDate: string, endDate
       paymentMethods,
     }
   } catch (error) {
-    console.error('Error fetching sales stats:', error)
+    logger.error('Error fetching sales stats:', error)
     return {
       totalSales: 0,
       transactionCount: 0,
@@ -125,7 +126,7 @@ export async function getTopSellingProducts(branchId: string, startDate: string,
 
     return topProducts
   } catch (error) {
-    console.error('Error fetching top selling products:', error)
+    logger.error('Error fetching top selling products:', error)
     return []
   }
 }
@@ -197,7 +198,7 @@ export async function getSlowMovingProducts(branchId: string, daysSinceSale: num
 
     return slowMoving.sort((a, b) => b.days_since_last_sale - a.days_since_last_sale).slice(0, limit)
   } catch (error) {
-    console.error('Error fetching slow moving products:', error)
+    logger.error('Error fetching slow moving products:', error)
     return []
   }
 }
@@ -257,7 +258,7 @@ export async function getInventoryValueByCategory(branchId: string) {
       totalValue: Math.round(totalValue),
     }
   } catch (error) {
-    console.error('Error fetching inventory value by category:', error)
+    logger.error('Error fetching inventory value by category:', error)
     return { categories: [], totalValue: 0 }
   }
 }
@@ -300,7 +301,7 @@ export async function getBranchPerformanceStats(startDate: string, endDate: stri
 
     return branchStats.sort((a, b) => b.sales - a.sales)
   } catch (error) {
-    console.error('Error fetching branch performance stats:', error)
+    logger.error('Error fetching branch performance stats:', error)
     return []
   }
 }
@@ -358,7 +359,7 @@ export async function getCashierPerformanceStats(branchId: string, startDate: st
 
     return cashierStats.sort((a, b) => b.sales - a.sales)
   } catch (error) {
-    console.error('Error fetching cashier performance stats:', error)
+    logger.error('Error fetching cashier performance stats:', error)
     return []
   }
 }
@@ -395,7 +396,7 @@ export async function getDailySalesTrend(branchId: string, startDate: string, en
 
     return dailyData
   } catch (error) {
-    console.error('Error fetching daily sales trend:', error)
+    logger.error('Error fetching daily sales trend:', error)
     return []
   }
 }
@@ -433,7 +434,7 @@ export async function getStockMovementSummary(branchId: string, startDate: strin
 
     return summary
   } catch (error) {
-    console.error('Error fetching stock movement summary:', error)
+    logger.error('Error fetching stock movement summary:', error)
     return {}
   }
 }
@@ -479,7 +480,7 @@ export async function getLowStockProducts(branchId: string, limit: number = 10) 
       })
       .filter((p) => p.status !== 'ok')
   } catch (error) {
-    console.error('Error fetching low stock products:', error)
+    logger.error('Error fetching low stock products:', error)
     return []
   }
 }

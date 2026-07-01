@@ -1,4 +1,5 @@
 "use client"
+import { logger } from '@/lib/logger';
 
 import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
@@ -175,7 +176,7 @@ export function PaymentPanel({
         setPaymentStatus("Waiting for customer to enter M-Pesa PIN on phone...")
       } catch (error) {
         if (!cancelled) {
-          console.warn("[PAYMENT] Failed to poll M-Pesa status:", error)
+          logger.warn("[PAYMENT] Failed to poll M-Pesa status:", { error })
           setPaymentStatus("Checking M-Pesa payment status...")
         }
       } finally {
@@ -270,7 +271,7 @@ export function PaymentPanel({
       setPaymentStatus("STK Push sent. Waiting for customer confirmation on phone...")
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error occurred"
-      console.error("[PAYMENT] Error during payment:", errorMessage)
+      logger.error("[PAYMENT] Error during payment:", errorMessage)
       setPaymentError(errorMessage)
       setPaymentStatus("")
       setIsProcessing(false)

@@ -1,4 +1,5 @@
 'use client'
+import { logger } from '@/lib/logger';
 
 import { useState, useEffect, useDeferredValue } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -98,7 +99,7 @@ export default function ProductsPage() {
         setCategories(categoriesData)
       } catch (err) {
         setError('Failed to load products')
-        console.error(err)
+        logger.error('Failed to load products', err)
       } finally {
         setIsLoading(false)
       }

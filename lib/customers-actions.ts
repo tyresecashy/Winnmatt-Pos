@@ -1,4 +1,5 @@
 'use server'
+import { logger } from '@/lib/logger';
 
 import { authenticateServerAction, authorizePOSProfile } from '@/lib/auth-helpers'
 import { supabaseAdmin } from '@/lib/supabase-server'
@@ -66,7 +67,7 @@ export async function getCustomers(limit: number = 100) {
     if (error) throw error
     return data || []
   } catch (error) {
-    console.error('Error fetching customers:', error)
+    logger.error('Error fetching customers:', error)
     return []
   }
 }
@@ -100,7 +101,7 @@ export async function getCustomerById(customerId: string) {
 
     return customer
   } catch (error) {
-    console.error('Error fetching customer:', error)
+    logger.error('Error fetching customer:', error)
     return null
   }
 }
@@ -114,13 +115,13 @@ export async function searchCustomers(query: string) {
 
     const authResult = await authenticateServerAction()
     if (!authResult.success || !authResult.profile) {
-      console.warn('[CUSTOMERS] Search denied:', authResult.error)
+      logger.warn('[CUSTOMERS] Search denied:', { error: authResult.error })
       return []
     }
 
     const posAccess = authorizePOSProfile(authResult.profile)
     if (!posAccess.authorized) {
-      console.warn('[CUSTOMERS] POS search denied:', posAccess.error)
+      logger.warn('[CUSTOMERS] POS search denied:', { error: posAccess.error })
       return []
     }
 
@@ -135,7 +136,7 @@ export async function searchCustomers(query: string) {
     if (error) throw error
     return data || []
   } catch (error) {
-    console.error('Error searching customers:', error)
+    logger.error('Error searching customers:', error)
     return []
   }
 }
@@ -154,7 +155,7 @@ export async function getCustomersByType(type: 'retail' | 'wholesale' | 'busines
     if (error) throw error
     return data || []
   } catch (error) {
-    console.error('Error fetching customers by type:', error)
+    logger.error('Error fetching customers by type:', error)
     return []
   }
 }
@@ -218,7 +219,7 @@ export async function createCustomer(
         .map((customer) => formatCustomerReference(customer))
         .join(', ')
 
-      console.warn('[CUSTOMERS] Blocked potential duplicate customer creation', {
+      logger.warn('[CUSTOMERS] Blocked potential duplicate customer creation', {
         requestedName: normalizedName,
         requestedPhone: normalizedPhone,
         requestedEmail: normalizedEmail,
@@ -257,7 +258,7 @@ export async function createCustomer(
       message: `Customer "${name}" created successfully`,
     }
   } catch (error) {
-    console.error('Error creating customer:', error)
+    logger.error('Error creating customer:', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to create customer',
@@ -308,7 +309,7 @@ export async function updateCustomer(
       message: 'Customer updated successfully',
     }
   } catch (error) {
-    console.error('Error updating customer:', error)
+    logger.error('Error updating customer:', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to update customer',
@@ -361,7 +362,7 @@ export async function getCustomersWithStats() {
       purchase_count: statsMap[customer.id]?.purchase_count || 0,
     })) || []
   } catch (error) {
-    console.error('Error fetching customers with stats:', error)
+    logger.error('Error fetching customers with stats:', error)
     return []
   }
 }
@@ -392,7 +393,7 @@ export async function getCustomerPurchases(customerId: string, limit: number = 1
         sale.sale_items?.reduce((sum: number, item: any) => sum + (item.quantity || 0), 0) || 0,
     })) || []
   } catch (error) {
-    console.error('Error fetching customer purchases:', error)
+    logger.error('Error fetching customer purchases:', error)
     return []
   }
 }
@@ -417,7 +418,7 @@ export async function getCustomerCounts() {
 
     return counts
   } catch (error) {
-    console.error('Error getting customer counts:', error)
+    logger.error('Error getting customer counts:', error)
     return { total: 0, retail: 0, wholesale: 0, business: 0 }
   }
 }

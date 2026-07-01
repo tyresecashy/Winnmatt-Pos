@@ -1,4 +1,5 @@
 'use client'
+import { logger } from '@/lib/logger';
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ProductSearch } from '@/components/pos/product-search'
@@ -58,6 +59,7 @@ export default function POSPage() {
   const productRefreshPromiseRef = useRef<Promise<void> | null>(null)
   const lastProductRefreshAtRef = useRef(0)
   const postSaleRefreshTimeoutRef = useRef<number | null>(null)
+  const refreshProductsRef = useRef(refreshProducts)
   const [allProducts, setAllProducts] = useState<any[]>([])
   const [productsLoading, setProductsLoading] = useState(true)
   const [cart, setCart] = useState<CartItem[]>([])
@@ -116,7 +118,7 @@ export default function POSPage() {
         setAllProducts(products)
         lastProductRefreshAtRef.current = Date.now()
       } catch (error) {
-        console.error('Failed to load products:', error)
+        logger.error('Failed to load products:', error)
         setAllProducts([])
       } finally {
         if (showLoadingState) {
@@ -135,6 +137,10 @@ export default function POSPage() {
       }
     }
   }
+
+  useEffect(() => {
+    refreshProductsRef.current = refreshProducts
+  })
 
   const applySoldQuantitiesToProducts = (items: SaleItem[]) => {
     setAllProducts((currentProducts) =>
@@ -159,7 +165,7 @@ export default function POSPage() {
 
     postSaleRefreshTimeoutRef.current = window.setTimeout(() => {
       postSaleRefreshTimeoutRef.current = null
-      void refreshProducts(false, { force: true })
+      void refreshProductsRef.current(false, { force: true })
     }, delayMs)
   }
 
@@ -169,17 +175,17 @@ export default function POSPage() {
 
     const loadProducts = async (showLoadingState: boolean = false) => {
       if (cancelled) return
-      await refreshProducts(showLoadingState)
+      await refreshProductsRef.current(showLoadingState)
     }
 
     void loadProducts(true)
 
     const intervalId = window.setInterval(() => {
-      void refreshProducts(false, { minIntervalMs: 10000 })
+      void refreshProductsRef.current(false, { minIntervalMs: 10000 })
     }, 45000)
 
     const handleFocus = () => {
-      void refreshProducts(false, { minIntervalMs: 10000 })
+      void refreshProductsRef.current(false, { minIntervalMs: 10000 })
     }
 
     window.addEventListener('focus', handleFocus)
@@ -399,7 +405,7 @@ export default function POSPage() {
           return
         }
 
-        console.error('[POS] Failed to load redemption eligibility:', error)
+        logger.error('[POS] Failed to load redemption eligibility:', error)
         setLoyaltyRedemption({
           loading: false,
           eligible: false,
@@ -747,7 +753,7 @@ export default function POSPage() {
                 // Don't close payment dialog yet - let user view receipt first
                 // Cart will be cleared from receipt dialog's close handler
               } catch (error) {
-                console.error('[POS] Failed to complete sale:', error)
+                logger.error('[POS] Failed to complete sale:', error)
                 void refreshProducts(false, { force: true })
                 toast({
                   title: 'Error',

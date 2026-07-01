@@ -1,4 +1,5 @@
 "use client"
+import { logger } from '@/lib/logger';
 
 import { useState, useCallback } from "react"
 import { Input } from "@/components/ui/input"
@@ -59,7 +60,7 @@ export function CustomerLookup({ selectedCustomer, onSelectCustomer, loyaltyRede
       const results = await searchCustomers(query)
       setSearchResults(results)
     } catch (error) {
-      console.error('Error searching customers:', error)
+      logger.error('Error searching customers:', error)
       setSearchResults([])
     } finally {
       setIsSearching(false)

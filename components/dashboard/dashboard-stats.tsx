@@ -1,4 +1,5 @@
 'use client'
+import { logger } from '@/lib/logger';
 
 import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '@/contexts/auth-context'
@@ -74,7 +75,7 @@ export function DashboardStats() {
         } catch (error) {
           if (!cancelled) {
             setError('Failed to load dashboard stats. The server may be unavailable.')
-            console.error('Error loading dashboard stats:', error)
+            logger.error('Error loading dashboard stats:', error)
           }
         } finally {
           if (!cancelled && shouldShowLoading) {

@@ -1,4 +1,5 @@
 "use client"
+import { logger } from '@/lib/logger';
 
 import { useState, useEffect } from "react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -54,7 +55,7 @@ export function CustomerDetailsDialog({
       const data = await getCustomerPurchases(customer.id, 10)
       setPurchases(data)
     } catch (error) {
-      console.error("Failed to load purchases:", error)
+      logger.error("Failed to load purchases:", error)
     } finally {
       setIsLoading(false)
     }
@@ -65,6 +66,7 @@ export function CustomerDetailsDialog({
       const timer = setTimeout(() => void loadPurchases())
       return () => clearTimeout(timer)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, customer?.id])
 
   const colorScheme = customerTypeColors[customer.type] || customerTypeColors.retail

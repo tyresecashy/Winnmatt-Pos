@@ -1,4 +1,5 @@
 'use server'
+import { logger } from '@/lib/logger';
 
 import { supabaseAdmin } from '@/lib/supabase-server'
 
@@ -27,7 +28,7 @@ export async function getSuppliers() {
     if (error) throw error
     return data || []
   } catch (error) {
-    console.error('Error fetching suppliers:', error)
+    logger.error('Error fetching suppliers:', error)
     return []
   }
 }
@@ -46,7 +47,7 @@ export async function getSupplierById(supplierId: string) {
     if (error) throw error
     return data
   } catch (error) {
-    console.error('Error fetching supplier:', error)
+    logger.error('Error fetching supplier:', error)
     return null
   }
 }
@@ -67,7 +68,7 @@ export async function searchSuppliers(query: string) {
     if (error) throw error
     return data || []
   } catch (error) {
-    console.error('Error searching suppliers:', error)
+    logger.error('Error searching suppliers:', error)
     return []
   }
 }
@@ -108,7 +109,7 @@ export async function createSupplier(
       message: `Supplier "${name}" created successfully`,
     }
   } catch (error) {
-    console.error('Error creating supplier:', error)
+    logger.error('Error creating supplier:', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to create supplier',
@@ -155,7 +156,7 @@ export async function updateSupplier(
       message: 'Supplier updated successfully',
     }
   } catch (error) {
-    console.error('Error updating supplier:', error)
+    logger.error('Error updating supplier:', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to update supplier',
@@ -180,7 +181,7 @@ export async function deleteSupplier(supplierId: string) {
       message: 'Supplier deleted successfully',
     }
   } catch (error) {
-    console.error('Error deleting supplier:', error)
+    logger.error('Error deleting supplier:', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to delete supplier',
@@ -213,7 +214,7 @@ export async function getSupplierOrders(supplierId: string) {
     if (error) throw error
     return data || []
   } catch (error) {
-    console.error('Error fetching supplier orders:', error)
+    logger.error('Error fetching supplier orders:', error)
     return []
   }
 }

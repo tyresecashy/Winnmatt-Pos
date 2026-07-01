@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 'use server'
 
 import { supabaseAdmin } from '@/lib/supabase-server'
@@ -20,7 +21,7 @@ export async function getUserProfile(userId: string) {
     if (error) throw error
     return data
   } catch (error) {
-    console.error('Error fetching user profile:', error)
+    logger.error('Error fetching user profile:', error)
     return null
   }
 }
@@ -42,7 +43,7 @@ export async function createUserProfile(userId: string, email: string, fullName:
     if (error) throw error
     return data
   } catch (error) {
-    console.error('Error creating user profile:', error)
+    logger.error('Error creating user profile:', error)
     return null
   }
 }
@@ -57,7 +58,7 @@ export async function getBranches() {
     if (error) throw error
     return data || []
   } catch (error) {
-    console.error('Error fetching branches:', error)
+    logger.error('Error fetching branches:', error)
     return []
   }
 }
@@ -73,7 +74,7 @@ export async function getMainBranch() {
     if (error) throw error
     return data
   } catch (error) {
-    console.error('Error fetching main branch:', error)
+    logger.error('Error fetching main branch:', error)
     return null
   }
 }

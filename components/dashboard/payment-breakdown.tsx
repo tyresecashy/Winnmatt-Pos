@@ -1,4 +1,5 @@
 'use client'
+import { logger } from '@/lib/logger';
 
 import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '@/contexts/auth-context'
@@ -64,7 +65,7 @@ export function PaymentBreakdown() {
             lastFetchAtRef.current = Date.now()
           }
         } catch (error) {
-          console.error('Error loading payment data:', error)
+          logger.error('Error loading payment data:', error)
           if (!cancelled) setError('Failed to load payment data')
         } finally {
           if (!cancelled && shouldShowLoading) {

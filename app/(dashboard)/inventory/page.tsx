@@ -1,4 +1,5 @@
 "use client"
+import { logger } from '@/lib/logger';
 
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -70,7 +71,7 @@ export default function InventoryPage() {
       const data = await getInventoryForBranch(profile.branch_id)
       setInventory(data || [])
     } catch (error) {
-      console.error("Failed to load inventory:", error)
+      logger.error("Failed to load inventory:", error)
       if (!options?.background) {
         setInventory([])
       }

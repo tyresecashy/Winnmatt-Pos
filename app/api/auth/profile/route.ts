@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server'
 import {
   getAuthenticatedSupabaseUser,
@@ -16,7 +17,7 @@ export async function GET(request: NextRequest) {
     const authUserResult = await getAuthenticatedSupabaseUser(request)
 
     if (!authUserResult.user) {
-      console.warn('[PROFILE] Auth failed:', authUserResult.error)
+      logger.warn('[PROFILE] Auth failed:', { error: authUserResult.error })
       return NextResponse.json(
         { error: authUserResult.error || 'Unauthorized' },
         { status: 401 }
@@ -46,15 +47,14 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    console.log(
-      '[PROFILE] Profile loaded for authenticated user:',
-      profileResult.profile.email,
-      profileResult.profile.role
-    )
+    logger.info('[PROFILE] Profile loaded', {
+      email: profileResult.profile.email,
+      role: profileResult.profile.role,
+    })
 
     return NextResponse.json({ profile: profileResult.profile })
   } catch (error) {
-    console.error('[PROFILE] Unhandled error:', error instanceof Error ? error.message : String(error))
+    logger.error('[PROFILE] Unhandled error:', error instanceof Error ? error.message : String(error))
     return NextResponse.json(
       { error: 'Failed to fetch profile', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
       { status: 403 }
     )
   } catch (error) {
-    console.error('[PROFILE] Unhandled error:', error instanceof Error ? error.message : String(error))
+    logger.error('[PROFILE] Unhandled error:', error instanceof Error ? error.message : String(error))
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

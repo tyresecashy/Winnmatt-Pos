@@ -1,4 +1,5 @@
 "use client"
+import { logger } from '@/lib/logger';
 
 import { useEffect, useRef, useState } from "react"
 import { useAuth } from "@/contexts/auth-context"
@@ -93,7 +94,7 @@ export function RecentTransactions({ onClose }: RecentTransactionsProps) {
             lastFetchAtRef.current = Date.now()
           }
         } catch (error) {
-          console.error("Failed to load recent cash sales:", error)
+          logger.error("Failed to load recent cash sales:", error)
           if (!cancelled) {
             setRecentSales([])
           }

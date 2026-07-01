@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 import { createClient } from '@supabase/supabase-js'
 
 function requirePublicEnv(name: string, value: string | undefined): string {
@@ -58,7 +59,7 @@ const browserSessionStorage = {
         return localValue
       }
     } catch (error) {
-      console.warn('[SUPABASE] Failed reading session from localStorage:', error)
+      logger.warn('[SUPABASE] Failed reading session from localStorage:', { error })
     }
 
     return getCookieValue(key)
@@ -71,7 +72,7 @@ const browserSessionStorage = {
     try {
       window.localStorage.setItem(key, value)
     } catch (error) {
-      console.warn('[SUPABASE] Failed writing session to localStorage:', error)
+      logger.warn('[SUPABASE] Failed writing session to localStorage:', { error })
     }
 
     setCookieValue(key, value)
@@ -84,7 +85,7 @@ const browserSessionStorage = {
     try {
       window.localStorage.removeItem(key)
     } catch (error) {
-      console.warn('[SUPABASE] Failed removing session from localStorage:', error)
+      logger.warn('[SUPABASE] Failed removing session from localStorage:', { error })
     }
 
     removeCookieValue(key)

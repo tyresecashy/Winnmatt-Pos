@@ -1,4 +1,5 @@
 'use client'
+import { logger } from '@/lib/logger';
 
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
@@ -54,7 +55,7 @@ export function ShiftOperations({ branchId, cashierId, cashierName }: ShiftOpera
       const shift = await getActiveShift(branchId, cashierId)
       setActiveShift(shift)
     } catch (error) {
-      console.error('Error loading shift:', error)
+      logger.error('Error loading shift:', error)
     } finally {
       setShiftLoading(false)
     }
@@ -63,6 +64,7 @@ export function ShiftOperations({ branchId, cashierId, cashierName }: ShiftOpera
   useEffect(() => {
     const timer = setTimeout(() => void loadActiveShift())
     return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // OPEN SHIFT

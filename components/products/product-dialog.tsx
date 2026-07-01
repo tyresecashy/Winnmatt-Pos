@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 import * as z from 'zod'
 import {
   Dialog,
@@ -98,7 +98,9 @@ export function ProductForm({
     }
   }
 
-  const margin = ((form.watch('sellingPrice') - form.watch('purchasePrice')) / form.watch('purchasePrice') * 100) || 0
+  const watchedSellingPrice = useWatch({ control: form.control, name: 'sellingPrice' })
+  const watchedPurchasePrice = useWatch({ control: form.control, name: 'purchasePrice' })
+  const margin = ((watchedSellingPrice - watchedPurchasePrice) / (watchedPurchasePrice || 1) * 100) || 0
 
   return (
     <div className="space-y-4">
@@ -273,12 +275,12 @@ export function ProductForm({
             />
           </div>
 
-          {form.watch('purchasePrice') > 0 && (
+          {watchedPurchasePrice > 0 && (
             <div className="bg-blue-50 p-3 rounded-lg">
               <p className="text-sm text-blue-900">
                 <span className="font-medium">Markup:</span> {margin.toFixed(1)}% 
                 <span className="text-blue-700 ml-2">
-                  (KShs {(form.watch('sellingPrice') - form.watch('purchasePrice')).toLocaleString()})
+                  (KShs {(watchedSellingPrice - watchedPurchasePrice).toLocaleString()})
                 </span>
               </p>
             </div>

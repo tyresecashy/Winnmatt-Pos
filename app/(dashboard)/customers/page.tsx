@@ -1,4 +1,5 @@
 "use client"
+import { logger } from '@/lib/logger';
 
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -66,7 +67,7 @@ export default function CustomersPage() {
       const customersData = await getCustomersWithStats()
       setCustomers(customersData || [])
     } catch (error) {
-      console.error("Failed to load customers:", error)
+      logger.error("Failed to load customers:", error)
     } finally {
       if (shouldShowLoading) {
         setIsLoading(false)

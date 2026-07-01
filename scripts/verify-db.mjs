@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 const MGMT_TOKEN = 'SUPABASE_MGMT_TOKEN';
 const REF = 'aunnoikvfjgrlejccywv';
 const API = `https://api.supabase.com/v1/projects/${REF}/database/query`;

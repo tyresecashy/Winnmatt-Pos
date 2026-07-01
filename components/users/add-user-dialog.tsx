@@ -1,4 +1,5 @@
 "use client"
+import { logger } from '@/lib/logger';
 
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/auth-context'
@@ -62,7 +63,7 @@ export function AddUserDialog({ open, onOpenChange, onUserCreated }: AddUserDial
           setBranchId(data[0].id)
         }
       } catch (err) {
-        console.error('Failed to fetch branches:', err)
+        logger.error('Failed to fetch branches:', err)
         setError('Failed to load branches')
       } finally {
         setBranchesLoading(false)
@@ -72,6 +73,7 @@ export function AddUserDialog({ open, onOpenChange, onUserCreated }: AddUserDial
     if (open) {
       fetchBranches()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
   // Reset form when dialog closes

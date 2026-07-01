@@ -1,4 +1,5 @@
 'use server'
+import { logger } from '@/lib/logger';
 
 import { createCashSaveTimingTracker, isCashSaveTimingEnabled } from '@/lib/cash-save-timing'
 import { supabaseAdmin } from '@/lib/supabase-server'
@@ -20,13 +21,13 @@ export async function getLoyaltySettings(): Promise<LoyaltySettings | null> {
       .single()
 
     if (error) {
-      console.error('[LOYALTY] Failed to fetch settings:', error)
+      logger.error('[LOYALTY] Failed to fetch settings:', error)
       return null
     }
 
     return data as LoyaltySettings
   } catch (error) {
-    console.error('[LOYALTY] Error fetching settings:', error)
+    logger.error('[LOYALTY] Error fetching settings:', error)
     return null
   }
 }
@@ -76,10 +77,10 @@ export async function updateLoyaltySettings(
       details: `Updated loyalty settings: ${JSON.stringify(updates)}`,
     })
 
-    console.log('[LOYALTY] Loyalty settings updated by', userId)
+    logger.info('[LOYALTY] Loyalty settings updated by', { userId })
     return data as LoyaltySettings
   } catch (error) {
-    console.error('[LOYALTY] Error updating settings:', error)
+    logger.error('[LOYALTY] Error updating settings:', error)
     return null
   }
 }
@@ -204,7 +205,7 @@ export async function awardLoyaltyPoints(
     )
 
     if (txError) {
-      console.warn('[LOYALTY] Failed to record transaction:', txError)
+      logger.warn('[LOYALTY] Failed to record transaction:', { txError })
       // Don't fail the sale if transaction logging fails
     }
 
@@ -222,14 +223,14 @@ export async function awardLoyaltyPoints(
       customerId,
       customerType: 'named_customer',
     })
-    console.error('[LOYALTY] Loyalty award failure for completed sale', {
+    logger.error('[LOYALTY] Loyalty award failure for completed sale', {
       customerId,
       saleId,
       saleAmountCents,
       discountAmountCents,
       error: error instanceof Error ? error.message : String(error),
     })
-    console.error('[LOYALTY] Error awarding points:', error)
+    logger.error('[LOYALTY] Error awarding points:', error)
     return null
   }
 }
@@ -261,7 +262,7 @@ export async function reverseLoyaltyPoints(
       .single()
 
     if (txError || !earnTx) {
-      console.log('[LOYALTY] No earn transaction found for sale', saleId)
+      logger.info('[LOYALTY] No earn transaction found for sale', { saleId })
       return null // No points were awarded for this sale
     }
 
@@ -308,13 +309,13 @@ export async function reverseLoyaltyPoints(
       })
 
     if (reverseError) {
-      console.warn('[LOYALTY] Failed to record reversal:', reverseError)
+      logger.warn('[LOYALTY] Failed to record reversal:', { reverseError })
     }
 
-    console.log(`[LOYALTY] ⚠️  Reversed ${pointsToReverse} points for customer ${customerId}. New balance: ${newBalance}`)
+    logger.info(`[LOYALTY] ⚠️  Reversed ${pointsToReverse} points for customer ${customerId}. New balance: ${newBalance}`)
     return { pointsReversed: pointsToReverse, newBalance }
   } catch (error) {
-    console.error('[LOYALTY] Error reversing points:', error)
+    logger.error('[LOYALTY] Error reversing points:', error)
     return null
   }
 }
@@ -339,13 +340,13 @@ export async function getLoyaltyHistory(
       .limit(limit)
 
     if (error) {
-      console.error('[LOYALTY] Failed to fetch history:', error)
+      logger.error('[LOYALTY] Failed to fetch history:', error)
       return []
     }
 
     return (data as LoyaltyTransaction[]) || []
   } catch (error) {
-    console.error('[LOYALTY] Error fetching history:', error)
+    logger.error('[LOYALTY] Error fetching history:', error)
     return []
   }
 }
@@ -382,7 +383,7 @@ export async function getLoyaltySummary(customerId: string): Promise<{
       .limit(10)
 
     if (txError) {
-      console.warn('[LOYALTY] Failed to fetch transactions:', txError)
+      logger.warn('[LOYALTY] Failed to fetch transactions:', { txError })
     }
 
     // Calculate total earned (sum of all earn_sale transactions)
@@ -396,7 +397,7 @@ export async function getLoyaltySummary(customerId: string): Promise<{
       recentTransactions: (transactions as LoyaltyTransaction[]) || [],
     }
   } catch (error) {
-    console.error('[LOYALTY] Error fetching summary:', error)
+    logger.error('[LOYALTY] Error fetching summary:', error)
     return null
   }
 }
@@ -532,7 +533,7 @@ export async function getRedemptionEligibility(
       customerId,
       customerType: 'named_customer',
     })
-    console.error('[LOYALTY] Error calculating redemption eligibility:', error)
+    logger.error('[LOYALTY] Error calculating redemption eligibility:', error)
     return null
   }
 }
@@ -582,7 +583,7 @@ export async function redeemLoyaltyPoints(
     if (!options?.skipSettingsCheck) {
       const settings = await timing.measure('settings_fetch', () => getLoyaltySettings())
       if (!settings || !settings.redeem_enabled) {
-        console.log('[LOYALTY] Redemption disabled, skipping')
+        logger.info('[LOYALTY] Redemption disabled, skipping')
         timing.logSuccess({
           saleId,
           branchId,
@@ -667,11 +668,11 @@ export async function redeemLoyaltyPoints(
     )
 
     if (txError) {
-      console.warn('[LOYALTY] Failed to record redemption transaction:', txError)
+      logger.warn('[LOYALTY] Failed to record redemption transaction:', { txError })
       // Don't fail the sale - but log for investigation
     }
 
-    console.log(`[LOYALTY] ✅ Redeemed ${pointsToRedeem} points (${(discountAppliedCents / 100).toFixed(0)} KSh) for customer ${customerId}. New balance: ${newBalance}`)
+    logger.info(`[LOYALTY] ✅ Redeemed ${pointsToRedeem} points (${(discountAppliedCents / 100).toFixed(0)} KSh) for customer ${customerId}. New balance: ${newBalance}`)
     timing.logSuccess({
       saleId,
       branchId,
@@ -686,7 +687,7 @@ export async function redeemLoyaltyPoints(
       customerId,
       customerType: 'named_customer',
     })
-    console.error('[LOYALTY] Error redeeming points:', error)
+    logger.error('[LOYALTY] Error redeeming points:', error)
     return null
   }
 }
@@ -718,7 +719,7 @@ export async function restoreRedeemedPoints(
       .single()
 
     if (txError || !redeemTx) {
-      console.log('[LOYALTY] No redemption transaction found for sale', saleId)
+      logger.info('[LOYALTY] No redemption transaction found for sale', { saleId })
       return null // No points were redeemed for this sale
     }
 
@@ -764,14 +765,14 @@ export async function restoreRedeemedPoints(
       })
 
     if (reverseError) {
-      console.warn('[LOYALTY] Failed to record restoration transaction:', reverseError)
+      logger.warn('[LOYALTY] Failed to record restoration transaction:', { reverseError })
       // Don't fail the void - but log for investigation
     }
 
-    console.log(`[LOYALTY] ✅ Restored ${pointsToRestore} redeemed points to customer ${customerId}. New balance: ${newBalance}`)
+    logger.info(`[LOYALTY] ✅ Restored ${pointsToRestore} redeemed points to customer ${customerId}. New balance: ${newBalance}`)
     return { pointsRestored: pointsToRestore, newBalance }
   } catch (error) {
-    console.error('[LOYALTY] Error restoring redeemed points:', error)
+    logger.error('[LOYALTY] Error restoring redeemed points:', error)
     return null
   }
 }

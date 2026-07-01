@@ -1,4 +1,5 @@
 "use client"
+import { logger } from '@/lib/logger';
 
 import { useState, useEffect } from "react"
 import { useAuth } from "@/contexts/auth-context"
@@ -89,7 +90,7 @@ export default function UsersPage() {
         const data = await getUsers(profile?.role || 'cashier')
         setUsers(data)
       } catch (error) {
-        console.error('Failed to load users:', error)
+        logger.error('Failed to load users:', error)
         toast({
           title: 'Error',
           description: 'Failed to load users',
