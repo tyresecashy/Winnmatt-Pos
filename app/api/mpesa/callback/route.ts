@@ -20,6 +20,7 @@ import {
   getMpesaTransactionByCheckoutId,
 } from '@/lib/mpesa-actions'
 import { supabaseAdmin } from '@/lib/supabase-server'
+import { logger } from '@/lib/logger'
 import type { CallbackPayload } from '@/lib/mpesa-service'
 
 async function restoreFailedMpesaSaleInventory(saleId: string) {
@@ -29,11 +30,9 @@ async function restoreFailedMpesaSaleInventory(saleId: string) {
     .eq('id', saleId)
     .single()
 
+// ── restoreFailedMpesaSaleInventory ──
   if (saleError || !sale) {
-    console.error('M-Pesa: Failed to load sale for inventory restore', {
-      saleId,
-      error: saleError?.message,
-    })
+    logger.error('[M-Pesa Callback] Failed to load sale for inventory restore', saleError, { saleId })
     return
   }
 
@@ -47,10 +46,7 @@ async function restoreFailedMpesaSaleInventory(saleId: string) {
     .eq('sale_id', saleId)
 
   if (itemsError) {
-    console.error('M-Pesa: Failed to load sale items for inventory restore', {
-      saleId,
-      error: itemsError.message,
-    })
+    logger.error('[M-Pesa Callback] Failed to load sale items for inventory restore', itemsError, { saleId })
     return
   }
 
@@ -63,11 +59,7 @@ async function restoreFailedMpesaSaleInventory(saleId: string) {
       .single()
 
     if (inventoryError || !inventory) {
-      console.error('M-Pesa: Inventory restore skipped for item', {
-        saleId,
-        productId: item.product_id,
-        error: inventoryError?.message,
-      })
+      logger.warn('[M-Pesa Callback] Inventory restore skipped for item', { saleId, productId: item.product_id })
       continue
     }
 
@@ -82,11 +74,7 @@ async function restoreFailedMpesaSaleInventory(saleId: string) {
       .eq('id', inventory.id)
 
     if (updateError) {
-      console.error('M-Pesa: Failed to restore inventory quantity', {
-        saleId,
-        productId: item.product_id,
-        error: updateError.message,
-      })
+      logger.error('[M-Pesa Callback] Failed to restore inventory quantity', updateError, { saleId, productId: item.product_id })
       continue
     }
 
@@ -102,11 +90,7 @@ async function restoreFailedMpesaSaleInventory(saleId: string) {
       })
 
     if (movementError) {
-      console.error('M-Pesa: Failed to write inventory restore movement', {
-        saleId,
-        productId: item.product_id,
-        error: movementError.message,
-      })
+      logger.error('[M-Pesa Callback] Failed to write inventory restore movement', movementError, { saleId, productId: item.product_id })
     }
   }
 }
@@ -123,7 +107,7 @@ export async function POST(req: NextRequest) {
     // Validate callback structure
     const stkCallback = body?.Body?.stkCallback
     if (!stkCallback) {
-      console.error('M-Pesa: Invalid callback payload structure')
+      logger.error('[M-Pesa Callback] Invalid callback payload structure')
       return NextResponse.json(
         { success: false },
         { status: 200 } // Return 200 to acknowledge to Safaricom
@@ -140,7 +124,7 @@ export async function POST(req: NextRequest) {
 
     // Reject malformed callbacks - must have checkoutRequestId
     if (!checkoutRequestId) {
-      console.error('M-Pesa: Callback missing CheckoutRequestID')
+      logger.error('[M-Pesa Callback] Callback missing CheckoutRequestID')
       return NextResponse.json(
         { success: false },
         { status: 200 }
@@ -149,19 +133,14 @@ export async function POST(req: NextRequest) {
 
     // Reject if ResultCode is not a number
     if (typeof resultCode !== 'number') {
-      console.error('M-Pesa: Callback ResultCode is not a number', { resultCode })
+      logger.error('[M-Pesa Callback] Callback ResultCode is not a number', undefined, { resultCode })
       return NextResponse.json(
         { success: false },
         { status: 200 }
       )
     }
 
-    console.log('M-Pesa: Callback received', {
-      merchantRequestId,
-      checkoutRequestId,
-      resultCode,
-      resultDesc,
-    })
+    logger.info('[M-Pesa Callback] Callback received', { resultCode, resultDesc })
 
     // Get the corresponding M-Pesa transaction
     const transactionResult = await getMpesaTransactionByCheckoutId(
@@ -169,9 +148,7 @@ export async function POST(req: NextRequest) {
     )
 
     if (!transactionResult.success || !transactionResult.transaction) {
-      console.error('M-Pesa: Transaction not found in callback', {
-        checkoutRequestId,
-      })
+      logger.error('[M-Pesa Callback] Transaction not found in callback', undefined, { checkoutRequestId })
       return NextResponse.json(
         { success: false },
         { status: 200 } // Still return 200 to Safaricom
@@ -186,12 +163,7 @@ export async function POST(req: NextRequest) {
     // ============================================================================
     // If callback_received_at is already set, this callback has been processed
     if (transaction.callback_received_at) {
-      console.log('M-Pesa: Callback already processed (idempotency)', {
-        checkoutRequestId,
-        previousResultCode: transaction.status,
-        previousReceivedAt: transaction.callback_received_at,
-        currentResultCode: resultCode,
-      })
+      logger.info('[M-Pesa Callback] Callback already processed (idempotency)', { resultCode, previousResultCode: transaction.status })
       
       // Return success without re-processing side effects
       // This prevents duplicate finalization, loyalty points, etc.
@@ -222,10 +194,7 @@ export async function POST(req: NextRequest) {
     )
 
     if (!updateResult.success) {
-      console.error('M-Pesa: Failed to update transaction', {
-        checkoutRequestId,
-        error: updateResult.error,
-      })
+      logger.error('[M-Pesa Callback] Failed to update transaction', updateResult.error, { checkoutRequestId })
       return NextResponse.json(
         { success: false },
         { status: 200 } // Acknowledge to Safaricom anyway
@@ -246,19 +215,12 @@ export async function POST(req: NextRequest) {
 
     // Handle success case (result code 0)
     if (resultCode === 0) {
-      console.log('M-Pesa: Payment confirmed', {
-        saleId,
-        checkoutRequestId,
-        mpesaReceiptNumber,
-      })
+      logger.info('[M-Pesa Callback] Payment confirmed', { saleId, mpesaReceiptNumber })
 
       // Finalize the sale (mark as completed)
       const finalizeResult = await finalizeMpesaSale(saleId)
       if (!finalizeResult.success) {
-        console.error('M-Pesa: Failed to finalize sale', {
-          saleId,
-          error: finalizeResult.error,
-        })
+        logger.error('[M-Pesa Callback] Failed to finalize sale', finalizeResult.error, { saleId })
         // Even if finalization fails, we've updated the transaction
         // The sale will be in pending state but M-Pesa transaction confirmed
         // This should be rare and caught by reconciliation
@@ -268,12 +230,7 @@ export async function POST(req: NextRequest) {
       await notifyPaymentSuccess(saleId, mpesaReceiptNumber)
     } else {
       // Payment failed, cancelled, or timeout
-      console.log('M-Pesa: Payment failed', {
-        saleId,
-        checkoutRequestId,
-        resultCode,
-        resultDesc,
-      })
+      logger.info('[M-Pesa Callback] Payment failed', { saleId, resultCode, resultDesc })
 
       // Mark sale as failed to allow retry
       const failResult = await failPendingMpesaSaleWithRestore(
@@ -282,10 +239,7 @@ export async function POST(req: NextRequest) {
       )
 
       if (!failResult?.success) {
-        console.error('M-Pesa: Failed to mark sale as failed', {
-          saleId,
-          error: failResult?.error,
-        })
+        logger.error('[M-Pesa Callback] Failed to mark sale as failed', failResult?.error, { saleId })
       }
 
       // Call webhook for payment failure notification (optional)
@@ -299,7 +253,7 @@ export async function POST(req: NextRequest) {
       { status: 200 }
     )
   } catch (error) {
-    console.error('M-Pesa: Callback processing error', error)
+    logger.error('[M-Pesa Callback] Callback processing error', error)
     return NextResponse.json(
       { success: false },
       { status: 200 } // Still return 200 to stop Safaricom retries
@@ -319,12 +273,9 @@ async function notifyPaymentSuccess(
   try {
     // TODO: Implement real-time notification
     // For now, database is the source of truth that POS polls
-    console.log('M-Pesa: Payment success notification', {
-      saleId,
-      mpesaReceiptNumber,
-    })
+    logger.info('[M-Pesa Callback] Payment success notification', { saleId, mpesaReceiptNumber })
   } catch (error) {
-    console.error('M-Pesa: Failed to notify success', error)
+    logger.error('[M-Pesa Callback] Failed to notify success', error)
     // Don't throw - failure to notify shouldn't affect callback processing
   }
 }
@@ -335,12 +286,9 @@ async function notifyPaymentSuccess(
 async function notifyPaymentFailure(saleId: string, errorMessage: string) {
   try {
     // TODO: Implement real-time notification
-    console.log('M-Pesa: Payment failure notification', {
-      saleId,
-      errorMessage,
-    })
+    logger.info('[M-Pesa Callback] Payment failure notification', { saleId, errorMessage })
   } catch (error) {
-    console.error('M-Pesa: Failed to notify failure', error)
+    logger.error('[M-Pesa Callback] Failed to notify failure', error)
     // Don't throw - failure to notify shouldn't affect callback processing
   }
 }

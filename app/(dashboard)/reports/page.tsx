@@ -27,7 +27,7 @@ import {
   AreaChart,
   Area,
 } from 'recharts'
-import { Download, Calendar, TrendingUp, TrendingDown, Package, Users as UsersIcon, AlertCircle, RefreshCw } from 'lucide-react'
+import { Download, Calendar, TrendingUp, TrendingDown, Package, Users as UsersIcon, AlertCircle, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react'
 import {
   getSalesStats,
   getTopSellingProducts,
@@ -106,6 +106,8 @@ export default function ReportsPage() {
   const [dailyTrend, setDailyTrend] = useState<any[]>([])
   const [stockMovementSummary, setStockMovementSummary] = useState<any>({})
   const [lowStockProducts, setLowStockProducts] = useState<any[]>([])
+  const [showAllTopProducts, setShowAllTopProducts] = useState(false)
+  const [showAllSlowProducts, setShowAllSlowProducts] = useState(false)
 
   // Load all reports data
   useEffect(() => {
@@ -503,7 +505,7 @@ export default function ReportsPage() {
               <CardContent>
                 <div className="space-y-3">
                   {topProducts.length > 0 ? (
-                    topProducts.map((product, index) => (
+                    (showAllTopProducts ? topProducts : topProducts.slice(0, 5)).map((product, index) => (
                       <div key={product.product_id} className="flex items-center gap-3">
                         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-sm font-semibold text-primary">
                           {index + 1}
@@ -517,6 +519,20 @@ export default function ReportsPage() {
                     ))
                   ) : (
                     <p className="text-muted-foreground text-sm">No sales data</p>
+                  )}
+                  {topProducts.length > 5 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full text-muted-foreground"
+                      onClick={() => setShowAllTopProducts(!showAllTopProducts)}
+                    >
+                      {showAllTopProducts ? (
+                        <>Show Less <ChevronUp className="ml-1 h-4 w-4" /></>
+                      ) : (
+                        <>Show All ({topProducts.length}) <ChevronDown className="ml-1 h-4 w-4" /></>
+                      )}
+                    </Button>
                   )}
                 </div>
               </CardContent>
@@ -534,7 +550,7 @@ export default function ReportsPage() {
               <CardContent>
                 <div className="space-y-3">
                   {slowMovingProducts.length > 0 ? (
-                    slowMovingProducts.map((product) => (
+                    (showAllSlowProducts ? slowMovingProducts : slowMovingProducts.slice(0, 5)).map((product) => (
                       <div key={product.product_id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
                         <Package className="h-5 w-5 text-muted-foreground flex-shrink-0" />
                         <div className="flex-1 min-w-0">
@@ -548,6 +564,20 @@ export default function ReportsPage() {
                     ))
                   ) : (
                     <p className="text-muted-foreground text-sm">No slow moving products</p>
+                  )}
+                  {slowMovingProducts.length > 5 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full text-muted-foreground"
+                      onClick={() => setShowAllSlowProducts(!showAllSlowProducts)}
+                    >
+                      {showAllSlowProducts ? (
+                        <>Show Less <ChevronUp className="ml-1 h-4 w-4" /></>
+                      ) : (
+                        <>Show All ({slowMovingProducts.length}) <ChevronDown className="ml-1 h-4 w-4" /></>
+                      )}
+                    </Button>
                   )}
                 </div>
               </CardContent>

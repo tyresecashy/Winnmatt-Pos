@@ -4,6 +4,8 @@
 
 import { createClient } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
+import { priceApproveSchema } from '@/lib/api-schemas'
+import { badRequest } from '@/lib/api-errors'
 
 export async function POST(request: Request) {
   const supabase = createClient(request)
@@ -28,23 +30,23 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Admin only' }, { status: 403 })
   }
 
-  // Parse body
-  let body: any
+  // Parse & validate body
+  let body: unknown
   try {
     body = await request.json()
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
-  const { action, productId, newSellingPrice, newPurchasePrice, reason, protectionLevel } = body
-
-  if (!action || !productId) {
-    return NextResponse.json({ error: 'Missing required fields: action, productId' }, { status: 400 })
+  const parsed = priceApproveSchema.safeParse(body)
+  if (!parsed.success) {
+    return badRequest(parsed.error.issues.map(i => ({
+      field: i.path.join('.'),
+      message: i.message,
+    })))
   }
 
-  if (!['approve', 'correct', 'protect'].includes(action)) {
-    return NextResponse.json({ error: 'Invalid action. Must be approve, correct, or protect.' }, { status: 400 })
-  }
+  const { action, productId, newSellingPrice, newPurchasePrice, reason, protectionLevel } = parsed.data
 
   try {
     switch (action) {

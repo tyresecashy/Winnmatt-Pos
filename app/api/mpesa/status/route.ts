@@ -19,6 +19,7 @@ import {
 } from '@/lib/mpesa-actions'
 import { supabaseAdmin } from '@/lib/supabase-server'
 import { authenticateRequest, verifySaleAccess, unauthorizedResponse, forbiddenResponse } from '@/lib/auth-helpers'
+import { logger } from '@/lib/logger'
 
 export async function GET(req: NextRequest) {
   try {
@@ -28,7 +29,7 @@ export async function GET(req: NextRequest) {
     const authResult = await authenticateRequest(req)
     
     if (!authResult.success) {
-      console.warn('[M-Pesa Status] Auth failed:', authResult.error)
+      logger.warn('[M-Pesa Status] Auth failed', { reason: authResult.error })
       return unauthorizedResponse(authResult.error)
     }
 
@@ -72,10 +73,7 @@ export async function GET(req: NextRequest) {
     }
 
     if (!transactionResult.success || !transactionResult.transaction) {
-      console.warn('[M-Pesa Status] Transaction not found', {
-        checkoutRequestId: checkoutRequestId || 'N/A',
-        saleId: saleId || 'N/A',
-      })
+      logger.warn('[M-Pesa Status] Transaction not found', { checkoutRequestId })
       return NextResponse.json(
         { error: 'Transaction not found' },
         { status: 404 }
@@ -96,11 +94,7 @@ export async function GET(req: NextRequest) {
     const saleAccessResult = await verifySaleAccess(profile, transaction.sale_id)
     
     if (!saleAccessResult.authorized) {
-      console.warn('[M-Pesa Status] Access denied:', {
-        userId: profile.id,
-        saleId: transaction.sale_id,
-        reason: saleAccessResult.error,
-      })
+      logger.warn('[M-Pesa Status] Access denied', { reason: saleAccessResult.error })
       return forbiddenResponse(saleAccessResult.error)
     }
 
@@ -128,7 +122,7 @@ export async function GET(req: NextRequest) {
       { status: 200 }
     )
   } catch (error) {
-    console.error('[M-Pesa Status] Endpoint error', error)
+    logger.error('[M-Pesa Status] Endpoint error', error)
     return NextResponse.json(
       {
         error: 'Internal server error',

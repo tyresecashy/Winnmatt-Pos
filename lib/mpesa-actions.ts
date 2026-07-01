@@ -6,6 +6,7 @@
 'use server'
 
 import { supabaseAdmin } from '@/lib/supabase-server'
+import { logger } from '@/lib/logger'
 
 export interface MpesaTransaction {
   id: string
@@ -53,18 +54,14 @@ export async function createMpesaTransaction(
 
     if (error) throw error
 
-    console.log('M-Pesa: Transaction created', {
-      transactionId: data.id,
-      saleId,
-      checkoutRequestId,
-    })
+    logger.info('[M-Pesa] Transaction created', { saleId })
 
     return {
       success: true,
       transaction: data,
     }
   } catch (error) {
-    console.error('M-Pesa: Failed to create transaction', error)
+    logger.error('[M-Pesa] Failed to create transaction', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
@@ -108,18 +105,14 @@ export async function updateMpesaTransactionCallback(
 
     if (error) throw error
 
-    console.log('M-Pesa: Callback processed', {
-      transactionId: data.id,
-      status,
-      resultCode,
-    })
+    logger.info('[M-Pesa] Callback processed', { checkoutRequestId })
 
     return {
       success: true,
       transaction: data,
     }
   } catch (error) {
-    console.error('M-Pesa: Failed to update callback', error)
+    logger.error('[M-Pesa] Failed to update callback', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
@@ -147,7 +140,7 @@ export async function getMpesaTransactionByCheckoutId(
       transaction: data,
     }
   } catch (error) {
-    console.error('M-Pesa: Failed to get transaction', error)
+    logger.error('[M-Pesa] Failed to get transaction', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Not found',
@@ -173,7 +166,7 @@ export async function getMpesaTransactionBySaleId(saleId: string) {
       transaction: data || null,
     }
   } catch (error) {
-    console.error('M-Pesa: Failed to get transaction by sale', error)
+    logger.error('[M-Pesa] Failed to get transaction by sale', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Error',
@@ -209,11 +202,11 @@ export async function finalizeMpesaSale(saleId: string) {
 
     if (transError) throw transError
 
-    console.log('M-Pesa: Sale finalized', { saleId })
+    logger.info('[M-Pesa] Sale finalized', { saleId })
 
     return { success: true }
   } catch (error) {
-    console.error('M-Pesa: Failed to finalize sale', error)
+    logger.error('[M-Pesa] Failed to finalize sale', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
@@ -239,11 +232,11 @@ export async function failMpesaSale(
 
     if (error) throw error
 
-    console.log('M-Pesa: Sale marked as failed', { saleId, errorMessage })
+    logger.info('[M-Pesa] Sale marked as failed', { saleId })
 
     return { success: true }
   } catch (error) {
-    console.error('M-Pesa: Failed to mark sale as failed', error)
+    logger.error('[M-Pesa] Failed to mark sale as failed', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
@@ -280,7 +273,7 @@ export async function getPendingMpesaTransactions(
       transactions: data || [],
     }
   } catch (error) {
-    console.error('M-Pesa: Failed to get pending transactions', error)
+    logger.error('[M-Pesa] Failed to get pending transactions', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
@@ -333,7 +326,7 @@ export async function getMpesaTransactionsByDateRange(
       transactions,
     }
   } catch (error) {
-    console.error('M-Pesa: Failed to get transactions by date range', error)
+    logger.error('[M-Pesa] Failed to get transactions by date range', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
@@ -401,7 +394,7 @@ export async function getMpesaTransactionSummary(
       summary,
     }
   } catch (error) {
-    console.error('M-Pesa: Failed to get summary', error)
+    logger.error('[M-Pesa] Failed to get summary', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',

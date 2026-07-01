@@ -11,6 +11,7 @@
  */
 
 import crypto from 'crypto'
+import { logger } from '@/lib/logger'
 
 interface DarajaConfig {
   consumerKey: string
@@ -110,12 +111,7 @@ class MpesaService {
     const apiUrl = this.API_URLS[this.config.environment].auth
 
     try {
-      console.log('M-Pesa: Requesting Daraja access token', {
-        environment: this.config.environment,
-        authUrl: apiUrl,
-        consumerKeyPresent: !!this.config.consumerKey,
-        consumerSecretPresent: !!this.config.consumerSecret,
-      })
+      logger.info('[M-Pesa] Requesting Daraja access token')
 
       const response = await fetch(apiUrl, {
         method: 'GET',
@@ -126,11 +122,7 @@ class MpesaService {
 
       if (!response.ok) {
         const errorBody = await response.text()
-        console.error('M-Pesa: Daraja access token request failed', {
-          status: response.status,
-          statusText: response.statusText,
-          body: errorBody,
-        })
+        logger.error('[M-Pesa] Daraja access token request failed', undefined, { status: response.status })
         throw new Error(
           `Token request failed: ${response.status} ${response.statusText} - ${errorBody}`
         )
@@ -146,7 +138,7 @@ class MpesaService {
 
       return data.access_token
     } catch (error) {
-      console.error('M-Pesa: Failed to get access token', error)
+      logger.error('[M-Pesa] Failed to get access token', error)
       throw error
     }
   }
@@ -207,22 +199,7 @@ class MpesaService {
 
     const apiUrl = this.API_URLS[this.config.environment].stkpush
 
-    console.log('M-Pesa: STK Push request payload', {
-      environment: this.config.environment,
-      apiUrl,
-      rawPhoneNumber: phoneNumber,
-      normalizedPhoneNumber: formattedPhone,
-      businessShortCode: requestBody.BusinessShortCode,
-      partyA: requestBody.PartyA,
-      partyB: requestBody.PartyB,
-      accountReference: requestBody.AccountReference,
-      transactionType: requestBody.TransactionType,
-      amount: requestBody.Amount,
-      callbackUrl: requestBody.CallBackURL,
-      timestamp: requestBody.Timestamp,
-      transactionDesc: requestBody.TransactionDesc,
-      passwordPresent: !!requestBody.Password,
-    })
+    logger.info('[M-Pesa] STK Push request payload', { amount, shortCode: this.config.paybill })
 
     try {
       const response = await fetch(apiUrl, {
@@ -237,48 +214,22 @@ class MpesaService {
       const responseBody = await response.text()
 
       if (!response.ok) {
-        console.error('M-Pesa: STK Push HTTP error response', {
-          status: response.status,
-          statusText: response.statusText,
-          body: responseBody,
-          normalizedPhoneNumber: formattedPhone,
-          businessShortCode: this.config.paybill,
-          accountReference,
-          environment: this.config.environment,
-        })
+        logger.error('[M-Pesa] STK Push HTTP error response', undefined, { status: response.status })
         throw new Error(
           `STK Push request failed: ${response.status} - ${responseBody}`
         )
       }
 
-      console.log('M-Pesa: STK Push Daraja response body', {
-        body: responseBody,
-        normalizedPhoneNumber: formattedPhone,
-        businessShortCode: this.config.paybill,
-        accountReference,
-        environment: this.config.environment,
-      })
-
       const data = JSON.parse(responseBody) as STKPushResponse
 
+      logger.info('[M-Pesa] STK Push Daraja response body', { ResponseCode: data.ResponseCode })
+
       // Log successful request
-      console.log('M-Pesa: STK Push initiated', {
-        MerchantRequestID: data.MerchantRequestID,
-        CheckoutRequestID: data.CheckoutRequestID,
-        phone: formattedPhone,
-        amount,
-        ResponseCode: data.ResponseCode,
-        ResponseDescription: data.ResponseDescription,
-        CustomerMessage: data.CustomerMessage,
-      })
+      logger.info('[M-Pesa] STK Push initiated')
 
       return data
     } catch (error) {
-      console.error('M-Pesa: STK Push failed', {
-        phone: formattedPhone,
-        amount,
-        error,
-      })
+      logger.error('[M-Pesa] STK Push failed')
       throw error
     }
   }

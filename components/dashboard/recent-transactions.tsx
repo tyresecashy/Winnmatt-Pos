@@ -109,20 +109,45 @@ export function RecentTransactions() {
 
     void fetchTransactions({ force: true })
 
-    const intervalId = window.setInterval(() => {
-      void fetchTransactions({ minIntervalMs: 15000 })
-    }, 30000)
+    let intervalId: number | null = null
+
+    function startPolling() {
+      stopPolling()
+      intervalId = window.setInterval(() => {
+        void fetchTransactions({ minIntervalMs: 15000 })
+      }, 30000)
+    }
+
+    function stopPolling() {
+      if (intervalId !== null) {
+        window.clearInterval(intervalId)
+        intervalId = null
+      }
+    }
+
+    startPolling()
 
     const handleFocus = () => {
       void fetchTransactions({ minIntervalMs: 15000 })
     }
 
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        stopPolling()
+      } else {
+        startPolling()
+        void fetchTransactions({ force: true })
+      }
+    }
+
     window.addEventListener('focus', handleFocus)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
 
     return () => {
       cancelled = true
-      window.clearInterval(intervalId)
+      stopPolling()
       window.removeEventListener('focus', handleFocus)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
   }, [profile?.branch_id, retryCount])
 

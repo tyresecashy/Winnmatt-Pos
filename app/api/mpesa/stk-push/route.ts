@@ -20,13 +20,9 @@ import {
 } from '@/lib/mpesa-actions'
 import { supabaseAdmin } from '@/lib/supabase-server'
 import { authenticateRequest, verifySaleAccess, unauthorizedResponse, forbiddenResponse } from '@/lib/auth-helpers'
-
-interface STKPushRequest {
-  saleId: string
-  phoneNumber: string
-  amount: number
-  accountReference: string
-}
+import { logger } from '@/lib/logger'
+import { stkPushSchema } from '@/lib/api-schemas'
+import { badRequest } from '@/lib/api-errors'
 
 function getMissingMpesaConfig() {
   const requiredConfig = {
@@ -50,9 +46,8 @@ async function restoreFailedMpesaSaleInventory(saleId: string) {
     .single()
 
   if (saleError || !sale) {
-    console.error('[M-Pesa STK] Failed to load sale for inventory restore', {
+    logger.error('[M-Pesa STK] Failed to load sale for inventory restore', saleError, {
       saleId,
-      error: saleError?.message,
     })
     return
   }
@@ -67,9 +62,8 @@ async function restoreFailedMpesaSaleInventory(saleId: string) {
     .eq('sale_id', saleId)
 
   if (itemsError) {
-    console.error('[M-Pesa STK] Failed to load sale items for inventory restore', {
+    logger.error('[M-Pesa STK] Failed to load sale items for inventory restore', itemsError, {
       saleId,
-      error: itemsError.message,
     })
     return
   }
@@ -83,10 +77,8 @@ async function restoreFailedMpesaSaleInventory(saleId: string) {
       .single()
 
     if (inventoryError || !inventory) {
-      console.error('[M-Pesa STK] Inventory restore skipped for item', {
-        saleId,
-        productId: item.product_id,
-        error: inventoryError?.message,
+      logger.warn('[M-Pesa STK] Inventory restore skipped for item', {
+        saleId, productId: item.product_id,
       })
       continue
     }
@@ -102,10 +94,8 @@ async function restoreFailedMpesaSaleInventory(saleId: string) {
       .eq('id', inventory.id)
 
     if (updateError) {
-      console.error('[M-Pesa STK] Failed to restore inventory quantity', {
-        saleId,
-        productId: item.product_id,
-        error: updateError.message,
+      logger.error('[M-Pesa STK] Failed to restore inventory quantity', updateError, {
+        saleId, productId: item.product_id,
       })
       continue
     }
@@ -122,10 +112,8 @@ async function restoreFailedMpesaSaleInventory(saleId: string) {
       })
 
     if (movementError) {
-      console.error('[M-Pesa STK] Failed to write inventory restore movement', {
-        saleId,
-        productId: item.product_id,
-        error: movementError.message,
+      logger.error('[M-Pesa STK] Failed to write inventory restore movement', movementError, {
+        saleId, productId: item.product_id,
       })
     }
   }
@@ -144,7 +132,7 @@ export async function POST(req: NextRequest) {
     const authResult = await authenticateRequest(req)
     
     if (!authResult.success) {
-      console.warn('[M-Pesa STK] Auth failed:', authResult.error)
+      logger.warn('[M-Pesa STK] Auth failed', { reason: authResult.error })
       return unauthorizedResponse(authResult.error)
     }
 
@@ -153,57 +141,40 @@ export async function POST(req: NextRequest) {
     // ========================================================================
     // REQUEST VALIDATION
     // ========================================================================
-    let body: STKPushRequest
+    let body: unknown
     
     try {
       body = await req.json()
-    } catch (error) {
-      console.error('[M-Pesa STK] Invalid JSON payload')
+    } catch {
+      logger.error('[M-Pesa STK] Invalid JSON payload')
       return NextResponse.json(
         { error: 'Invalid request body' },
         { status: 400 }
       )
     }
 
-    // Validate required fields
-    const { saleId, phoneNumber, amount, accountReference } = body
-    
-    if (!saleId || !phoneNumber || !amount) {
-      return NextResponse.json(
-        { error: 'Missing required fields: saleId, phoneNumber, amount' },
-        { status: 400 }
-      )
+    const parsed = stkPushSchema.safeParse(body)
+    if (!parsed.success) {
+      return badRequest(parsed.error.issues.map(i => ({
+        field: i.path.join('.'),
+        message: i.message,
+      })))
     }
 
-    if (typeof amount !== 'number' || amount <= 0) {
-      return NextResponse.json(
-        { error: 'Amount must be a positive number' },
-        { status: 400 }
-      )
-    }
-
-    if (typeof phoneNumber !== 'string' || phoneNumber.length < 10) {
-      return NextResponse.json(
-        { error: 'Invalid phone number' },
-        { status: 400 }
-      )
-    }
+    const { saleId, phoneNumber, amount, accountReference } = parsed.data
 
     // Validate environment variables
     const missingMpesaConfig = getMissingMpesaConfig()
 
-    console.log('[M-Pesa STK] Configuration snapshot', {
+    logger.info('[M-Pesa STK] Configuration snapshot', {
       environment: process.env.MPESA_ENVIRONMENT || 'sandbox',
-      paybill: process.env.MPESA_PAYBILL || null,
-      accountReference: process.env.MPESA_ACCOUNT_REFERENCE || accountReference || null,
       callbackUrlPresent: !!process.env.MPESA_CALLBACK_URL,
       passkeyPresent: !!process.env.MPESA_PASSKEY,
       consumerKeyPresent: !!process.env.MPESA_CONSUMER_KEY,
-      consumerSecretPresent: !!process.env.MPESA_CONSUMER_SECRET,
     })
 
     if (missingMpesaConfig.length > 0) {
-      console.error('[M-Pesa STK] Missing environment variables', {
+      logger.error('[M-Pesa STK] Missing environment variables', undefined, {
         missingMpesaConfig,
       })
       return NextResponse.json(
@@ -221,7 +192,7 @@ export async function POST(req: NextRequest) {
     const passkey = process.env.MPESA_PASSKEY!
     const callbackUrl = process.env.MPESA_CALLBACK_URL!
     const mpesaEnvironment = (process.env.MPESA_ENVIRONMENT as 'sandbox' | 'production') || 'sandbox'
-    const resolvedAccountReference = process.env.MPESA_ACCOUNT_REFERENCE || accountReference
+    const resolvedAccountReference = process.env.MPESA_ACCOUNT_REFERENCE || accountReference || 'WINNMATT'
 
     // ========================================================================
     // AUTHORIZATION: Verify sale access
@@ -229,9 +200,7 @@ export async function POST(req: NextRequest) {
     const saleAccessResult = await verifySaleAccess(profile, saleId)
     
     if (!saleAccessResult.authorized) {
-      console.warn('[M-Pesa STK] Access denied:', {
-        userId: profile.id,
-        saleId,
+      logger.warn('[M-Pesa STK] Access denied', {
         reason: saleAccessResult.error,
       })
       return forbiddenResponse(saleAccessResult.error)
@@ -247,7 +216,7 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (saleError || !sale) {
-      console.error('[M-Pesa STK] Sale not found', { saleId })
+      logger.error('[M-Pesa STK] Sale not found', saleError, { saleId })
       return NextResponse.json(
         { error: 'Sale not found' },
         { status: 404 }
@@ -255,8 +224,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (sale.payment_status !== 'pending') {
-      console.error('[M-Pesa STK] Sale not in pending state', {
-        saleId,
+      logger.warn('[M-Pesa STK] Sale not in pending state', {
         paymentStatus: sale.payment_status,
       })
       return NextResponse.json(
@@ -266,10 +234,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (Math.abs(sale.total_amount - amount) > 1) {
-      console.error('[M-Pesa STK] Amount mismatch', {
-        requested: amount,
-        expected: sale.total_amount,
-      })
+      logger.warn('[M-Pesa STK] Amount mismatch')
       return NextResponse.json(
         { error: 'Amount does not match sale total' },
         { status: 400 }
@@ -290,18 +255,9 @@ export async function POST(req: NextRequest) {
 
     const normalizedPhoneNumber = mpesaService.normalizePhoneNumber(phoneNumber)
 
-    console.log('[M-Pesa STK] Initiating STK Push', {
-      rawPhoneNumber: phoneNumber,
-      normalizedPhoneNumber,
-      amount,
-      saleId,
-      userId: profile.id,
-      branch: profile.branch_id,
+    logger.info('[M-Pesa STK] Initiating STK Push', {
       environment: mpesaEnvironment,
       shortcode: paybill,
-      accountReference: resolvedAccountReference,
-      callbackUrl,
-      passkeyPresent: !!passkey,
     })
 
     const stkResponse = await mpesaService.initiateStkPush(
@@ -314,7 +270,7 @@ export async function POST(req: NextRequest) {
 
     // Check response
     if (stkResponse.ResponseCode !== '0') {
-      console.error('[M-Pesa STK] STK Push failed', {
+      logger.warn('[M-Pesa STK] STK Push failed', {
         ResponseCode: stkResponse.ResponseCode,
         ResponseDescription: stkResponse.ResponseDescription,
       })
@@ -344,7 +300,7 @@ export async function POST(req: NextRequest) {
     )
 
     if (!transactionResult.success) {
-      console.error('[M-Pesa STK] Failed to create transaction record')
+      logger.error('[M-Pesa STK] Failed to create transaction record')
       await failPendingMpesaSaleWithRestore(
         saleId,
         'Failed to record M-Pesa transaction after sending STK Push'
@@ -355,11 +311,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    console.log('[M-Pesa STK] STK Push sent successfully', {
-      checkoutRequestId: stkResponse.CheckoutRequestID,
-      merchantRequestId: stkResponse.MerchantRequestID,
-      userId: profile.id,
-    })
+    logger.info('[M-Pesa STK] STK Push sent successfully')
 
     return NextResponse.json(
       {
@@ -371,7 +323,7 @@ export async function POST(req: NextRequest) {
       { status: 200 }
     )
   } catch (error) {
-    console.error('[M-Pesa STK] Endpoint error', error)
+    logger.error('[M-Pesa STK] Endpoint error', error)
     return NextResponse.json(
       {
         error: 'Internal server error',

@@ -55,11 +55,14 @@ interface PriceAnomaly {
   }
 }
 
+const ITEMS_PER_PAGE = 10
+
 export function PriceAuditDashboard() {
   const [anomalies, setAnomalies] = useState<PriceAnomaly[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [retryCount, setRetryCount] = useState(0)
+  const [page, setPage] = useState(1)
   const [selectedAnomaly, setSelectedAnomaly] = useState<PriceAnomaly | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [actionType, setActionType] = useState<'approve' | 'correct' | 'protect'>('approve')
@@ -79,6 +82,7 @@ export function PriceAuditDashboard() {
 
         const data = await response.json()
         setAnomalies(data.anomalies || [])
+        setPage(1)
       } catch (error: any) {
         setError(error.message || 'Failed to load price anomalies')
         toast({
@@ -192,6 +196,8 @@ export function PriceAuditDashboard() {
   const criticalCount = anomalies.filter((a) => a.severity === 'critical').length
   const highCount = anomalies.filter((a) => a.severity === 'high').length
   const mediumCount = anomalies.filter((a) => a.severity === 'medium').length
+  const totalPages = Math.max(1, Math.ceil(anomalies.length / ITEMS_PER_PAGE))
+  const paginatedAnomalies = anomalies.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE)
 
   return (
     <div className="space-y-6">
@@ -229,7 +235,7 @@ export function PriceAuditDashboard() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {anomalies.map((anomaly) => (
+            {paginatedAnomalies.map((anomaly) => (
               <TableRow key={anomaly.id} className="hover:bg-gray-50">
                 <TableCell>
                   <div>
@@ -317,6 +323,42 @@ export function PriceAuditDashboard() {
             ))}
           </TableBody>
         </Table>
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between px-4 py-3 border-t">
+            <p className="text-sm text-muted-foreground">
+              Showing {(page - 1) * ITEMS_PER_PAGE + 1}–{Math.min(page * ITEMS_PER_PAGE, anomalies.length)} of{' '}
+              {anomalies.length}
+            </p>
+            <div className="flex gap-1">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                Previous
+              </Button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                <Button
+                  key={p}
+                  variant={p === page ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setPage(p)}
+                >
+                  {p}
+                </Button>
+              ))}
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Review Dialog */}
