@@ -150,7 +150,7 @@ export function PriceAuditDashboard() {
 
   if (loading) {
     return (
-      <div className="space-y-4">
+      <div role="region" aria-label="Loading price audit data" className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
             <Skeleton key={i} className="h-24 w-full rounded-lg" />
@@ -166,7 +166,7 @@ export function PriceAuditDashboard() {
 
   if (error) {
     return (
-      <div className="space-y-4">
+      <div role="region" aria-label="Error loading price audit data" className="space-y-4">
         <div className="flex items-center justify-between rounded-lg border border-destructive/30 bg-destructive/5 p-4">
           <div className="flex items-center gap-2">
             <AlertCircle className="h-5 w-5 text-destructive" />
@@ -185,7 +185,7 @@ export function PriceAuditDashboard() {
 
   if (anomalies.length === 0) {
     return (
-      <div className="p-8 text-center">
+      <div role="region" aria-label="No anomalies detected" className="p-8 text-center">
         <CheckCircle className="mx-auto h-12 w-12 text-green-500 mb-4" />
         <p className="text-lg font-semibold">All prices approved ✓</p>
         <p className="text-gray-500 mt-2">No anomalies detected</p>
@@ -202,7 +202,7 @@ export function PriceAuditDashboard() {
   return (
     <div className="space-y-6">
       {/* Summary */}
-      <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
+      <div role="region" aria-label="Price anomaly summary" className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
         <div className="p-4 border rounded-lg">
           <p className="text-sm text-gray-500">Total Anomalies</p>
           <p className="text-2xl font-bold">{anomalies.length}</p>
@@ -223,7 +223,7 @@ export function PriceAuditDashboard() {
 
       {/* Anomalies Table */}
       <div className="border rounded-lg">
-        <Table>
+        <Table aria-label="Price anomalies requiring review">
           <TableHeader>
             <TableRow className="bg-gray-50">
               <TableHead>Product</TableHead>
@@ -324,7 +324,7 @@ export function PriceAuditDashboard() {
           </TableBody>
         </Table>
         {totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t">
+          <div role="region" aria-label="Pagination" className="flex items-center justify-between px-4 py-3 border-t">
             <p className="text-sm text-muted-foreground">
               Showing {(page - 1) * ITEMS_PER_PAGE + 1}–{Math.min(page * ITEMS_PER_PAGE, anomalies.length)} of{' '}
               {anomalies.length}
@@ -335,6 +335,7 @@ export function PriceAuditDashboard() {
                 size="sm"
                 disabled={page <= 1}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
+                aria-label="Previous page"
               >
                 Previous
               </Button>
@@ -344,6 +345,7 @@ export function PriceAuditDashboard() {
                   variant={p === page ? 'default' : 'outline'}
                   size="sm"
                   onClick={() => setPage(p)}
+                  aria-label={`Go to page ${p}`}
                 >
                   {p}
                 </Button>
@@ -353,6 +355,7 @@ export function PriceAuditDashboard() {
                 size="sm"
                 disabled={page >= totalPages}
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                aria-label="Next page"
               >
                 Next
               </Button>

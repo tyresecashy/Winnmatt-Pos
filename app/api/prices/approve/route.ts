@@ -53,7 +53,7 @@ export async function POST(request: Request) {
       case 'approve':
       case 'correct': {
         // Build update object with only provided price fields
-        const productUpdate: Record<string, any> = {
+        const productUpdate: Record<string, string | number | null | undefined> = {
           price_review_status: action === 'approve' ? 'approved' : 'reviewed',
         }
         if (newSellingPrice != null) {
@@ -74,7 +74,7 @@ export async function POST(request: Request) {
         }
 
         // Mark anomaly as resolved
-        const anomalyUpdate: Record<string, any> = {
+        const anomalyUpdate: Record<string, string | number | null | undefined> = {
           status: 'resolved',
           reviewed_by: user.id,
           reviewed_at: new Date().toISOString(),
@@ -117,7 +117,7 @@ export async function POST(request: Request) {
         }
 
         // Mark anomalies as resolved with protection note
-        const anomalyUpdate: Record<string, any> = {
+        const anomalyUpdate: Record<string, string | number | null | undefined> = {
           status: 'resolved',
           reviewed_by: user.id,
           reviewed_at: new Date().toISOString(),
@@ -145,8 +145,9 @@ export async function POST(request: Request) {
       default:
         return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Price approval error:', error)
-    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 })
+    const errorMessage = error instanceof Error ? error.message : 'Internal server error'
+    return NextResponse.json({ error: errorMessage }, { status: 500 })
   }
 }

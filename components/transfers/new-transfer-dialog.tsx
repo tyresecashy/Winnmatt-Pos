@@ -65,10 +65,10 @@ interface Product {
     id: string
     sku: string
     name: string
-    category?: {
+    category: {
       id: string
       name: string
-    }
+    } | null
   }
   availableQuantity: number
 }
@@ -222,8 +222,9 @@ export function NewTransferDialog({ open, onOpenChange, onSuccess }: NewTransfer
           return
         }
 
-        setSourceProducts(products)
-        productsCacheRef.current[sourceBranch] = products
+        const validProducts = products.filter((p): p is Product => p.product !== null)
+        setSourceProducts(validProducts)
+        productsCacheRef.current[sourceBranch] = validProducts
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to load products'
         setSourceProducts([])

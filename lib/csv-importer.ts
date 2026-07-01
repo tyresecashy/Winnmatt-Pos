@@ -19,7 +19,7 @@ export interface CSVProduct {
   currency?: string
   barcode?: string
   image_url?: string
-  [key: string]: any
+  [key: string]: unknown
 }
 
 export interface ImportResult {

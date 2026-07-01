@@ -3,6 +3,8 @@ import {
   getAuthenticatedSupabaseUser,
   loadUserProfileResult,
 } from '@/lib/auth-helpers'
+import { profileUpdateSchema } from '@/lib/api-schemas'
+import { badRequest } from '@/lib/api-errors'
 
 /**
  * GET /api/auth/profile
@@ -73,11 +75,31 @@ export async function GET(request: NextRequest) {
  * Future: Will be admin-only for provisioning new app profiles.
  */
 export async function POST(request: NextRequest) {
-  return NextResponse.json(
-    {
-      error: 'User self-service profile creation is not supported.',
-      message: 'Your account must be provisioned by an administrator. Please contact support.',
-    },
-    { status: 403 }
-  )
+  try {
+    let body: unknown
+    try {
+      body = await request.json()
+    } catch {
+      return badRequest([{ field: 'body', message: 'Invalid JSON body' }])
+    }
+
+    const parsed = profileUpdateSchema.safeParse(body)
+    if (!parsed.success) {
+      return badRequest(parsed.error.issues.map(i => ({
+        field: i.path.join('.'),
+        message: i.message,
+      })))
+    }
+
+    return NextResponse.json(
+      {
+        error: 'User self-service profile creation is not supported.',
+        message: 'Your account must be provisioned by an administrator. Please contact support.',
+      },
+      { status: 403 }
+    )
+  } catch (error) {
+    console.error('[PROFILE] Unhandled error:', error instanceof Error ? error.message : String(error))
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
 }

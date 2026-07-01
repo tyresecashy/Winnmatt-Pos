@@ -190,7 +190,7 @@ export default function ReportsPage() {
 
   if (loading) {
     return (
-      <div className="p-6 space-y-6">
+      <div role="region" aria-label="Loading reports" className="p-6 space-y-6">
         <div className="flex items-center justify-between">
           <div>
             <Skeleton className="h-8 w-48" />
@@ -250,7 +250,7 @@ export default function ReportsPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div role="region" aria-label="Reports dashboard" className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Reports</h1>
@@ -340,7 +340,7 @@ export default function ReportsPage() {
                 <CardDescription>Sales over the period</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="h-[300px]">
+                <div role="img" aria-label="Daily sales trend chart" className="h-[300px]">
                   {dailyTrend.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={dailyTrend}>
@@ -424,7 +424,7 @@ export default function ReportsPage() {
                 <CardDescription>Sales by branch</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="h-[300px]">
+                <div role="img" aria-label="Branch performance bar chart" className="h-[300px]">
                   {branchStats.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart
@@ -631,7 +631,7 @@ export default function ReportsPage() {
                 <CardDescription>Total value: {formatKSh(inventoryByCategory.totalValue)}</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="h-[300px]">
+                <div role="img" aria-label="Inventory value by category pie chart" className="h-[300px]">
                   {inventoryByCategory.categories.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>

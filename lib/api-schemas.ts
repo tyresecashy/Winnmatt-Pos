@@ -24,7 +24,28 @@ export const mpesaStatusSchema = z.object({
   checkoutRequestId: z.string().min(1),
 })
 
-// ── M-PESA Callback ──
+// ── M-PESA Callback Item ──
+export const mpesaCallbackItemSchema = z.object({
+  Name: z.string().optional(),
+  Value: z.unknown().optional(),
+})
+
+// ── M-PESA Callback Body ──
+export const mpesaCallbackBodySchema = z.object({
+  Body: z.object({
+    stkCallback: z.object({
+      MerchantRequestID: z.string().optional(),
+      CheckoutRequestID: z.string(),
+      ResultCode: z.number().int(),
+      ResultDesc: z.string().optional(),
+      CallbackMetadata: z.object({
+        Item: z.array(mpesaCallbackItemSchema).optional(),
+      }).optional(),
+    }),
+  }).optional(),
+})
+
+// ── M-PESA Callback (strict) ──
 export const mpesaCallbackSchema = z.object({
   Body: z.object({
     stkCallback: z.object({
@@ -40,4 +61,17 @@ export const mpesaCallbackSchema = z.object({
       }).optional(),
     }),
   }),
+})
+
+// ── Profile Update ──
+export const profileUpdateSchema = z.object({
+  full_name: z.string().min(1).max(100).optional(),
+  phone: z.string().regex(/^(254|0)\d{9}$/, 'Invalid Kenyan phone number').optional(),
+  avatar_url: z.string().url().optional().or(z.literal('')),
+})
+
+// ── CSV Import ──
+export const csvImportSchema = z.object({
+  sourceName: z.string().min(1).max(100),
+  data: z.array(z.record(z.unknown())).optional(),
 })

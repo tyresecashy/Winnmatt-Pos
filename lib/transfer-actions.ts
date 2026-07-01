@@ -7,6 +7,18 @@ import {
 } from '@/lib/auth-helpers'
 import { supabaseAdmin } from '@/lib/supabase-server'
 
+interface ProductRow {
+  productId: string
+  product: {
+    id: string
+    sku: string
+    name: string
+    category_id?: string
+    category?: { id: string; name: string } | null
+  } | null
+  availableQuantity: number
+}
+
 /**
  * Get all branches for selection
  */
@@ -132,7 +144,7 @@ export async function getProductsAtBranch(branchId: string) {
         }
 
         // Fetch all products referenced by these inventory rows
-        const productIds = inventoryRows.map((row: any) => row.product_id)
+        const productIds = inventoryRows.map((row) => row.product_id)
         const { data: products, error: productError } = await supabaseAdmin
           .from('products')
           .select('id, sku, name, category_id, category:categories(id, name)')
@@ -143,11 +155,11 @@ export async function getProductsAtBranch(branchId: string) {
         }
 
         // Merge products back into inventory rows
-        const productMap: any = Object.fromEntries(
-          (products || []).map((p: any) => [p.id, p])
+        const productMap: Record<string, { id: string; sku: string; name: string; category_id: string; category: { id: string; name: string } | null }> = Object.fromEntries(
+          (products || []).map((p) => [p.id, p])
         )
 
-        const result = inventoryRows.map((invRow: any) => ({
+        const result = inventoryRows.map((invRow) => ({
           productId: invRow.product_id,
           product: productMap[invRow.product_id] || null,
           availableQuantity: invRow.quantity,
@@ -157,30 +169,52 @@ export async function getProductsAtBranch(branchId: string) {
       }
 
       // Approach 2 succeeded
-      const products = (data2 || []).map((row: any) => ({
-        productId: row.product_id,
-        product: row.product,
-        availableQuantity: row.quantity,
-      }))
+      const approach2Products: ProductRow[] = (data2 || []).map((row) => {
+        const product = Array.isArray(row.product) ? row.product[0] : row.product
+        const rawCategory = (product as Record<string, unknown>)?.category
+        const category = Array.isArray(rawCategory) ? rawCategory[0] : (rawCategory ?? null)
+        return {
+          productId: row.product_id,
+          product: product ? {
+            id: (product as Record<string, unknown>).id as string,
+            sku: (product as Record<string, unknown>).sku as string,
+            name: (product as Record<string, unknown>).name as string,
+            category_id: (product as Record<string, unknown>).category_id as string | undefined,
+            category: category as { id: string; name: string } | null,
+          } : null,
+          availableQuantity: row.quantity,
+        }
+      })
 
-      return products
+      return approach2Products
     }
 
     // Approach 1 succeeded
-    const products = (data || []).map((row: any) => ({
-      productId: row.product_id,
-      product: row.product,
-      availableQuantity: row.quantity,
-    }))
+    const approach1Products: ProductRow[] = (data || []).map((row) => {
+      const product = Array.isArray(row.product) ? row.product[0] : row.product
+      const rawCategory = (product as Record<string, unknown>)?.category
+      const category = Array.isArray(rawCategory) ? rawCategory[0] : (rawCategory ?? null)
+      return {
+        productId: row.product_id,
+        product: product ? {
+          id: (product as Record<string, unknown>).id as string,
+          sku: (product as Record<string, unknown>).sku as string,
+          name: (product as Record<string, unknown>).name as string,
+          category_id: (product as Record<string, unknown>).category_id as string | undefined,
+          category: category as { id: string; name: string } | null,
+        } : null,
+        availableQuantity: row.quantity,
+      }
+    })
 
-    return products
+    return approach1Products
   } catch (error) {
     // Handle both Error instances and Supabase error objects
     let errorMsg: string
     if (error instanceof Error) {
       errorMsg = error.message
     } else if (error && typeof error === 'object' && 'message' in error) {
-      errorMsg = (error as any).message || 'Unknown error'
+      errorMsg = (error as { message?: string }).message || 'Unknown error'
     } else {
       errorMsg = 'Unknown error occurred'
     }
@@ -190,6 +224,24 @@ export async function getProductsAtBranch(branchId: string) {
       error: errorMsg,
     })
     throw new Error(`Failed to load products for branch: ${errorMsg}`)
+  }
+}
+
+/**
+ * Normalize a raw Supabase movement row — unwrap embedded arrays from joins.
+ */
+function normalizeMovement(row: Record<string, unknown>): StockMovement {
+  return {
+    id: row.id as string,
+    product_id: row.product_id as string,
+    branch_id: row.branch_id as string,
+    type: row.type as string,
+    quantity: row.quantity as number,
+    reference_id: row.reference_id as string,
+    notes: row.notes as string | null,
+    created_at: row.created_at as string,
+    product: Array.isArray(row.product) ? (row.product[0] as StockMovement['product']) : (row.product as StockMovement['product']),
+    branch: Array.isArray(row.branch) ? (row.branch[0] as StockMovement['branch']) : (row.branch as StockMovement['branch']),
   }
 }
 
@@ -211,7 +263,7 @@ export async function getTransfers(limit: number = 50) {
     }
 
     const safeLimit = Math.max(1, Math.min(limit, 100))
-    let movementList: any[] = []
+    let movementList: StockMovement[] = []
 
     if (authResult.profile.role === 'owner') {
       const { data: movements, error } = await supabaseAdmin
@@ -233,7 +285,7 @@ export async function getTransfers(limit: number = 50) {
         .limit(safeLimit)
 
       if (error) throw error
-      movementList = movements || []
+      movementList = (movements || []).map(normalizeMovement)
     } else {
       const { data: scopedMovements, error: scopedError } = await supabaseAdmin
         .from('stock_movements')
@@ -248,7 +300,7 @@ export async function getTransfers(limit: number = 50) {
       const referenceIds = Array.from(
         new Set(
           (scopedMovements || [])
-            .map((movement: any) => movement.reference_id || movement.id)
+            .map((movement) => movement.reference_id || movement.id)
             .filter(Boolean)
         )
       )
@@ -276,13 +328,13 @@ export async function getTransfers(limit: number = 50) {
         .order('created_at', { ascending: false })
 
       if (error) throw error
-      movementList = movements || []
+      movementList = (movements || []).map(normalizeMovement)
     }
 
     // Group by reference_id to get transfer pairs
-    const transferMap: Record<string, any> = {}
+    const transferMap: Record<string, TransferGroup> = {}
 
-    movementList.forEach((movement: any) => {
+    movementList.forEach((movement) => {
       const refId = movement.reference_id || movement.id
 
       if (!transferMap[refId]) {
@@ -305,9 +357,9 @@ export async function getTransfers(limit: number = 50) {
 
     // Format transfers for display
     return Object.values(transferMap)
-      .map((transfer: any) => {
-        const outTransfer = transfer.transfers.find((t: any) => t.direction === 'out')
-        const inTransfer = transfer.transfers.find((t: any) => t.direction === 'in')
+      .map((transfer) => {
+        const outTransfer = transfer.transfers.find((t) => t.direction === 'out')
+        const inTransfer = transfer.transfers.find((t) => t.direction === 'in')
 
         return {
           id: transfer.id,
@@ -320,12 +372,38 @@ export async function getTransfers(limit: number = 50) {
           status: 'completed', // In real app with approvals, this could vary
         }
       })
-      .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, safeLimit)
   } catch (error) {
     console.error('Error fetching transfers:', error)
     return []
   }
+}
+
+interface StockMovement {
+  id: string
+  product_id: string
+  branch_id: string
+  type: string
+  quantity: number
+  reference_id: string
+  notes: string | null
+  created_at: string
+  product: { id: string; sku: string; name: string } | null
+  branch: { id: string; name: string; code: string } | null
+}
+
+interface TransferGroup {
+  id: string
+  createdAt: string
+  transfers: Array<{
+    id: string
+    product: { id: string; sku: string; name: string } | null
+    branch: { id: string; name: string; code: string } | null
+    quantity: number
+    direction: 'out' | 'in'
+  }>
+  notes: string | null
 }
 
 export interface TransferItem {

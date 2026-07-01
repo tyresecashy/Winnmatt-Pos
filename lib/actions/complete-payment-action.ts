@@ -14,6 +14,17 @@ import { getRedemptionEligibility, redeemLoyaltyPoints } from '@/lib/loyalty-act
 import { buildReceiptPayload } from '@/lib/receipt-builder'
 import { createSaleWithContext, getSaleByIdForAuthorizedContext } from '@/lib/sales-actions'
 
+interface CreateSaleResult {
+  success: boolean
+  sale?: { id: string }
+  receiptNumber?: string
+  receiptSeed?: SaleReceiptSeed
+  loyaltyAward?: { pointsAwarded: number; newBalance: number } | null
+  error?: string
+}
+
+// Full sale record used to build receipt payload - shape matches the return of buildReceiptSaleFromSeed and getSaleByIdForAuthorizedContext
+
 export interface CompletePaymentRequest {
   branchId: string
   cashierId: string
@@ -21,7 +32,7 @@ export interface CompletePaymentRequest {
   paymentMethod: 'cash' | 'card' | 'bank_transfer' | 'cheque' | 'credit'
   customerId?: string
   cartDiscount: number
-  receiptSettings: any
+  receiptSettings: Record<string, unknown>
   redemptionPoints?: number
   redemptionDiscount?: number
 }
@@ -262,7 +273,7 @@ export async function completePaymentAction(
       }
     }
 
-    let createResult: any
+    let createResult: CreateSaleResult
     try {
       createResult = await timing.measure('create_sale_total', () =>
         createSaleWithContext(

@@ -21,7 +21,8 @@ import {
 } from '@/lib/mpesa-actions'
 import { supabaseAdmin } from '@/lib/supabase-server'
 import { logger } from '@/lib/logger'
-import type { CallbackPayload } from '@/lib/mpesa-service'
+import { mpesaCallbackBodySchema } from '@/lib/api-schemas'
+import { badRequest } from '@/lib/api-errors'
 
 async function restoreFailedMpesaSaleInventory(saleId: string) {
   const { data: sale, error: saleError } = await supabaseAdmin
@@ -102,43 +103,39 @@ async function failPendingMpesaSaleWithRestore(saleId: string, errorMessage: str
 
 export async function POST(req: NextRequest) {
   try {
-    const body: CallbackPayload = await req.json()
+    let body: unknown
+    try {
+      body = await req.json()
+    } catch {
+      return NextResponse.json(
+        { success: false },
+        { status: 200 }
+      )
+    }
 
-    // Validate callback structure
-    const stkCallback = body?.Body?.stkCallback
+    const parsed = mpesaCallbackBodySchema.safeParse(body)
+    if (!parsed.success) {
+      logger.error('[M-Pesa Callback] Invalid callback payload', undefined, { issues: parsed.error.issues })
+      return NextResponse.json(
+        { success: false },
+        { status: 200 }
+      )
+    }
+
+    const stkCallback = parsed.data.Body?.stkCallback
     if (!stkCallback) {
       logger.error('[M-Pesa Callback] Invalid callback payload structure')
       return NextResponse.json(
         { success: false },
-        { status: 200 } // Return 200 to acknowledge to Safaricom
+        { status: 200 }
       )
     }
 
-    // Validate required callback fields
     const {
-      MerchantRequestID: merchantRequestId,
       CheckoutRequestID: checkoutRequestId,
       ResultCode: resultCode,
-      ResultDesc: resultDesc,
+      ResultDesc: resultDesc = '',
     } = stkCallback
-
-    // Reject malformed callbacks - must have checkoutRequestId
-    if (!checkoutRequestId) {
-      logger.error('[M-Pesa Callback] Callback missing CheckoutRequestID')
-      return NextResponse.json(
-        { success: false },
-        { status: 200 }
-      )
-    }
-
-    // Reject if ResultCode is not a number
-    if (typeof resultCode !== 'number') {
-      logger.error('[M-Pesa Callback] Callback ResultCode is not a number', undefined, { resultCode })
-      return NextResponse.json(
-        { success: false },
-        { status: 200 }
-      )
-    }
 
     logger.info('[M-Pesa Callback] Callback received', { resultCode, resultDesc })
 

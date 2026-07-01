@@ -276,7 +276,7 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <div className="p-6 space-y-6">
+      <div role="region" aria-label="Loading settings" className="p-6 space-y-6">
         <div>
           <Skeleton className="h-8 w-48" />
           <Skeleton className="h-4 w-72 mt-2" />
@@ -311,7 +311,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div role="region" aria-label="Settings" className="p-6 space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
         <p className="text-muted-foreground">
@@ -346,7 +346,7 @@ export default function SettingsPage() {
               </Alert>
             )}
 
-            <Card>
+            <Card role="region" aria-label="Global receipt settings">
               <CardHeader>
                 <div className="flex items-center gap-3">
                   <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
@@ -483,7 +483,7 @@ export default function SettingsPage() {
             </Card>
 
             {isAdmin && (
-              <Card>
+              <Card role="region" aria-label="Branch receipt overrides">
                 <CardHeader>
                   <div className="flex items-center gap-3">
                     <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
@@ -595,7 +595,7 @@ export default function SettingsPage() {
 
           {isOwner && (
             <TabsContent value="loyalty" className="space-y-6">
-              <Card>
+              <Card role="region" aria-label="Loyalty rules">
                 <CardHeader>
                   <div className="flex items-center gap-3">
                     <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">

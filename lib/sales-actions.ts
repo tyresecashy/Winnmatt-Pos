@@ -11,12 +11,49 @@ import type { UserProfile } from '@/contexts/auth-context'
 import { getNairobiDayRange } from '@/lib/date-time'
 import { supabaseAdmin } from '@/lib/supabase-server'
 import { awardLoyaltyPoints, reverseLoyaltyPoints } from '@/lib/loyalty-actions'
+import { logger } from '@/lib/logger'
 
 export interface SaleItem {
   productId: string
   quantity: number
   unitPrice: number
   discountPercent?: number
+}
+
+interface SalePayload {
+  id: string
+  branch_id: string
+  cashier_id: string
+  customer_id: string | null
+  subtotal: number
+  discount_amount: number
+  tax_amount: number
+  total_amount: number
+  payment_method: string
+  payment_status: string
+  receipt_number: string
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+interface InsertedSaleItem {
+  id: string
+  sale_id: string
+  product_id: string
+  quantity: number
+  unit_price: number
+  discount_percent: number
+  line_total: number
+  created_at: string
+}
+
+interface SaleItemPayload {
+  product_id: string
+  quantity: number
+  unit_price: number
+  discount_percent: number
+  line_total: number
 }
 
 interface AuthorizedSaleContext {
@@ -31,7 +68,7 @@ interface ReceiptSeedItem {
   unit_price: number
   discount_percent: number
   line_total: number
-  product: {
+  product?: {
     id: string
     sku: string
     name: string
@@ -39,7 +76,7 @@ interface ReceiptSeedItem {
 }
 
 export interface SaleReceiptSeed {
-  sale: any
+  sale: SalePayload
   items: ReceiptSeedItem[]
 }
 
@@ -48,17 +85,8 @@ interface PreparedCashSalePayload {
   totalAmount: number
   receiptNumber: string
   writeTimestamp: string
-  createdSale: any
-  insertedSaleItems: Array<{
-    id: string
-    sale_id: string
-    product_id: string
-    quantity: number
-    unit_price: number
-    discount_percent: number
-    line_total: number
-    created_at: string
-  }>
+  createdSale: SalePayload
+  insertedSaleItems: InsertedSaleItem[]
 }
 
 function prepareCashSalePayload(
@@ -196,8 +224,8 @@ async function createCashSaleWithTransaction(
     Array.isArray(data) ? data[0] : data
 
   const persistedSale = rpcResult?.sale || prepared.createdSale
-  const persistedItems = Array.isArray(rpcResult?.items)
-    ? rpcResult.items
+  const persistedItems: (InsertedSaleItem & { product?: { id: string; sku: string; name: string } })[] = Array.isArray(rpcResult?.items)
+    ? rpcResult.items as (InsertedSaleItem & { product?: { id: string; sku: string; name: string } })[]
     : prepared.insertedSaleItems
 
   return {
@@ -207,7 +235,7 @@ async function createCashSaleWithTransaction(
     loyaltyAward: null,
     receiptSeed: {
       sale: persistedSale,
-      items: persistedItems.map((item: any) => ({
+      items: persistedItems.map((item) => ({
         id: item.id,
         product_id: item.product_id,
         quantity: item.quantity,
@@ -288,11 +316,7 @@ export async function createSaleWithContext(
           customerType: customerId ? 'named_customer' : 'walk_in',
         })
 
-        console.error('[SALES] Cash transaction RPC failed', {
-          branchId,
-          itemCount: items.length,
-          error: error instanceof Error ? error.message : String(error),
-        })
+        logger.error('[SALES] Cash transaction RPC failed', error, { branchId, itemCount: items.length })
 
         return {
           success: false,
@@ -300,7 +324,7 @@ export async function createSaleWithContext(
         }
       }
 
-      console.warn('[SALES] Cash transaction RPC missing, falling back to app-side persistence')
+      logger.warn('[SALES] Cash transaction RPC missing, falling back to app-side persistence')
     }
   }
 
@@ -315,7 +339,7 @@ export async function createSaleWithContext(
 
   try {
     let subtotal = 0
-    const saleItems: any[] = []
+    const saleItems: SaleItemPayload[] = []
     const requestedQuantities = new Map<string, number>()
     const writeTimestamp = new Date().toISOString()
     const saleId = crypto.randomUUID()
@@ -366,7 +390,7 @@ export async function createSaleWithContext(
       }
 
       const inventoryByProductId = new Map(
-        (inventoryRows || []).map((row: any) => {
+        (inventoryRows || []).map((row) => {
           const product = Array.isArray(row.product) ? row.product[0] : row.product
 
           return [
@@ -426,7 +450,7 @@ export async function createSaleWithContext(
       async () =>
         await supabaseAdmin
           .from('sales')
-          .insert(createdSale as any)
+          .insert(createdSale)
     )
 
     if (saleError) throw saleError
@@ -450,7 +474,7 @@ export async function createSaleWithContext(
     const saleItemsInsertPromise = timing.measure('sale_items_insert', async () =>
       await supabaseAdmin
         .from('sale_items')
-        .insert(insertedSaleItems as any)
+        .insert(insertedSaleItems)
     )
 
     const inventoryUpdatesPromise = timing.measure('inventory_updates', async () => {
@@ -566,9 +590,9 @@ export async function createSaleWithContext(
       loyaltyAward,
       receiptSeed: {
         sale: createdSale,
-        items: insertedSaleItems.map((item: any) => ({
+        items: insertedSaleItems.map((item) => ({
           ...item,
-          product: inventorySnapshots[item.product_id]?.product,
+          product: inventorySnapshots[item.product_id]!.product,
         })),
       } satisfies SaleReceiptSeed,
     }
@@ -581,10 +605,7 @@ export async function createSaleWithContext(
     })
 
     if (createdSaleId) {
-      console.error('[SALES] Rolling back incomplete sale', {
-        saleId: createdSaleId,
-        error: error instanceof Error ? error.message : String(error),
-      })
+      logger.error('[SALES] Rolling back incomplete sale', error, { saleId: createdSaleId })
 
       for (const change of appliedInventoryChanges.reverse()) {
         const { error: restoreError } = await supabaseAdmin
@@ -596,11 +617,7 @@ export async function createSaleWithContext(
           .eq('id', change.inventoryId)
 
         if (restoreError) {
-          console.error('[SALES] Failed to restore inventory during rollback', {
-            saleId: createdSaleId,
-            productId: change.productId,
-            error: restoreError.message,
-          })
+          logger.error('[SALES] Failed to restore inventory during rollback', restoreError, { saleId: createdSaleId, productId: change.productId })
         }
       }
 
@@ -621,7 +638,7 @@ export async function createSaleWithContext(
         .eq('id', createdSaleId)
     }
 
-    console.error('Error creating sale:', error)
+    logger.error('Error creating sale', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to create sale',
@@ -636,7 +653,7 @@ async function getSaleByIdWithProfile(
 ) {
   const posAccess = authorizePOSProfile(profile)
   if (!posAccess.authorized) {
-    console.warn('[getSaleById] POS access denied:', posAccess.error)
+    logger.warn('[getSaleById] POS access denied', { error: posAccess.error })
     return null
   }
 
@@ -669,12 +686,7 @@ async function getSaleByIdWithProfile(
   const { data, error } = await scopedQuery.single()
 
   if (error) {
-    console.error('[getSaleById] Supabase error:', {
-      code: error.code,
-      message: error.message,
-      details: error.details,
-      hint: error.hint,
-    })
+    logger.error('[getSaleById] Supabase error', error, { code: error.code, details: error.details, hint: error.hint })
     throw error
   }
 
@@ -690,10 +702,7 @@ export async function getSaleByIdForAuthorizedContext(
     return await getSaleByIdWithProfile(profile, saleId, branchId)
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)
-    console.error('[getSaleById] Failed to fetch sale for authorized context:', {
-      saleId,
-      errorMessage,
-    })
+    logger.error('[getSaleById] Failed to fetch sale for authorized context', undefined, { saleId, errorMessage })
     return null
   }
 }
@@ -746,15 +755,12 @@ export async function createSale(
     const effectiveCashierId = authResult.profile.id
 
     if (cashierId && cashierId !== effectiveCashierId) {
-      console.warn('[SALES] Ignoring mismatched cashier id in createSale', {
-        requestedCashierId: cashierId,
-        authenticatedCashierId: effectiveCashierId,
-      })
+      logger.warn('[SALES] Ignoring mismatched cashier id in createSale', { requestedCashierId: cashierId, authenticatedCashierId: effectiveCashierId })
     }
 
     // Calculate totals
     let subtotal = 0
-    const saleItems: any[] = []
+    const saleItems: SaleItemPayload[] = []
 
     for (const item of items) {
       const lineTotal = item.quantity * item.unitPrice
@@ -896,23 +902,11 @@ export async function createSale(
 
     // Award loyalty points only for named customers on completed sales
     if (!customerId) {
-      console.log('[LOYALTY] Customer not eligible for points: walk-in customer', {
-        saleId: saleData.id,
-        paymentStatus,
-      })
+      logger.info('[LOYALTY] Customer not eligible for points: walk-in customer', { saleId: saleData.id, paymentStatus })
     } else if (paymentStatus !== 'completed') {
-      console.log('[LOYALTY] Customer not eligible for points: sale is not completed', {
-        customerId,
-        saleId: saleData.id,
-        paymentStatus,
-      })
+      logger.info('[LOYALTY] Customer not eligible for points: sale is not completed', { customerId, saleId: saleData.id, paymentStatus })
     } else {
-      console.log('[LOYALTY] Customer eligible for loyalty earn', {
-        customerId,
-        saleId: saleData.id,
-        saleAmountKSh: Math.round(subtotal),
-        discountAmountKSh: Math.round(totalDiscount),
-      })
+      logger.info('[LOYALTY] Customer eligible for loyalty earn', { customerId, saleId: saleData.id, saleAmountKSh: Math.round(subtotal), discountAmountKSh: Math.round(totalDiscount) })
 
       loyaltyAward = await awardLoyaltyPoints(
         customerId,
@@ -923,17 +917,11 @@ export async function createSale(
         effectiveCashierId
       )
       if (loyaltyAward && loyaltyAward.pointsAwarded) {
-        console.log(`[LOYALTY] ✅ Awarded ${loyaltyAward.pointsAwarded} points to customer. New balance: ${loyaltyAward.newBalance}`)
+        logger.info(`[LOYALTY] Awarded ${loyaltyAward.pointsAwarded} points to customer. New balance: ${loyaltyAward.newBalance}`)
       }
     }
 
-    console.log('[DEBUG] createSale() returning:', {
-      success: true,
-      saleId: saleData?.id,
-      receiptNumber,
-      loyaltyAward,
-      saleDataKeys: Object.keys(saleData || {}),
-    })
+    logger.info('[DEBUG] createSale() returning', { success: true, saleId: saleData?.id, receiptNumber, loyaltyAward })
     return {
       success: true,
       sale: saleData,
@@ -942,10 +930,7 @@ export async function createSale(
     }
   } catch (error) {
     if (createdSaleId) {
-      console.error('[SALES] Rolling back incomplete sale', {
-        saleId: createdSaleId,
-        error: error instanceof Error ? error.message : String(error),
-      })
+      logger.error('[SALES] Rolling back incomplete sale', error, { saleId: createdSaleId })
 
       for (const change of appliedInventoryChanges.reverse()) {
         const { error: restoreError } = await supabaseAdmin
@@ -957,11 +942,7 @@ export async function createSale(
           .eq('id', change.inventoryId)
 
         if (restoreError) {
-          console.error('[SALES] Failed to restore inventory during rollback', {
-            saleId: createdSaleId,
-            productId: change.productId,
-            error: restoreError.message,
-          })
+          logger.error('[SALES] Failed to restore inventory during rollback', restoreError, { saleId: createdSaleId, productId: change.productId })
         }
       }
 
@@ -982,7 +963,7 @@ export async function createSale(
         .eq('id', createdSaleId)
     }
 
-    console.error('Error creating sale:', error)
+    logger.error('Error creating sale', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to create sale',
@@ -994,19 +975,19 @@ export async function getSales(branchId: string, limit: number = 50) {
   try {
     const authResult = await authenticateServerAction()
     if (!authResult.success || !authResult.profile) {
-      console.warn('[SALES] Sales history denied:', authResult.error)
+      logger.warn('[SALES] Sales history denied', { error: authResult.error })
       return []
     }
 
     const posAccess = authorizePOSProfile(authResult.profile)
     if (!posAccess.authorized) {
-      console.warn('[SALES] Sales history POS access denied:', posAccess.error)
+      logger.warn('[SALES] Sales history POS access denied', { error: posAccess.error })
       return []
     }
 
     const branchScope = resolveAuthorizedBranchId(authResult.profile, branchId)
     if (!branchScope.authorized || !branchScope.branchId) {
-      console.warn('[SALES] Sales history branch denied:', branchScope.error)
+      logger.warn('[SALES] Sales history branch denied', { error: branchScope.error })
       return []
     }
 
@@ -1023,14 +1004,14 @@ export async function getSales(branchId: string, limit: number = 50) {
       .limit(limit)
 
     if (error) throw error
-    return (data || []).map((sale: any) => ({
+    return (data || []).map((sale) => ({
       ...sale,
       branch: Array.isArray(sale.branch) ? sale.branch[0] || null : sale.branch,
       cashier: Array.isArray(sale.cashier) ? sale.cashier[0] || null : sale.cashier,
       customer: Array.isArray(sale.customer) ? sale.customer[0] || null : sale.customer,
     }))
   } catch (error) {
-    console.error('Error fetching sales:', error)
+    logger.error('Error fetching sales', error)
     return []
   }
 }
@@ -1039,27 +1020,23 @@ export async function getSaleById(saleId: string) {
   try {
     const authResult = await authenticateServerAction()
     if (!authResult.success || !authResult.profile) {
-      console.warn('[getSaleById] Auth denied:', authResult.error)
+      logger.warn('[getSaleById] Auth denied', { error: authResult.error })
       return null
     }
 
     const posAccess = authorizePOSProfile(authResult.profile)
     if (!posAccess.authorized) {
-      console.warn('[getSaleById] POS access denied:', posAccess.error)
+    logger.warn('[getSaleById] POS access denied', { error: posAccess.error })
       return null
     }
 
     const saleAccess = await verifySaleAccess(authResult.profile, saleId)
     if (!saleAccess.authorized) {
-      console.warn('[getSaleById] Sale access denied:', {
-        saleId,
-        userId: authResult.profile.id,
-        reason: saleAccess.error,
-      })
+      logger.warn('[getSaleById] Sale access denied', { saleId, userId: authResult.profile.id, reason: saleAccess.error })
       return null
     }
 
-    console.log('[getSaleById] Fetching sale:', { saleId })
+    logger.info('[getSaleById] Fetching sale', { saleId })
     
     const { data, error } = await supabaseAdmin
       .from('sales')
@@ -1082,40 +1059,20 @@ export async function getSaleById(saleId: string) {
       .single()
 
     if (error) {
-      console.error('[getSaleById] Supabase error:', {
-        code: error.code,
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-      })
+      logger.error('[getSaleById] Supabase error', error, { code: error.code, details: error.details, hint: error.hint })
       throw error
     }
 
     if (!data) {
-      console.warn('[getSaleById] No sale found for id:', saleId)
+      logger.warn('[getSaleById] No sale found for id', { saleId })
       return null
     }
 
-    console.log('[DEBUG] getSaleById() returning:', {
-      saleId: data?.id,
-      hasItems: !!data?.items,
-      itemsLength: data?.items?.length,
-      cashierIsArray: Array.isArray(data?.cashier),
-      branchIsArray: Array.isArray(data?.branch),
-      customerIsArray: Array.isArray(data?.customer),
-      firstItemProductIsArray: Array.isArray(data?.items?.[0]?.product),
-      dataKeys: Object.keys(data || {}),
-      itemKeys: data?.items?.length ? Object.keys(data.items[0] || {}) : [],
-      firstItemProduct: data?.items?.[0]?.product,
-    })
+    logger.info('[DEBUG] getSaleById() returning', { saleId: data?.id, hasItems: !!data?.items, itemsLength: data?.items?.length })
     return data
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)
-    console.error('[getSaleById] FATAL: Failed to fetch sale:', {
-      saleId,
-      errorMessage,
-      errorStack: error instanceof Error ? error.stack : undefined,
-    })
+    logger.error('[getSaleById] FATAL: Failed to fetch sale', error, { saleId, errorMessage })
     return null
   }
 }
@@ -1134,7 +1091,7 @@ export async function getSalesByDateRange(branchId: string, startDate: string, e
     if (error) throw error
     return data || []
   } catch (error) {
-    console.error('Error fetching sales by date range:', error)
+    logger.error('Error fetching sales by date range', error)
     return []
   }
 }
@@ -1176,7 +1133,7 @@ export async function getTodaySalesStats(branchId: string) {
 
     return stats
   } catch (error) {
-    console.error('Error fetching today sales stats:', error)
+    logger.error('Error fetching today sales stats', error)
     return { totalSales: 0, transactionCount: 0, averageBasket: 0, paymentMethods: {} }
   }
 }
@@ -1307,7 +1264,7 @@ export async function voidSale(
         userId
       )
       if (reverseResult) {
-        console.log(`[LOYALTY] ⚠️  Reversed ${reverseResult.pointsReversed} points. New balance: ${reverseResult.newBalance}`)
+        logger.info(`[LOYALTY] Reversed ${reverseResult.pointsReversed} points. New balance: ${reverseResult.newBalance}`)
       }
       
       // Restore redeemed points (imported from loyalty-actions)
@@ -1319,7 +1276,7 @@ export async function voidSale(
         userId
       )
       if (restoreResult) {
-        console.log(`[LOYALTY] ⚠️  Restored ${restoreResult.pointsRestored} redeemed points. New balance: ${restoreResult.newBalance}`)
+        logger.info(`[LOYALTY] Restored ${restoreResult.pointsRestored} redeemed points. New balance: ${restoreResult.newBalance}`)
       }
     }
 
@@ -1346,7 +1303,7 @@ export async function voidSale(
       saleId,
     }
   } catch (error) {
-    console.error('Error voiding sale:', error)
+    logger.error('Error voiding sale', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to void sale',
@@ -1502,7 +1459,7 @@ export async function returnSale(
       saleId,
     }
   } catch (error) {
-    console.error('Error processing return:', error)
+    logger.error('Error processing return', error)
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to process return',
@@ -1527,7 +1484,7 @@ export async function getSaleAuditTrail(saleId: string) {
     if (error) throw error
     return data || []
   } catch (error) {
-    console.error('Error fetching audit trail:', error)
+    logger.error('Error fetching audit trail', error)
     return []
   }
 }

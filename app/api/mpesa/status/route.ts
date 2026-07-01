@@ -20,6 +20,8 @@ import {
 import { supabaseAdmin } from '@/lib/supabase-server'
 import { authenticateRequest, verifySaleAccess, unauthorizedResponse, forbiddenResponse } from '@/lib/auth-helpers'
 import { logger } from '@/lib/logger'
+import { mpesaStatusSchema } from '@/lib/api-schemas'
+import { badRequest } from '@/lib/api-errors'
 
 export async function GET(req: NextRequest) {
   try {
@@ -42,26 +44,16 @@ export async function GET(req: NextRequest) {
     const checkoutRequestId = searchParams.get('checkoutRequestId')
     const saleId = searchParams.get('saleId')
 
-    if (!checkoutRequestId && !saleId) {
-      return NextResponse.json(
-        { error: 'Missing checkoutRequestId or saleId parameter' },
-        { status: 400 }
-      )
-    }
-
-    // Validate query parameter types
-    if (checkoutRequestId && typeof checkoutRequestId !== 'string') {
-      return NextResponse.json(
-        { error: 'Invalid checkoutRequestId format' },
-        { status: 400 }
-      )
-    }
-
-    if (saleId && typeof saleId !== 'string') {
-      return NextResponse.json(
-        { error: 'Invalid saleId format' },
-        { status: 400 }
-      )
+    if (checkoutRequestId) {
+      const parsed = mpesaStatusSchema.safeParse({ checkoutRequestId })
+      if (!parsed.success) {
+        return badRequest(parsed.error.issues.map(i => ({
+          field: i.path.join('.'),
+          message: i.message,
+        })))
+      }
+    } else if (!saleId) {
+      return badRequest([{ field: 'checkoutRequestId', message: 'Missing checkoutRequestId or saleId parameter' }])
     }
 
     let transactionResult

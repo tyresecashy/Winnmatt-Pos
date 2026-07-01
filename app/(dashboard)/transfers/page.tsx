@@ -26,7 +26,7 @@ interface Transfer {
   fromBranch: string
   toBranch: string
   createdAt: string
-  notes?: string
+  notes: string | null
   status: string
 }
 

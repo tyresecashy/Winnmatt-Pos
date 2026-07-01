@@ -464,7 +464,7 @@ export default function POSPage() {
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)]">
       {/* POS Header */}
-      <div className="flex items-center justify-between px-4 py-3 bg-card border-b">
+      <div role="region" aria-label="Point of Sale header" className="flex items-center justify-between px-4 py-3 bg-card border-b">
         <div className="flex items-center gap-3">
           <div className="h-9 w-9 rounded-lg bg-primary flex items-center justify-center">
             <Receipt className="h-5 w-5 text-primary-foreground" />
@@ -520,7 +520,7 @@ export default function POSPage() {
       {/* Main Content - Single Column: Search + Cart */}
       <div className="flex flex-1 overflow-hidden gap-0">
         {/* Left: Search Bar + Results */}
-        <div className="flex-1 flex flex-col bg-card border-r overflow-hidden max-w-md">
+        <div role="region" aria-label="Product search and selection" className="flex-1 flex flex-col bg-card border-r overflow-hidden max-w-md">
           {productsLoading && allProducts.length === 0 ? (
             <div className="p-4 space-y-3">
               <Skeleton className="h-10 w-full" />
@@ -550,7 +550,7 @@ export default function POSPage() {
         </div>
 
         {/* Right: Cart & Checkout (Primary Focus) */}
-        <div className="flex-1 flex flex-col bg-card overflow-hidden min-h-0">
+        <div role="region" aria-label="Cart and checkout" className="flex-1 flex flex-col bg-card overflow-hidden min-h-0">
           <CustomerLookup
             selectedCustomer={selectedCustomer}
             onSelectCustomer={setSelectedCustomer}
@@ -707,7 +707,7 @@ export default function POSPage() {
                   paymentMethod: 'cash',
                   customerId: selectedCustomer?.id,
                   cartDiscount,
-                  receiptSettings,
+                  receiptSettings: receiptSettings ?? {},
                   redemptionPoints: options?.redemption?.pointsToRedeem || undefined,
                   redemptionDiscount: options?.redemption?.discountApplied || undefined,
                 })
@@ -791,7 +791,9 @@ export default function POSPage() {
 
         {/* Recent Transactions Sidebar */}
         {showRecent && (
-          <RecentTransactions onClose={() => setShowRecent(false)} />
+          <div role="region" aria-label="Recent transactions">
+            <RecentTransactions onClose={() => setShowRecent(false)} />
+          </div>
         )}
       </div>
     </div>

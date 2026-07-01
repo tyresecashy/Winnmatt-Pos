@@ -3,9 +3,34 @@
  * Cleans raw CSV data: normalize units, names, extract brands
  */
 
+import { logger } from '@/lib/logger'
 import { createClient } from '@/lib/supabase-server'
 
 const uuidv4 = () => crypto.randomUUID()
+
+interface ProductFields {
+  normalized_name?: string
+  barcode?: string
+  brand?: string
+  image_url?: string
+  category?: string
+  listed_price?: number
+}
+
+interface RawProduct {
+  scraped_name?: string
+  brand?: string
+  source_name?: string
+  source_product_id?: string
+  source_url?: string
+  pack_size?: string
+  unit?: string
+  category?: string
+  listed_price?: number
+  currency?: string
+  barcode?: string
+  image_url?: string
+}
 
 export interface NormalizedProduct {
   product_id: string
@@ -24,8 +49,8 @@ export interface NormalizedProduct {
   currency: string
   barcode?: string
   image_url?: string
-  confidence_score: number // 0-100: how confident we are in the data
-  raw_data: any
+  confidence_score: number
+  raw_data: Record<string, unknown>
   created_at: string
 }
 
@@ -155,7 +180,7 @@ export function extractBrand(name: string, providedBrand?: string): string | und
  * Calculate confidence score for a normalized product
  * Factors: required fields present, brand detected, price valid, image url present
  */
-export function calculateConfidenceScore(product: any): number {
+export function calculateConfidenceScore(product: ProductFields): number {
   let score = 50 // baseline
 
   // Required fields (+30)
@@ -180,7 +205,7 @@ export function calculateConfidenceScore(product: any): number {
 /**
  * Normalize a raw imported product
  */
-export function normalizeProduct(rawProduct: any, batchId: string): NormalizedProduct {
+export function normalizeProduct(rawProduct: RawProduct, batchId: string): NormalizedProduct {
   const normalizedName = normalizeName(rawProduct.scraped_name || '')
   const extractedBrand = extractBrand(
     rawProduct.scraped_name || '',
@@ -191,10 +216,10 @@ export function normalizeProduct(rawProduct: any, batchId: string): NormalizedPr
   const normalized: NormalizedProduct = {
     product_id: uuidv4(),
     batch_id: batchId,
-    source_name: rawProduct.source_name,
-    source_product_id: rawProduct.source_product_id,
+    source_name: rawProduct.source_name || 'unknown',
+    source_product_id: rawProduct.source_product_id || '',
     source_url: rawProduct.source_url,
-    raw_name: rawProduct.scraped_name,
+    raw_name: rawProduct.scraped_name || '',
     normalized_name: normalizedName,
     brand: extractedBrand || rawProduct.brand,
     product_type: undefined, // Could be enhanced with ML later
@@ -206,7 +231,7 @@ export function normalizeProduct(rawProduct: any, batchId: string): NormalizedPr
     barcode: rawProduct.barcode,
     image_url: rawProduct.image_url,
     confidence_score: 0, // Will calculate after
-    raw_data: rawProduct,
+    raw_data: rawProduct as Record<string, unknown>,
     created_at: new Date().toISOString(),
   }
 
@@ -232,7 +257,7 @@ export async function normalizeImportBatch(batchId: string): Promise<number> {
   }
 
   if (!rawImports || rawImports.length === 0) {
-    console.log('No raw imports found for batch:', batchId)
+    logger.info('No raw imports found for batch', { batchId })
     return 0
   }
 
@@ -258,7 +283,7 @@ export async function normalizeImportBatch(batchId: string): Promise<number> {
     .eq('id', batchId)
 
   const count = inserted?.length || 0
-  console.log(`Normalized ${count} products for batch ${batchId}`)
+  logger.info(`Normalized ${count} products for batch ${batchId}`)
 
   return count
 }
