@@ -1,0 +1,3 @@
+reviews:
+  max_files: 500
+  review_status: true
