@@ -16,7 +16,11 @@ export async function serverReturnSale(
   branchId: string,
   returnReason: string,
   userId: string,
-  returnDetails?: any
+  returnDetails?: {
+    itemId?: string
+    quantity?: number
+    isFullReturn?: boolean
+  }
 ) {
   return returnSale(saleId, branchId, returnReason, userId, returnDetails)
 }

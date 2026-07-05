@@ -291,7 +291,7 @@ export interface CSVProductRow {
   retail_price?: string
   image_url?: string
   url?: string
-  [key: string]: any
+  [key: string]: unknown
 }
 
 export interface ImportProgressUpdate {
@@ -334,7 +334,7 @@ export interface PriceAnomalyCheck {
   anomaly_type?: AnomalyType
   severity?: AnomalySeverity
   reason?: string
-  flagged_value?: any
+  flagged_value?: string | number | null
   suggested_action?: string
 }
 
@@ -380,7 +380,7 @@ export interface AuditEntry {
   entity_type: string
   entity_id: string
   user_id: string
-  changes: Record<string, { old: any; new: any }>
+  changes: Record<string, { old: unknown; new: unknown }>
   timestamp: string
 }
 

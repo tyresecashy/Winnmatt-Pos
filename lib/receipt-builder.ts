@@ -25,7 +25,7 @@ interface RawItemProduct {
   name: string
 }
 
-interface RawItem {
+export interface RawItem {
   id: string
   product_id: string
   quantity: number
@@ -35,7 +35,7 @@ interface RawItem {
   product: RawItemProduct | RawItemProduct[]
 }
 
-interface RawSaleData {
+export interface RawSaleData {
   id: string
   receipt_number: string
   created_at: string

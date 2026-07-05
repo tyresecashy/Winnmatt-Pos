@@ -30,7 +30,13 @@ export async function createPurchaseOrder(input: CreatePurchaseOrderInput) {
 
     // Calculate totals
     let subtotal = 0
-    const itemsToInsert: any[] = []
+    const itemsToInsert: Array<{
+      product_id: string
+      quantity: number
+      unit_price: number
+      line_total: number
+      received_quantity: number
+    }> = []
 
     for (const item of items) {
       const lineTotal = item.quantity * item.unit_price
@@ -370,6 +376,7 @@ export async function getPurchaseStats(branchId: string) {
       total_spent: 0,
       draft: 0,
       pending: 0,
+      approved: 0,
       received: 0,
       cancelled: 0,
     }
@@ -378,6 +385,7 @@ export async function getPurchaseStats(branchId: string) {
       stats.total_spent += po.total_amount || 0
       if (po.status === 'draft') stats.draft++
       else if (po.status === 'pending') stats.pending++
+      else if (po.status === 'approved') stats.approved++
       else if (po.status === 'received') stats.received++
       else if (po.status === 'cancelled') stats.cancelled++
     })
@@ -385,6 +393,6 @@ export async function getPurchaseStats(branchId: string) {
     return stats
   } catch (error) {
     logger.error('Error fetching purchase stats:', error)
-    return { total_orders: 0, total_spent: 0, draft: 0, pending: 0, received: 0, cancelled: 0 }
+    return { total_orders: 0, total_spent: 0, draft: 0, pending: 0, approved: 0, received: 0, cancelled: 0 }
   }
 }

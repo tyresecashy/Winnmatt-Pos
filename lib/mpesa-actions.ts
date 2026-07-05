@@ -17,7 +17,7 @@ export interface MpesaTransaction {
   amount: number
   status: 'pending' | 'confirmed' | 'failed' | 'cancelled' | 'timeout'
   mpesa_receipt_number: string | null
-  callback_payload: any
+  callback_payload: unknown
   initiated_at: string
   callback_received_at: string | null
   sale_finalized_at: string | null
@@ -75,7 +75,7 @@ export async function createMpesaTransaction(
  */
 export async function updateMpesaTransactionCallback(
   checkoutRequestId: string,
-  callbackPayload: any,
+  callbackPayload: unknown,
   resultCode: number,
   resultDesc: string,
   mpesaReceiptNumber?: string
@@ -317,7 +317,7 @@ export async function getMpesaTransactionsByDateRange(
     let transactions = data || []
     if (branch_id && transactions.length > 0) {
       transactions = transactions.filter(
-        (t: any) => t.sale?.branch_id === branch_id
+        (t: { sale?: { branch_id?: string } | null }) => t.sale?.branch_id === branch_id
       )
     }
 
@@ -367,7 +367,7 @@ export async function getMpesaTransactionSummary(
     // If branch filter was requested, filter in-memory via the expanded sale relation
     if (branchId && transactions.length > 0) {
       transactions = transactions.filter(
-        (t: any) => t.sale?.branch_id === branchId
+        (t) => (t.sale as unknown as { branch_id: string } | null)?.branch_id === branchId
       )
     }
 

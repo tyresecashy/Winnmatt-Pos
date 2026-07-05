@@ -85,9 +85,7 @@ export function RecentTransactions({ onClose }: RecentTransactionsProps) {
           }
 
           const transactions = await getRecentTransactions(branchId, 20)
-          const cashSales = transactions
-            .filter((sale) => sale.paymentMethod === "Cash")
-            .slice(0, 8)
+          const cashSales = transactions.slice(0, 8)
 
           if (!cancelled) {
             setRecentSales(cashSales)
@@ -146,7 +144,7 @@ export function RecentTransactions({ onClose }: RecentTransactionsProps) {
       <div className="flex items-center justify-between px-4 py-3 border-b">
         <div className="flex items-center gap-2">
           <Receipt className="h-4 w-4 text-muted-foreground" />
-          <span className="font-medium">Recent Cash Sales</span>
+          <span className="font-medium">Recent Sales</span>
         </div>
         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onClose}>
           <X className="h-4 w-4" />
@@ -157,11 +155,11 @@ export function RecentTransactions({ onClose }: RecentTransactionsProps) {
         <div className="p-3 space-y-2">
           {loading ? (
             <div className="p-4 text-sm text-center text-muted-foreground">
-              Loading recent cash sales...
+              Loading recent sales...
             </div>
           ) : recentSales.length === 0 ? (
             <div className="p-4 text-sm text-center text-muted-foreground">
-              No recent cash sales to show.
+              No recent sales to show.
             </div>
           ) : recentSales.map((sale) => (
             <div
@@ -191,7 +189,7 @@ export function RecentTransactions({ onClose }: RecentTransactionsProps) {
 
       <div className="p-3 border-t bg-muted/30">
         <p className="text-sm text-center text-muted-foreground">
-          Showing up to 8 recent cash sales
+          Showing up to 8 recent sales
         </p>
       </div>
     </div>

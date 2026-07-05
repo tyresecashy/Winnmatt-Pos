@@ -173,7 +173,7 @@ export async function getBranchPerformanceToday(startDate?: Date, endDate?: Date
       .select('id, name')
 
     const { data: branches, error: branchesError } =
-      authResult.profile.role === 'owner'
+      authResult.profile.role === 'super_admin'
         ? await branchQuery
         : await branchQuery.eq('id', authResult.profile.branch_id || '')
 
@@ -463,7 +463,7 @@ export async function getRecentTransactions(branchId: string, limit: number = 5)
         : { data: [] as Array<{ sale_id: string; quantity: number }> }
 
     const itemMap: Record<string, number> = {}
-    saleItems?.forEach((item: any) => {
+    saleItems?.forEach((item: { sale_id: string; quantity: number }) => {
       itemMap[item.sale_id] = (itemMap[item.sale_id] || 0) + (item.quantity || 0)
     })
 

@@ -1,4 +1,20 @@
 import { logger } from '@/lib/logger';
+
+/**
+ * Minimal shape of a product record for deduplication comparisons.
+ * These fields are expected to exist on raw imports, staging products,
+ * and live products.
+ */
+interface ProductMatchData {
+  product_id?: string
+  source_name?: string
+  source_product_id?: string
+  barcode?: string
+  normalized_name?: string
+  brand?: string
+  unit?: string
+}
+
 /**
  * Product Deduplication Service
  * Identifies duplicate products using deterministic and fuzzy matching
@@ -47,9 +63,9 @@ export function levenshteinSimilarity(str1: string, str2: string): number {
  * Same normalized name + brand + unit
  */
 export function isDeterministicMatch(
-  product1: any,
-  product2: any,
-  existingProduct?: any
+  product1: ProductMatchData,
+  product2: ProductMatchData,
+  existingProduct?: ProductMatchData
 ): boolean {
   // Same source & source ID = definite duplicate from same source
   if (
@@ -88,8 +104,8 @@ export function isDeterministicMatch(
  * Similar names + same brand + same unit = possible duplicate
  */
 export function isFuzzyMatch(
-  product1: any,
-  product2: any,
+  product1: ProductMatchData,
+  product2: ProductMatchData,
   threshold = 85
 ): {
   isMatch: boolean
@@ -103,8 +119,8 @@ export function isFuzzyMatch(
   }
 
   const similarity = levenshteinSimilarity(
-    product1.normalized_name,
-    product2.normalized_name
+    product1.normalized_name ?? '',
+    product2.normalized_name ?? ''
   )
 
   // Similar names
@@ -135,7 +151,7 @@ export function isFuzzyMatch(
  * Find potential duplicates for a staging product
  */
 export async function findPotentialDuplicates(
-  stagingProduct: any,
+  stagingProduct: ProductMatchData,
   batchId: string
 ): Promise<
   Array<{

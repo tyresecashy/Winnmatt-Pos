@@ -131,7 +131,7 @@ export async function updateSupplier(
   }
 ) {
   try {
-    const cleanUpdates: any = {
+    const cleanUpdates: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
     }
 

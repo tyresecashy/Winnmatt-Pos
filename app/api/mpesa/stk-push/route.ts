@@ -244,6 +244,45 @@ export async function POST(req: NextRequest) {
     // ========================================================================
     // INITIATE M-PESA PAYMENT
     // ========================================================================
+
+    // Sandbox simulation mode: simulate STK push without calling Daraja API
+    if (process.env.MPESA_SANDBOX_SIMULATE === 'true') {
+      logger.info('[M-Pesa STK] Sandbox simulation mode - simulating STK push')
+
+      const simulatedCheckoutId = `ws_CO_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`
+      const simulatedMerchantId = `merchant_${Date.now()}`
+
+      // Create M-Pesa transaction record
+      const transactionResult = await createMpesaTransaction(
+        saleId,
+        simulatedMerchantId,
+        simulatedCheckoutId,
+        phoneNumber,
+        amount
+      )
+
+      if (!transactionResult.success) {
+        logger.error('[M-Pesa STK] Failed to create simulation transaction record')
+        return NextResponse.json(
+          { error: 'Failed to record M-Pesa transaction' },
+          { status: 500 }
+        )
+      }
+
+      logger.info('[M-Pesa STK] Sandbox simulation - STK Push sent successfully')
+
+      return NextResponse.json(
+        {
+          success: true,
+          message: `STK Push sent to ${phoneNumber}. Enter PIN 1234 on phone to complete.`,
+          checkoutRequestId: simulatedCheckoutId,
+          merchantRequestId: simulatedMerchantId,
+          sandbox: true,
+        },
+        { status: 200 }
+      )
+    }
+
     const mpesaService = new MpesaService({
       consumerKey,
       consumerSecret,

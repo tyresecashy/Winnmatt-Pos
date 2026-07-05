@@ -106,8 +106,8 @@ export function NewTransferDialog({ open, onOpenChange, onSuccess }: NewTransfer
   const productsCacheRef = useRef<Record<string, Product[]>>({})
   const deferredProductSearch = useDeferredValue(productSearch)
 
-  const canManageTransfers = ['owner', 'admin', 'manager'].includes(profile?.role || '')
-  const sourceBranchLocked = profile?.role !== 'owner'
+  const canManageTransfers = ['super_admin', 'admin', 'manager'].includes(profile?.role || '')
+  const sourceBranchLocked = profile?.role !== 'super_admin'
   const lockedSourceBranchId = sourceBranchLocked ? profile?.branch_id || '' : ''
 
   const resetDialogState = () => {
@@ -338,15 +338,16 @@ export function NewTransferDialog({ open, onOpenChange, onSuccess }: NewTransfer
 
     setSubmitting(true)
     try {
-      const result = await createStockTransfer(
-        sourceBranch,
-        destinationBranch,
-        transferItems.map((item) => ({
-          productId: item.productId,
-          quantity: item.quantity,
+      const result = await createStockTransfer({
+        from_branch_id: sourceBranch,
+        to_branch_id: destinationBranch,
+        items: transferItems.map((item) => ({
+          product_id: item.productId,
+          quantity_requested: item.quantity,
+          product_name: item.productName,
         })),
-        notes || undefined
-      )
+        notes: notes || undefined,
+      })
 
       if (!result.success) {
         setError(result.error || 'Failed to create transfer')

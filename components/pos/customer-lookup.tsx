@@ -27,6 +27,8 @@ interface CustomerLookupProps {
   selectedCustomer: SelectedCustomer | null
   onSelectCustomer: (customer: SelectedCustomer | null) => void
   loyaltyRedeemValue?: number
+  /** Ref forwarded to the trigger button so keyboard shortcuts can open the popover */
+  searchTriggerRef?: React.RefObject<HTMLButtonElement | null>
 }
 
 const customerTypeColors: Record<string, string> = {
@@ -35,12 +37,20 @@ const customerTypeColors: Record<string, string> = {
   business: "bg-purple-100 text-purple-700",
 }
 
+const tierColors: Record<string, string> = {
+  bronze: "bg-amber-100 text-amber-800",
+  silver: "bg-slate-100 text-slate-700",
+  gold: "bg-yellow-100 text-yellow-800",
+  platinum: "bg-teal-100 text-teal-800",
+  vip: "bg-purple-100 text-purple-800",
+}
+
 function getCustomerIdSuffix(id?: string) {
   if (!id) return "UNKNOWN"
   return id.slice(-6).toUpperCase()
 }
 
-export function CustomerLookup({ selectedCustomer, onSelectCustomer, loyaltyRedeemValue }: CustomerLookupProps) {
+export function CustomerLookup({ selectedCustomer, onSelectCustomer, loyaltyRedeemValue, searchTriggerRef }: CustomerLookupProps) {
   const [open, setOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [searchResults, setSearchResults] = useState<any[]>([])
@@ -83,6 +93,14 @@ export function CustomerLookup({ selectedCustomer, onSelectCustomer, loyaltyRede
               >
                 {selectedCustomer.type}
               </Badge>
+              {selectedCustomer.tier && (
+                <Badge
+                  variant="outline"
+                  className={`text-[10px] ${tierColors[selectedCustomer.tier] || ""}`}
+                >
+                  {selectedCustomer.tier.charAt(0).toUpperCase() + selectedCustomer.tier.slice(1)}
+                </Badge>
+              )}
               <Badge variant="outline" className="text-[10px] font-mono">
                 ID {getCustomerIdSuffix(selectedCustomer.id)}
               </Badge>
@@ -141,6 +159,7 @@ export function CustomerLookup({ selectedCustomer, onSelectCustomer, loyaltyRede
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
+            ref={searchTriggerRef}
             variant="outline"
             role="combobox"
             aria-expanded={open}
@@ -182,6 +201,7 @@ export function CustomerLookup({ selectedCustomer, onSelectCustomer, loyaltyRede
                           email: customer.email || "",
                           type: customer.type,
                           loyalty_points: customer.loyalty_points || 0,
+                          tier: customer.tier || "bronze",
                         })
                         setOpen(false)
                         setSearchQuery("")

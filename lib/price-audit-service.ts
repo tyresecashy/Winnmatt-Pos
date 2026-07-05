@@ -6,7 +6,8 @@ import type { Database } from '@/lib/db.types'
 
 const createClient = () => supabase
 
-// TODO: These tables don't exist in current schema - file is legacy/unused
+// NOTE: This file is legacy/unused — tables don't exist in current schema.
+// Confirmed zero imports across codebase. Keep for reference until Phase clean-up decides to remove.
 // type PriceAnomaly = Database['public']['Tables']['price_anomalies']['Row']
 // type PriceAuditLog = Database['public']['Tables']['price_audit_log']['Row']
 // type PriceProtection = Database['public']['Tables']['price_protections']['Row']
@@ -414,10 +415,11 @@ export async function getAnomalySummary() {
     rejected: 0,
   }
 
-  data?.forEach((row: any) => {
+  data?.forEach((row: { severity: string; status: string }) => {
+    const s = summary as Record<string, number>
     summary.total++
-    ;(summary as any)[row.severity]++
-    ;(summary as any)[row.status]++
+    s[row.severity] = (s[row.severity] || 0) + 1
+    s[row.status] = (s[row.status] || 0) + 1
   })
 
   return summary

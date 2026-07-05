@@ -277,7 +277,16 @@ class MpesaService {
     // Result code 0 = success, anything else = failure
     const isSuccessful = stkCallback.ResultCode === 0
 
-    let result: any = {
+    const result: {
+      merchantRequestId: string
+      checkoutRequestId: string
+      resultCode: number
+      resultDesc: string
+      isSuccessful: boolean
+      amount?: number
+      mpesaReceiptNumber?: string
+      phoneNumber?: string
+    } = {
       merchantRequestId: stkCallback.MerchantRequestID,
       checkoutRequestId: stkCallback.CheckoutRequestID,
       resultCode: stkCallback.ResultCode,
@@ -298,10 +307,10 @@ class MpesaService {
         result.amount = Number(amountItem.Value)
       }
       if (receiptItem) {
-        result.mpesaReceiptNumber = receiptItem.Value
+        result.mpesaReceiptNumber = String(receiptItem.Value)
       }
       if (phoneItem) {
-        result.phoneNumber = phoneItem.Value
+        result.phoneNumber = String(phoneItem.Value)
       }
     }
 

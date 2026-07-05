@@ -13,7 +13,7 @@ export async function getUserProfile(userId: string) {
         full_name,
         role,
         branch_id,
-        branch:branches(id, name, code)
+        branch:branches!branch_id(id, name, code)
       `)
       .eq('id', userId)
       .single()

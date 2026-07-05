@@ -151,7 +151,7 @@ export function StockAdjustmentDialog({
           {/* Adjustment Type */}
           <div className="space-y-2">
             <label className="text-sm font-medium">Adjustment Type</label>
-            <Select value={adjustmentType} onValueChange={(value: any) => setAdjustmentType(value)}>
+            <Select value={adjustmentType} onValueChange={(value: string) => setAdjustmentType(value as 'set' | 'increase' | 'decrease')}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>

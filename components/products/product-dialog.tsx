@@ -38,17 +38,17 @@ const productFormSchema = z.object({
   name: z.string().min(1, 'Product name is required').max(200, 'Name too long'),
   description: z.string().optional(),
   categoryId: z.string().min(1, 'Category is required'),
-  purchasePrice: z.number().min(0, 'Purchase price must be >= 0'),
-  sellingPrice: z.number().min(0, 'Selling price must be >= 0'),
+  purchasePrice: z.number().min(0, 'Purchase price must be >= 0').int('Price must be a whole number'),
+  sellingPrice: z.number().min(0, 'Selling price must be >= 0').int('Price must be a whole number'),
   reorderLevel: z.number().min(0, 'Reorder level must be >= 0').int(),
   initialStock: z.number().min(0, 'Initial stock must be >= 0').int(),
 })
 
-type ProductFormValues = z.infer<typeof productFormSchema>
+export type ProductFormValues = z.infer<typeof productFormSchema>
 
 interface ProductFormProps {
   categories: { id: string; name: string }[]
-  initialData?: any
+  initialData?: ProductFormValues
   onSubmit: (values: ProductFormValues) => Promise<{ success: boolean; error?: string }>
   isLoading?: boolean
 }
@@ -202,7 +202,7 @@ export function ProductForm({
                       min="0"
                       step="1"
                       placeholder="0"
-                      onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                      onChange={(e) => field.onChange(parseInt(e.target.value, 10) || 0)}
                       value={field.value}
                     />
                   </FormControl>
@@ -223,7 +223,7 @@ export function ProductForm({
                       min="0"
                       step="1"
                       placeholder="0"
-                      onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                      onChange={(e) => field.onChange(parseInt(e.target.value, 10) || 0)}
                       value={field.value}
                     />
                   </FormControl>
@@ -244,7 +244,7 @@ export function ProductForm({
                       min="0"
                       step="1"
                       placeholder="10"
-                      onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                      onChange={(e) => field.onChange(parseInt(e.target.value, 10) || 0)}
                       value={field.value}
                     />
                   </FormControl>
@@ -265,7 +265,7 @@ export function ProductForm({
                       min="0"
                       step="1"
                       placeholder="0"
-                      onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                      onChange={(e) => field.onChange(parseInt(e.target.value, 10) || 0)}
                       value={field.value}
                     />
                   </FormControl>
@@ -309,7 +309,7 @@ export function ProductForm({
 interface ProductDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  initialData?: any
+  initialData?: ProductFormValues
   categories: { id: string; name: string }[]
   onSubmit: (values: ProductFormValues) => Promise<{ success: boolean; error?: string }>
   isLoading?: boolean

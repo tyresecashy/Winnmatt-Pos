@@ -28,7 +28,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Plus, Search, MoreHorizontal, Pencil, Trash2, Package, AlertTriangle, Loader2, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Plus, Search, SearchX, MoreHorizontal, Pencil, Trash2, Package, AlertTriangle, Loader2, ChevronLeft, ChevronRight } from 'lucide-react'
 import { ProductDialog } from '@/components/products/product-dialog'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
@@ -47,6 +47,7 @@ import {
   updateProduct,
   deleteProduct,
 } from '@/lib/products-actions'
+import type { ProductFormValues } from '@/components/products/product-dialog'
 import { useAuth } from '@/contexts/auth-context'
 
 function formatKSh(amount: number): string {
@@ -81,9 +82,9 @@ export default function ProductsPage() {
 
   // Dialog states
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [editingProduct, setEditingProduct] = useState<any | null>(null)
+  const [editingProduct, setEditingProduct] = useState<Record<string, unknown> | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const [productToDelete, setProductToDelete] = useState<any | null>(null)
+  const [productToDelete, setProductToDelete] = useState<Record<string, unknown> | null>(null)
 
   // Load initial data
   useEffect(() => {
@@ -158,16 +159,17 @@ export default function ProductsPage() {
     }
   }
 
-  async function handleUpdateProduct(values: any) {
+  async function handleUpdateProduct(values: ProductFormValues) {
     if (!editingProduct) return { success: false }
+    const productId = editingProduct.id as string
 
     setIsSaving(true)
     try {
       const result = await updateProduct(
-        editingProduct.id,
+        productId,
         values.sku,
         values.name,
-        values.description,
+        values.description ?? '',
         values.categoryId,
         values.purchasePrice,
         values.sellingPrice,
@@ -195,12 +197,13 @@ export default function ProductsPage() {
 
   async function handleDeleteProduct() {
     if (!productToDelete) return
+    const productId = productToDelete.id as string
 
     setIsSaving(true)
     try {
-      const result = await deleteProduct(productToDelete.id)
+      const result = await deleteProduct(productId)
       if (result.success) {
-        setProducts(products.filter((p) => p.id !== productToDelete.id))
+        setProducts(products.filter((p) => p.id !== productId))
         setDeleteDialogOpen(false)
         setProductToDelete(null)
         setSuccessMessage('Product deleted successfully')
@@ -217,7 +220,7 @@ export default function ProductsPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6 fade-in">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Products</h1>
@@ -311,8 +314,16 @@ export default function ProductsPage() {
               ))}
             </div>
           ) : filteredProducts.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-muted-foreground">No products found</p>
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
+                <SearchX className="h-6 w-6 text-muted-foreground" />
+              </div>
+              <p className="text-lg font-medium">No products found</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                {products.length === 0
+                  ? 'Add your first product to get started.'
+                  : 'Try adjusting your search or filters.'}
+              </p>
             </div>
           ) : (
             <>
@@ -499,16 +510,17 @@ export default function ProductsPage() {
         description={editingProduct ? 'Update product details' : 'Create a new product in your catalog'}
         initialData={
           editingProduct
-            ? {
-                sku: editingProduct.sku,
-                name: editingProduct.name,
-                description: editingProduct.description,
-                categoryId: editingProduct.category_id,
-                purchasePrice: editingProduct.purchase_price,
-                sellingPrice: editingProduct.selling_price,
-                reorderLevel: editingProduct.reorder_level,
-              }
-            : null
+            ? ({
+                sku: editingProduct.sku as string,
+                name: editingProduct.name as string,
+                description: (editingProduct.description as string) ?? '',
+                categoryId: editingProduct.category_id as string,
+                purchasePrice: editingProduct.purchase_price as number,
+                sellingPrice: editingProduct.selling_price as number,
+                reorderLevel: editingProduct.reorder_level as number,
+                initialStock: 0,
+              } as ProductFormValues)
+            : undefined
         }
         categories={categories}
         onSubmit={editingProduct ? handleUpdateProduct : handleCreateProduct}
@@ -521,7 +533,7 @@ export default function ProductsPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Product?</AlertDialogTitle>
             <AlertDialogDescription>
-               Are you sure you want to delete &quot;{productToDelete?.name}&quot;? This action cannot be undone.
+               Are you sure you want to delete &quot;{(productToDelete?.name as string) ?? ''}&quot;? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="grid grid-cols-2 gap-4">

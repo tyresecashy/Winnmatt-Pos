@@ -1,6 +1,7 @@
-import { logger } from '@/lib/logger';
 'use server'
 
+import { logger } from '@/lib/logger'
+import { emitEvent } from '@/lib/automation'
 import { supabaseAdmin } from '@/lib/supabase-server'
 
 /**
@@ -13,7 +14,7 @@ import { supabaseAdmin } from '@/lib/supabase-server'
 export async function openShift(
   branchId: string,
   cashierId: string,
-  openingFloat: number // in cents, e.g., 50000 = 500 KShs
+  openingFloat: number // in KES
 ) {
   try {
     // Validation 1: Check if cashier already has open shift today
@@ -112,13 +113,27 @@ export async function openShift(
         shift_id: newShift.id,
         action: 'opened',
         performed_by: cashierId,
-        notes: `Opening float: KShs ${(openingFloat / 100).toFixed(2)}`,
+        notes: `Opening float: KShs ${openingFloat.toFixed(2)}`,
         details: {
           opening_float: openingFloat,
         },
       })
 
     if (auditError) throw auditError
+
+    // Emit automation event (fire-and-forget)
+    emitEvent({
+      eventType: 'shift.opened',
+      source: 'shift',
+      entityType: 'shift',
+      entityId: newShift.id,
+      payload: {
+        shiftId: newShift.id,
+        branchId,
+        cashierId,
+        openingFloat: Math.round(openingFloat),
+      },
+    }).catch(err => logger.warn('[Automation] Failed to emit shift.opened', { error: err.message }))
 
     return {
       success: true,
@@ -143,8 +158,8 @@ export async function getActiveShift(branchId: string, cashierId: string) {
       .from('shifts')
       .select(`
         *,
-        cashier:users(id, full_name),
-        branch:branches(id, name)
+        cashier:users!cashier_id(id, full_name),
+        branch:branches!branch_id(id, name)
       `)
       .eq('branch_id', branchId)
       .eq('cashier_id', cashierId)
@@ -171,7 +186,7 @@ export async function getActiveShift(branchId: string, cashierId: string) {
  */
 export async function closeShift(
   shiftId: string,
-  countedCash: number, // Actual cash counted in drawer (in cents)
+  countedCash: number, // Actual cash counted in drawer (in KES)
   closingNotes: string,
   cashierId: string
 ) {
@@ -190,7 +205,10 @@ export async function closeShift(
     }
 
     // Validation 2: Get all sales for this shift (non-voided)
-    // For existing sales without shift_id, use timestamp-based matching
+    // NOTE: For existing sales without shift_id FK (requires migration), we use timestamp-based matching.
+    // There is a small race window: a sale could be created between query time and shift close.
+    // The .lte('created_at', new Date().toISOString()) caps the time window to minimize this.
+    // A future migration adding shift_id FK would eliminate this race condition entirely.
     const { data: shiftSales, error: salesError } = await supabaseAdmin
       .from('sales')
       .select('id, payment_method, total_amount, sale_status')
@@ -282,7 +300,7 @@ export async function closeShift(
         shift_id: shiftId,
         action: 'closed',
         performed_by: cashierId,
-        notes: `Shift closed. Over/Short: KShs ${(difference / 100).toFixed(2)}${difference > 0 ? ' OVER' : difference < 0 ? ' SHORT' : ''}`,
+        notes: `Shift closed. Over/Short: KShs ${difference.toFixed(2)}${difference > 0 ? ' OVER' : difference < 0 ? ' SHORT' : ''}`,
         details: {
           opening_float: shift.opening_float,
           cash_sales: cashSalesTotal,
@@ -294,6 +312,25 @@ export async function closeShift(
       })
 
     if (auditError) throw auditError
+
+    // Emit automation event (fire-and-forget)
+    emitEvent({
+      eventType: 'shift.closed',
+      source: 'shift',
+      entityType: 'shift',
+      entityId: shiftId,
+      payload: {
+        shiftId,
+        branchId: shift.branch_id,
+        cashierId,
+        openingFloat: shift.opening_float,
+        cashSalesTotal,
+        expectedCash,
+        countedCash,
+        difference,
+        transactionCount: sales.length,
+      },
+    }).catch(err => logger.warn('[Automation] Failed to emit shift.closed', { error: err.message }))
 
     return {
       success: true,
@@ -310,7 +347,7 @@ export async function closeShift(
         transactionCount: sales.length,
         closedAt: new Date().toISOString(),
       },
-      message: `Shift closed successfully. ${difference === 0 ? 'Perfect reconciliation!' : difference > 0 ? `Over by KShs ${(difference / 100).toFixed(2)}` : `Short by KShs ${(Math.abs(difference) / 100).toFixed(2)}`}`,
+      message: `Shift closed successfully. ${difference === 0 ? 'Perfect reconciliation!' : difference > 0 ? `Over by KShs ${difference.toFixed(2)}` : `Short by KShs ${Math.abs(difference).toFixed(2)}`}`,
     }
   } catch (error) {
     logger.error('Error closing shift:', error)

@@ -15,14 +15,14 @@ import {
 import type { UserProfile } from '@/contexts/auth-context'
 
 const POS_ALLOWED_ROLES: ReadonlySet<UserProfile['role']> = new Set([
-  'owner',
+  'super_admin',
   'admin',
   'manager',
   'cashier',
 ])
 
 const INVENTORY_CONTROL_ALLOWED_ROLES: ReadonlySet<UserProfile['role']> = new Set([
-  'owner',
+  'super_admin',
   'admin',
   'manager',
 ])
@@ -126,7 +126,7 @@ export async function loadUserProfileResult(userId: string): Promise<{
         status,
         created_at,
         updated_at,
-        branch:branches(id, name, code)
+        branch:branches!branch_id(id, name, code)
       `)
       .eq('id', userId)
       .single()
@@ -448,6 +448,41 @@ export async function authenticateServerAction(): Promise<{
 }
 
 /**
+ * Server-side supervisor role verification.
+ * Re-fetches the current user's role from DB to prevent stale-client-role attacks.
+ */
+export async function verifySupervisorRole(): Promise<{
+  isSupervisor: boolean
+  error?: string
+}> {
+  try {
+    const authResult = await getAuthenticatedServerActionUser()
+    if (!authResult.user) {
+      return { isSupervisor: false, error: 'Unauthorized' }
+    }
+
+    const { data } = await supabaseAdmin
+      .from('users')
+      .select('role')
+      .eq('id', authResult.user.id)
+      .single()
+
+    if (!data) {
+      return { isSupervisor: false, error: 'User not found' }
+    }
+
+    return {
+      isSupervisor: data.role === 'super_admin' || data.role === 'admin',
+    }
+  } catch (error) {
+    return {
+      isSupervisor: false,
+      error: error instanceof Error ? error.message : 'Verification failed',
+    }
+  }
+}
+
+/**
  * Verify a profile is allowed to use the live POS surface.
  */
 export function authorizePOSProfile(profile: UserProfile): {
@@ -461,7 +496,7 @@ export function authorizePOSProfile(profile: UserProfile): {
     }
   }
 
-  if (profile.role !== 'owner' && !profile.branch_id) {
+  if (profile.role !== 'super_admin' && !profile.branch_id) {
     return {
       authorized: false,
       error: 'Access denied: User must be assigned to a branch',
@@ -486,7 +521,7 @@ export function authorizeInventoryControlProfile(profile: UserProfile): {
   if (!INVENTORY_CONTROL_ALLOWED_ROLES.has(profile.role)) {
     return {
       authorized: false,
-      error: 'Access denied: Only owners, admins, and managers can manage inventory',
+      error: 'Access denied: Only super admins, admins, and managers can manage inventory',
     }
   }
 
@@ -526,13 +561,13 @@ export function resolveAuthorizedBranchId(
     return posAccess
   }
 
-  if (profile.role === 'owner') {
+  if (profile.role === 'super_admin') {
     const ownerBranchId = requestedBranchId || profile.branch_id || undefined
 
     if (!ownerBranchId) {
       return {
         authorized: false,
-        error: 'Access denied: Owner must choose a branch for POS actions',
+        error: 'Access denied: Super Admin must choose a branch for POS actions',
       }
     }
 
@@ -571,7 +606,7 @@ export async function verifySaleAccess(
   saleId: string
 ): Promise<{ authorized: boolean; error?: string }> {
   try {
-    if (profile.role === 'owner') {
+    if (profile.role === 'super_admin') {
       return { authorized: true }
     }
 

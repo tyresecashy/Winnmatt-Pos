@@ -33,10 +33,10 @@ export async function getLoyaltySettings(): Promise<LoyaltySettings | null> {
 }
 
 /**
- * Update loyalty settings (Owner only)
+ * Update loyalty settings (Owner or Admin only)
  * 
  * @param userId ID of the user making the change
- * @param userRole Role of the user (must be 'owner')
+ * @param userRole Role of the user (must be 'owner' or 'admin')
  * @param updates Partial settings object to update
  * @returns Updated LoyaltySettings or null on error
  */
@@ -46,9 +46,9 @@ export async function updateLoyaltySettings(
   updates: Partial<LoyaltySettings>
 ): Promise<LoyaltySettings | null> {
   try {
-    // Only owner can change loyalty rules
-    if (userRole !== 'owner') {
-      throw new Error('Unauthorized: Only owner can modify loyalty settings')
+    // Only owner or admin can change loyalty rules
+    if (userRole !== 'owner' && userRole !== 'admin') {
+      throw new Error('Unauthorized: Only owner or admin can modify loyalty settings')
     }
 
     const { data, error } = await supabaseAdmin
@@ -92,8 +92,8 @@ export async function updateLoyaltySettings(
  * 
  * @param customerId UUID of the customer
  * @param saleId UUID of the sale
- * @param saleAmountCents Total sale amount in cents (before discount)
- * @param discountAmountCents Total discount amount in cents
+ * @param saleAmountCents Total sale amount in KES (before discount)
+ * @param discountAmountCents Total discount amount in KES
  * @param branchId UUID of the branch
  * @param cashierId UUID of the cashier who completed the sale
  * @returns Object with pointsAwarded and newBalance, or null if loyalty disabled
@@ -104,7 +104,8 @@ export async function awardLoyaltyPoints(
   saleAmountCents: number,
   discountAmountCents: number,
   branchId: string,
-  cashierId: string
+  cashierId: string,
+  customerTier?: string
 ): Promise<{ pointsAwarded: number; newBalance: number } | null> {
   const timing = createCashSaveTimingTracker(
     'loyalty_award',
@@ -139,8 +140,9 @@ export async function awardLoyaltyPoints(
 
     const currentBalance = customer?.loyalty_points || 0
 
-    // Check minimum basket threshold
-    if (saleAmountCents < settings.earn_minimum_basket_cents) {
+    // Check minimum basket threshold (DB stores cents, code passes KES — convert)
+    const minBasketKES = (settings.earn_minimum_basket_cents || 0) / 100
+    if (saleAmountCents < minBasketKES) {
       timing.logSuccess({
         saleId,
         branchId,
@@ -158,8 +160,21 @@ export async function awardLoyaltyPoints(
     }
     // else: earn on full sale amount (default behavior)
 
-    // Calculate points (integer division - loses fractional points)
-    const pointsToAward = Math.floor(earnableAmount / settings.earn_threshold_cents)
+    // Calculate base points (DB threshold is in cents, convert to KES)
+    const thresholdKES = (settings.earn_threshold_cents || 15000) / 100
+    let pointsToAward = Math.floor(earnableAmount / thresholdKES)
+
+    // Apply tier multiplier
+    if (customerTier && settings.enable_tiers) {
+      const multiplierKey = `tier_${customerTier}_multiplier` as keyof LoyaltySettings
+      const multiplier = (settings[multiplierKey] as number) || 1.0
+      pointsToAward = Math.floor(pointsToAward * multiplier)
+    }
+
+    // Future: apply holiday/birthday/weekend/campaign multipliers using
+    // settings.holiday_multiplier, settings.birthday_multiplier,
+    // settings.weekend_multiplier, settings.campaign_multiplier
+    // based on current date and customer metadata
 
     if (pointsToAward === 0) {
       timing.logSuccess({
@@ -173,17 +188,74 @@ export async function awardLoyaltyPoints(
 
     const newBalance = currentBalance + pointsToAward
 
-    const { error: updateError } = await timing.measure(
+    // Optimistic lock: ensure loyalty_points hasn't changed since we read it
+    const { data: updatedRows, error: updateError } = await timing.measure(
       'customer_balance_update',
       async () =>
         await supabaseAdmin
           .from('customers')
           .update({ loyalty_points: newBalance, updated_at: new Date().toISOString() })
           .eq('id', customerId)
+          .eq('loyalty_points', currentBalance)
+          .select('id')
     )
 
     if (updateError) {
       throw new Error(`Failed to update customer balance: ${updateError.message}`)
+    }
+
+    // If zero rows updated, another transaction modified the balance — retry once
+    if (!updatedRows || updatedRows.length === 0) {
+      const { data: freshCustomer } = await supabaseAdmin
+        .from('customers')
+        .select('loyalty_points')
+        .eq('id', customerId)
+        .single()
+
+      if (!freshCustomer) throw new Error('Customer not found during loyalty retry')
+
+      const retryBalance = freshCustomer.loyalty_points || 0
+      const retryNewBalance = retryBalance + pointsToAward
+
+      const { data: retryRows, error: retryErr } = await supabaseAdmin
+        .from('customers')
+        .update({ loyalty_points: retryNewBalance, updated_at: new Date().toISOString() })
+        .eq('id', customerId)
+        .eq('loyalty_points', retryBalance)
+        .select('id')
+
+      if (retryErr) throw new Error(`Failed to update customer balance on retry: ${retryErr.message}`)
+      if (!retryRows || retryRows.length === 0) {
+        throw new Error('Concurrent modification detected on retry — please try again')
+      }
+
+      // Use retry values for the transaction log and return
+      const retryNewBalanceVal = retryNewBalance
+      const retryCurrentBalance = retryBalance
+
+      const { error: txRetryErr } = await timing.measure(
+        'loyalty_transaction_insert',
+        async () =>
+          await supabaseAdmin
+            .from('loyalty_transactions')
+            .insert({
+              customer_id: customerId,
+              type: 'earn_sale',
+              sale_id: saleId,
+              points_delta: pointsToAward,
+              balance_before: retryCurrentBalance,
+              balance_after: retryNewBalanceVal,
+              reason: `Earned ${pointsToAward} points from sale ${saleId}`,
+              branch_id: branchId,
+              created_by: cashierId,
+            })
+      )
+      if (txRetryErr) {
+        logger.warn('[LOYALTY] Failed to record transaction on retry:', { txRetryErr })
+      }
+
+      timing.logSuccess({ saleId, branchId, customerId, customerType: 'named_customer' })
+      return { pointsAwarded: pointsToAward, newBalance: retryNewBalanceVal }
     }
 
     const { error: txError } = await timing.measure(
@@ -278,7 +350,7 @@ export async function reverseLoyaltyPoints(
     }
 
     const currentBalance = customer?.loyalty_points || 0
-    const pointsToReverse = (earnTx as any).points_delta
+    const pointsToReverse = (earnTx as { points_delta: number }).points_delta
 
     // Ensure balance doesn't go negative (safety check)
     const newBalance = Math.max(0, currentBalance - pointsToReverse)
@@ -388,8 +460,8 @@ export async function getLoyaltySummary(customerId: string): Promise<{
 
     // Calculate total earned (sum of all earn_sale transactions)
     const totalEarned = (transactions || [])
-      .filter((tx: any) => tx.type === 'earn_sale')
-      .reduce((sum: number, tx: any) => sum + tx.points_delta, 0)
+      .filter((tx: LoyaltyTransaction) => tx.type === 'earn_sale')
+      .reduce((sum: number, tx: LoyaltyTransaction) => sum + tx.points_delta, 0)
 
     return {
       balance: customer?.loyalty_points || 0,
@@ -406,7 +478,7 @@ export async function getLoyaltySummary(customerId: string): Promise<{
  * Get redemption eligibility and calculate maximum redeemable amount
  * 
  * @param customerId UUID of the customer
- * @param saleTotalCents Sale total in cents (after discounts applied)
+ * @param saleTotalCents Sale total in KES (after discounts applied)
  * @returns Object with eligible, maxRedeemablePoints, maxRedeemableDiscount, or null
  */
 export async function getRedemptionEligibility(
@@ -419,28 +491,28 @@ export async function getRedemptionEligibility(
   maxRedeemableDiscount: number
   currentBalance: number
   redeemValueCents: number
-} | null> {
-  const timing = createCashSaveTimingTracker(
-    'loyalty_redemption_validation',
-    isCashSaveTimingEnabled()
-  )
+  } | null> {
+    const timing = createCashSaveTimingTracker(
+      'loyalty_redemption_validation',
+      isCashSaveTimingEnabled()
+    )
 
-  try {
-    const settings = await timing.measure('settings_fetch', () => getLoyaltySettings())
-    if (!settings || !settings.redeem_enabled) {
-      timing.logSuccess({
-        customerId,
-        customerType: 'named_customer',
-      })
-      return {
-        eligible: false,
-        reason: 'Loyalty redemption is disabled',
-        maxRedeemablePoints: 0,
-        maxRedeemableDiscount: 0,
-        currentBalance: 0,
-        redeemValueCents: settings?.redeem_value_cents || 50,
+    try {
+      const settings = await timing.measure('settings_fetch', () => getLoyaltySettings())
+      if (!settings || !settings.redeem_enabled) {
+        timing.logSuccess({
+          customerId,
+          customerType: 'named_customer',
+        })
+        return {
+          eligible: false,
+          reason: 'Loyalty redemption is disabled',
+          maxRedeemablePoints: 0,
+          maxRedeemableDiscount: 0,
+          currentBalance: 0,
+          redeemValueCents: settings?.redeem_value_cents || settings?.point_value_cents || 50,
+        }
       }
-    }
 
     // Get customer balance
     const { data: customer, error: fetchError } = await timing.measure(
@@ -464,7 +536,7 @@ export async function getRedemptionEligibility(
         maxRedeemablePoints: 0,
         maxRedeemableDiscount: 0,
         currentBalance: 0,
-        redeemValueCents: settings.redeem_value_cents || 50,
+        redeemValueCents: (settings.redeem_value_cents || settings.point_value_cents || 50) / 100,
       }
     }
 
@@ -482,7 +554,7 @@ export async function getRedemptionEligibility(
         maxRedeemablePoints: 0,
         maxRedeemableDiscount: 0,
         currentBalance,
-        redeemValueCents: settings.redeem_value_cents || 50,
+        redeemValueCents: (settings.redeem_value_cents || settings.point_value_cents || 50) / 100,
       }
     }
 
@@ -494,11 +566,11 @@ export async function getRedemptionEligibility(
       })
       return {
         eligible: false,
-        reason: `Minimum purchase of ${(settings.redeem_minimum_basket_cents / 100).toFixed(0)} KSh required for redemption`,
+        reason: `Minimum purchase of ${settings.redeem_minimum_basket_cents.toFixed(0)} KSh required for redemption`,
         maxRedeemablePoints: 0,
         maxRedeemableDiscount: 0,
         currentBalance,
-        redeemValueCents: settings.redeem_value_cents || 50,
+        redeemValueCents: (settings.redeem_value_cents || 50) / 100,
       }
     }
 
@@ -507,21 +579,22 @@ export async function getRedemptionEligibility(
       (saleTotalCents * settings.redeem_max_percent_per_sale) / 100
     )
 
-    // Convert discount to max points
+    // Convert discount to max points (DB value is cents, convert to KES)
+    const redeemValueKES = (settings.redeem_value_cents || 50) / 100
     const maxPointsByDiscount = Math.floor(
-      maxDiscountByCap / (settings.redeem_value_cents || 1)
+      maxDiscountByCap / redeemValueKES
     )
 
     // Use whichever is lower: available points or max by percentage
     const maxRedeemablePoints = Math.min(currentBalance, maxPointsByDiscount)
-    const maxRedeemableDiscount = maxRedeemablePoints * settings.redeem_value_cents
+    const maxRedeemableDiscount = maxRedeemablePoints * redeemValueKES
 
     const result = {
       eligible: maxRedeemablePoints > 0,
       maxRedeemablePoints,
       maxRedeemableDiscount,
       currentBalance,
-      redeemValueCents: settings.redeem_value_cents || 50,
+      redeemValueCents: (settings.redeem_value_cents || settings.point_value_cents || 50) / 100,
     }
     timing.logSuccess({
       customerId,
@@ -547,7 +620,7 @@ export async function getRedemptionEligibility(
  * @param customerId UUID of the customer
  * @param saleId UUID of the sale
  * @param pointsToRedeem Number of points to redeem
- * @param discountAppliedCents Actual discount in cents applied
+ * @param discountAppliedCents Actual discount in KES applied
  * @param branchId UUID of the branch
  * @param cashierId UUID of the cashier
  * @returns Object with pointsRedeemed, discountApplied, newBalance, or null
@@ -661,7 +734,7 @@ export async function redeemLoyaltyPoints(
             points_delta: -pointsToRedeem, // Negative = deduction
             balance_before: resolvedCurrentBalance,
             balance_after: newBalance,
-            reason: `Redeemed ${pointsToRedeem} points for ${(discountAppliedCents / 100).toFixed(0)} KSh discount on sale ${saleId}`,
+            reason: `Redeemed ${pointsToRedeem} points for ${discountAppliedCents.toFixed(0)} KSh discount on sale ${saleId}`,
             branch_id: branchId,
             created_by: cashierId,
           })
@@ -669,10 +742,15 @@ export async function redeemLoyaltyPoints(
 
     if (txError) {
       logger.warn('[LOYALTY] Failed to record redemption transaction:', { txError })
-      // Don't fail the sale - but log for investigation
+      // Roll back the balance update
+      await supabaseAdmin
+        .from('customers')
+        .update({ loyalty_points: resolvedCurrentBalance, updated_at: new Date().toISOString() })
+        .eq('id', customerId)
+      throw new Error('Loyalty redemption failed: could not record transaction')
     }
 
-    logger.info(`[LOYALTY] ✅ Redeemed ${pointsToRedeem} points (${(discountAppliedCents / 100).toFixed(0)} KSh) for customer ${customerId}. New balance: ${newBalance}`)
+    logger.info(`[LOYALTY] ✅ Redeemed ${pointsToRedeem} points (${discountAppliedCents.toFixed(0)} KSh) for customer ${customerId}. New balance: ${newBalance}`)
     timing.logSuccess({
       saleId,
       branchId,
@@ -735,7 +813,7 @@ export async function restoreRedeemedPoints(
     }
 
     const currentBalance = customer?.loyalty_points || 0
-    const pointsToRestore = Math.abs((redeemTx as any).points_delta) // Convert neg to pos
+    const pointsToRestore = Math.abs((redeemTx as { points_delta: number }).points_delta) // Convert neg to pos
 
     const newBalance = currentBalance + pointsToRestore
 

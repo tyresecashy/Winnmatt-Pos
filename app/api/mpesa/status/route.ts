@@ -74,6 +74,64 @@ export async function GET(req: NextRequest) {
 
     const transaction = transactionResult.transaction
 
+    // ========================================================================
+    // SANDBOX SIMULATION: Auto-confirm after delay
+    // ========================================================================
+    if (process.env.MPESA_SANDBOX_SIMULATE === 'true' && transaction.status === 'pending') {
+      const initiatedAt = new Date(transaction.initiated_at).getTime()
+      const now = Date.now()
+      const secondsSinceInit = (now - initiatedAt) / 1000
+
+      // Auto-confirm after 5 seconds (simulates user entering PIN)
+      if (secondsSinceInit >= 5) {
+        logger.info('[M-Pesa Status] Sandbox simulation - auto-confirming payment')
+
+        const simulatedReceipt = `SMP${Date.now().toString().slice(-8)}`
+
+        // Update transaction to confirmed
+        await supabaseAdmin
+          .from('mpesa_transactions')
+          .update({
+            status: 'confirmed',
+            mpesa_receipt_number: simulatedReceipt,
+            callback_received_at: new Date().toISOString(),
+          })
+          .eq('id', transaction.id)
+
+        // Update sale to completed
+        await supabaseAdmin
+          .from('sales')
+          .update({
+            payment_status: 'completed',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', transaction.sale_id)
+
+        // Return confirmed status
+        return NextResponse.json(
+          {
+            success: true,
+            transactionId: transaction.id,
+            saleId: transaction.sale_id,
+            status: 'confirmed',
+            amount: transaction.amount,
+            phoneNumber: transaction.phone_number,
+            mpesaReceiptNumber: simulatedReceipt,
+            errorMessage: null,
+            initiatedAt: transaction.initiated_at,
+            callbackReceivedAt: new Date().toISOString(),
+            saleFinalizedAt: new Date().toISOString(),
+            salePaymentStatus: 'completed',
+            isConfirmed: true,
+            isFailed: false,
+            isPending: false,
+            sandbox: true,
+          },
+          { status: 200 }
+        )
+      }
+    }
+
     const { data: sale } = await supabaseAdmin
       .from('sales')
       .select('id, payment_status')

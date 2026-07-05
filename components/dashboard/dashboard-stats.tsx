@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { TrendingUp, ShoppingCart, Users, Package, RefreshCw, AlertCircle } from 'lucide-react'
 import { getTodayDashboardStats } from '@/lib/dashboard-actions'
 import { formatKSh } from '@/lib/currency'
+import { AnimatedCounter } from '@/components/ui/animated-counter'
 
 interface DashboardStatsData {
   totalSales: number
@@ -117,27 +118,31 @@ export function DashboardStats() {
   const dashboardStats = [
     {
       title: "Today's Sales",
-      value: formatKSh(stats.totalSales),
+      rawValue: stats.totalSales,
       icon: TrendingUp,
       description: 'total revenue',
+      isCurrency: true,
     },
     {
       title: 'Transactions',
-      value: stats.transactionCount.toString(),
+      rawValue: stats.transactionCount,
       icon: ShoppingCart,
       description: 'completed sales',
+      isCurrency: false,
     },
     {
       title: 'Avg. Basket Size',
-      value: formatKSh(stats.averageBasket),
+      rawValue: stats.averageBasket,
       icon: Package,
       description: 'per transaction',
+      isCurrency: true,
     },
     {
       title: 'Active Customers',
-      value: stats.activeCustomers.toString(),
+      rawValue: stats.activeCustomers,
       icon: Users,
       description: 'today',
+      isCurrency: false,
     },
   ]
 
@@ -145,7 +150,7 @@ export function DashboardStats() {
     return (
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {dashboardStats.map((stat) => (
-          <Card key={stat.title} className="overflow-hidden">
+          <Card key={stat.title} className="overflow-hidden card-hover">
             <CardContent className="p-6">
               <div className="space-y-2 animate-pulse">
                 <div className="h-4 bg-muted rounded w-1/2"></div>
@@ -162,7 +167,7 @@ export function DashboardStats() {
     return (
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {dashboardStats.map((stat) => (
-          <Card key={stat.title} className="overflow-hidden border-destructive/30">
+          <Card key={stat.title} className="overflow-hidden card-hover border-destructive/30">
             <CardContent className="p-6">
               <div className="flex items-start justify-between">
                 <div className="space-y-2">
@@ -198,14 +203,20 @@ export function DashboardStats() {
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       {dashboardStats.map((stat) => (
-        <Card key={stat.title} className="overflow-hidden">
+        <Card key={stat.title} className="overflow-hidden card-hover">
           <CardContent className="p-6">
             <div className="flex items-start justify-between">
               <div className="space-y-2">
                 <p className="text-sm font-medium text-muted-foreground">
                   {stat.title}
                 </p>
-                <p className="text-2xl font-bold tracking-tight">{stat.value}</p>
+                <p className="text-2xl font-bold tracking-tight">
+                  {stat.isCurrency ? (
+                    <><span className="text-sm font-medium text-muted-foreground mr-0.5">KSh</span><AnimatedCounter value={Math.round(stat.rawValue)} /></>
+                  ) : (
+                    <AnimatedCounter value={stat.rawValue} />
+                  )}
+                </p>
                 <p className="text-xs text-muted-foreground">{stat.description}</p>
               </div>
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">

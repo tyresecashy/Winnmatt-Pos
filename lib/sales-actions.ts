@@ -12,6 +12,13 @@ import { getNairobiDayRange } from '@/lib/date-time'
 import { supabaseAdmin } from '@/lib/supabase-server'
 import { awardLoyaltyPoints, reverseLoyaltyPoints } from '@/lib/loyalty-actions'
 import { logger } from '@/lib/logger'
+import { emitEvent } from '@/lib/automation'
+
+export interface PaymentSplit {
+  method: 'cash' | 'card' | 'bank_transfer' | 'cheque' | 'credit' | 'mpesa'
+  amount: number
+  reference?: string
+}
 
 export interface SaleItem {
   productId: string
@@ -80,6 +87,44 @@ export interface SaleReceiptSeed {
   items: ReceiptSeedItem[]
 }
 
+/**
+ * Update customer aggregate stats after a completed sale.
+ * Keeps total_lifetime_spend_cents, total_visits, and last_purchase_date in sync.
+ */
+async function updateCustomerSaleStats(customerId: string, saleAmountCents: number) {
+  try {
+    const { data: customer, error: fetchError } = await supabaseAdmin
+      .from('customers')
+      .select('total_lifetime_spend_cents, total_visits, last_purchase_date')
+      .eq('id', customerId)
+      .single()
+
+    if (fetchError) {
+      logger.warn('[CUSTOMER_STATS] Could not fetch customer for stats update', { customerId, error: fetchError.message })
+      return
+    }
+
+    const newSpend = (customer?.total_lifetime_spend_cents || 0) + saleAmountCents
+    const newVisits = (customer?.total_visits || 0) + 1
+
+    const { error: updateError } = await supabaseAdmin
+      .from('customers')
+      .update({
+        total_lifetime_spend_cents: newSpend,
+        total_visits: newVisits,
+        last_purchase_date: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', customerId)
+
+    if (updateError) {
+      logger.warn('[CUSTOMER_STATS] Failed to update customer stats', { customerId, error: updateError.message })
+    }
+  } catch (error) {
+    logger.warn('[CUSTOMER_STATS] Unexpected error updating stats', { customerId, error })
+  }
+}
+
 interface PreparedCashSalePayload {
   subtotal: number
   totalAmount: number
@@ -122,7 +167,7 @@ function prepareCashSalePayload(
   })
 
   const totalAmount = Math.max(0, subtotal - totalDiscount)
-  const receiptNumber = `RCP-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
+  const receiptNumber = `RCP-${crypto.randomUUID().substring(0, 8).toUpperCase()}`
 
   return {
     subtotal,
@@ -146,6 +191,24 @@ function prepareCashSalePayload(
       updated_at: writeTimestamp,
     },
     insertedSaleItems,
+  }
+}
+
+async function writePaymentSplits(saleId: string, splits: PaymentSplit[]): Promise<void> {
+  if (!splits || splits.length === 0) return
+
+  const { error } = await supabaseAdmin
+    .from('payment_splits')
+    .insert(splits.map((s) => ({
+      sale_id: saleId,
+      method: s.method,
+      amount: Math.round(s.amount),
+      reference: s.reference || null,
+    })))
+
+  if (error) {
+    logger.error('[SALES] Failed to write payment splits', error, { saleId, splits })
+    throw new Error(`Failed to save payment splits: ${error.message}`)
   }
 }
 
@@ -245,8 +308,8 @@ async function createCashSaleWithTransaction(
         product: item.product,
       })),
     } satisfies SaleReceiptSeed,
-    subtotalCents: Math.round(prepared.subtotal * 100),
-    discountCents: Math.round(totalDiscount * 100),
+    subtotal: Math.round(prepared.subtotal),
+    discount: Math.round(totalDiscount),
   }
 }
 
@@ -257,15 +320,24 @@ export async function createSaleWithContext(
   customerId?: string,
   totalDiscount: number = 0,
   notes?: string,
-  paymentStatus: 'pending' | 'completed' | 'failed' = 'completed'
+  paymentStatus: 'pending' | 'completed' | 'failed' = 'completed',
+  paymentSplits?: PaymentSplit[]
 ) {
   const { branchId, cashierId } = context
+
+  // If payment splits provided, derive the primary method (largest split)
+  const hasSplits = paymentSplits && paymentSplits.length > 0
+  const effectivePaymentMethod: typeof paymentMethod = hasSplits
+    ? paymentSplits!.reduce((max, s) => s.amount > max.amount ? s : max).method
+    : paymentMethod
+
   const timing = createCashSaveTimingTracker(
     'sale_persistence',
-    paymentMethod === 'cash' && isCashSaveTimingEnabled()
+    effectivePaymentMethod === 'cash' && isCashSaveTimingEnabled()
   )
 
-  if (paymentMethod === 'cash' && paymentStatus === 'completed') {
+  // Skip RPC fast path when splits are present (RPC hardcodes 'cash' and doesn't handle splits)
+  if (!hasSplits && effectivePaymentMethod === 'cash' && paymentStatus === 'completed') {
     try {
       const transactionResult = await timing.measure('db_transaction_rpc', () =>
         createCashSaleWithTransaction(
@@ -278,20 +350,9 @@ export async function createSaleWithContext(
         )
       )
 
-      let loyaltyAward: { pointsAwarded: number; newBalance: number } | null = null
-
-      if (customerId) {
-        loyaltyAward = await timing.measure('loyalty_award', () =>
-          awardLoyaltyPoints(
-            customerId,
-            transactionResult.sale.id,
-            transactionResult.subtotalCents,
-            transactionResult.discountCents,
-            branchId,
-            cashierId
-          )
-        )
-      }
+      // NOTE: Loyalty is already awarded inside createCashSaleWithTransaction.
+      // Do NOT award again here — that was a bug causing double awards and stale
+      // balance issues during redemption.
 
       timing.logSuccess({
         saleId: transactionResult.sale.id,
@@ -304,7 +365,7 @@ export async function createSaleWithContext(
         success: true,
         sale: transactionResult.sale,
         receiptNumber: transactionResult.receiptNumber,
-        loyaltyAward,
+        loyaltyAward: transactionResult.loyaltyAward,
         receiptSeed: transactionResult.receiptSeed,
       }
     } catch (error) {
@@ -366,7 +427,7 @@ export async function createSaleWithContext(
     }
 
     const totalAmount = Math.max(0, subtotal - totalDiscount)
-    const receiptNumber = `RCP-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
+    const receiptNumber = `RCP-${crypto.randomUUID().substring(0, 8).toUpperCase()}`
     const inventorySnapshots: Record<string, {
       id: string
       quantity: number
@@ -437,7 +498,7 @@ export async function createSaleWithContext(
       discount_amount: Math.round(totalDiscount),
       tax_amount: 0,
       total_amount: Math.round(totalAmount),
-      payment_method: paymentMethod,
+      payment_method: effectivePaymentMethod,
       payment_status: paymentStatus,
       receipt_number: receiptNumber,
       notes: notes || null,
@@ -568,12 +629,22 @@ export async function createSaleWithContext(
         awardLoyaltyPoints(
           customerId,
           saleId,
-          Math.round(subtotal * 100),
-          Math.round(totalDiscount * 100),
+          Math.round(subtotal),
+          Math.round(totalDiscount),
           branchId,
           cashierId
         )
       )
+    }
+
+    // Auto-populate customer aggregate stats
+    if (customerId && paymentStatus === 'completed') {
+      await updateCustomerSaleStats(customerId, createdSale.total_amount)
+    }
+
+    // Write payment splits if provided (only in app-level persistence path)
+    if (hasSplits && paymentSplits) {
+      await writePaymentSplits(saleId, paymentSplits)
     }
 
     timing.logSuccess({
@@ -588,6 +659,8 @@ export async function createSaleWithContext(
       sale: createdSale,
       receiptNumber,
       loyaltyAward,
+      subtotal: Math.round(subtotal),
+      discount: Math.round(totalDiscount),
       receiptSeed: {
         sale: createdSale,
         items: insertedSaleItems.map((item) => ({
@@ -661,7 +734,7 @@ async function getSaleByIdWithProfile(
     .from('sales')
     .select(`
       *,
-      branch:branches(id, name, code),
+      branch:branches!branch_id(id, name, code),
       cashier:users!sales_cashier_id_fkey(id, full_name),
       customer:customers(id, name, phone),
       items:sale_items(
@@ -677,7 +750,7 @@ async function getSaleByIdWithProfile(
     .eq('id', saleId)
 
   const scopedQuery =
-    profile.role === 'owner'
+    profile.role === 'super_admin'
       ? branchId
         ? saleQuery.eq('branch_id', branchId)
         : saleQuery
@@ -707,6 +780,8 @@ export async function getSaleByIdForAuthorizedContext(
   }
 }
 
+// TODO: Consolidate this legacy createSale with createSaleWithContext in a future refactor.
+// createSale handles auth internally while createSaleWithContext receives a pre-authed context.
 export async function createSale(
   branchId: string,
   cashierId: string,
@@ -715,7 +790,8 @@ export async function createSale(
   customerId?: string,
   totalDiscount: number = 0,
   notes?: string,
-  paymentStatus: 'pending' | 'completed' | 'failed' = 'completed'
+  paymentStatus: 'pending' | 'completed' | 'failed' = 'completed',
+  paymentSplits?: PaymentSplit[]
 ) {
   let createdSaleId: string | null = null
   const appliedInventoryChanges: Array<{
@@ -727,6 +803,12 @@ export async function createSale(
   }> = []
 
   try {
+    // If payment splits provided, derive the primary method (largest split)
+    const hasSplits = paymentSplits && paymentSplits.length > 0
+    const effectivePaymentMethod: typeof paymentMethod = hasSplits
+      ? paymentSplits!.reduce((max, s) => s.amount > max.amount ? s : max).method
+      : paymentMethod
+
     const authResult = await authenticateServerAction()
     if (!authResult.success || !authResult.profile) {
       return {
@@ -783,7 +865,7 @@ export async function createSale(
     const taxAmount = 0 // Tax shown as included in price, not added
     const totalAmount = Math.max(0, subtotal - totalDiscount)
 
-    const receiptNumber = `RCP-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
+    const receiptNumber = `RCP-${crypto.randomUUID().substring(0, 8).toUpperCase()}`
 
     const inventorySnapshots: Record<string, { id: string; quantity: number }> = {}
 
@@ -822,7 +904,7 @@ export async function createSale(
         discount_amount: Math.round(totalDiscount),
         tax_amount: taxAmount,
         total_amount: Math.round(totalAmount),
-        payment_method: paymentMethod,
+        payment_method: effectivePaymentMethod,
         payment_status: paymentStatus,
         receipt_number: receiptNumber,
         notes: notes || null,
@@ -832,6 +914,8 @@ export async function createSale(
 
     if (saleError) throw saleError
     createdSaleId = saleData.id
+
+    // Write payment splits if provided
 
     // Create sale items
     const itemsToInsert = saleItems.map((item) => ({
@@ -911,14 +995,24 @@ export async function createSale(
       loyaltyAward = await awardLoyaltyPoints(
         customerId,
         saleData.id,
-        Math.round(subtotal * 100),
-        Math.round(totalDiscount * 100),
+        Math.round(subtotal),
+        Math.round(totalDiscount),
         effectiveBranchId,
         effectiveCashierId
       )
       if (loyaltyAward && loyaltyAward.pointsAwarded) {
         logger.info(`[LOYALTY] Awarded ${loyaltyAward.pointsAwarded} points to customer. New balance: ${loyaltyAward.newBalance}`)
       }
+    }
+
+    // Auto-populate customer aggregate stats
+    if (customerId && paymentStatus === 'completed') {
+      await updateCustomerSaleStats(customerId, saleData.total_amount)
+    }
+
+    // Write payment splits if provided
+    if (hasSplits && paymentSplits) {
+      await writePaymentSplits(saleData.id, paymentSplits)
     }
 
     logger.info('[DEBUG] createSale() returning', { success: true, saleId: saleData?.id, receiptNumber, loyaltyAward })
@@ -995,7 +1089,7 @@ export async function getSales(branchId: string, limit: number = 50) {
       .from('sales')
       .select(`
         *,
-        branch:branches(id, name, code),
+        branch:branches!branch_id(id, name, code),
         cashier:users!sales_cashier_id_fkey(id, full_name),
         customer:customers(id, name, phone)
       `)
@@ -1042,7 +1136,7 @@ export async function getSaleById(saleId: string) {
       .from('sales')
       .select(`
         *,
-        branch:branches(id, name, code),
+        branch:branches!branch_id(id, name, code),
         cashier:users!sales_cashier_id_fkey(id, full_name),
         customer:customers(id, name, phone),
         items:sale_items(
@@ -1200,43 +1294,85 @@ export async function voidSale(
       throw new Error('Sale has no items to void')
     }
 
-    // Step 1: Restore inventory for each item
-    for (const item of saleItems) {
-      // Get current inventory
-      const { data: currentInventory, error: fetchError } = await supabaseAdmin
-        .from('inventory')
-        .select('id, quantity')
-        .eq('product_id', item.product_id)
-        .eq('branch_id', branchId)
-        .single()
+    // Step 1: Restore inventory for each item with rollback on partial failure
+    const restoredItems: Array<{ inventoryId: string; quantity: number; productId: string }> = []
+    try {
+      for (const item of saleItems) {
+        // Get current inventory
+        const { data: currentInventory, error: fetchError } = await supabaseAdmin
+          .from('inventory')
+          .select('id, quantity')
+          .eq('product_id', item.product_id)
+          .eq('branch_id', branchId)
+          .single()
 
-      if (fetchError) throw new Error(`Inventory not found for product ${item.product_id}`)
+        if (fetchError) throw new Error(`Inventory not found for product ${item.product_id}`)
 
-      // Restore quantity (add back the sales quantity)
-      const newQuantity = currentInventory.quantity + item.quantity
-      const { error: updateError } = await supabaseAdmin
-        .from('inventory')
-        .update({
-          quantity: newQuantity,
-          updated_at: new Date().toISOString(),
+        // Restore quantity (add back the sales quantity)
+        const newQuantity = currentInventory.quantity + item.quantity
+        const { data: updatedRows, error: updateError } = await supabaseAdmin
+          .from('inventory')
+          .update({
+            quantity: newQuantity,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', currentInventory.id)
+          .eq('quantity', currentInventory.quantity)
+          .select()
+
+        if (updateError) throw new Error(`Failed to restore inventory: ${updateError.message}`)
+        if (!updatedRows || updatedRows.length === 0) throw new Error(`Concurrent modification detected for inventory of product ${item.product_id}. Please retry.`)
+
+        // Track restored item for potential rollback
+        restoredItems.push({
+          inventoryId: currentInventory.id,
+          quantity: item.quantity,
+          productId: item.product_id,
         })
-        .eq('id', currentInventory.id)
 
-      if (updateError) throw new Error(`Failed to restore inventory: ${updateError.message}`)
+        // Create reversal movement (positive quantity to offset original sale)
+        const { error: movementError } = await supabaseAdmin
+          .from('stock_movements')
+          .insert({
+            product_id: item.product_id,
+            branch_id: branchId,
+            type: 'reversal',
+            quantity: item.quantity, // positive = added back
+            reference_id: saleId,
+            notes: `Sale void: ${voidReason}`,
+          })
 
-      // Create reversal movement (positive quantity to offset original sale)
-      const { error: movementError } = await supabaseAdmin
-        .from('stock_movements')
-        .insert({
-          product_id: item.product_id,
-          branch_id: branchId,
-          type: 'reversal',
-          quantity: item.quantity, // positive = added back
-          reference_id: saleId,
-          notes: `Sale void: ${voidReason}`,
-        })
+        if (movementError) throw new Error(`Failed to create reversal movement: ${movementError.message}`)
+      }
+    } catch (error) {
+      // Rollback already restored items
+      for (const restored of restoredItems) {
+        const { data: currentInv } = await supabaseAdmin
+          .from('inventory')
+          .select('id, quantity')
+          .eq('id', restored.inventoryId)
+          .single()
 
-      if (movementError) throw new Error(`Failed to create reversal movement: ${movementError.message}`)
+        if (currentInv) {
+          const revertQuantity = currentInv.quantity - restored.quantity
+          await supabaseAdmin
+            .from('inventory')
+            .update({
+              quantity: revertQuantity,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', restored.inventoryId)
+
+          // Delete the reversal movement we created
+          await supabaseAdmin
+            .from('stock_movements')
+            .delete()
+            .eq('reference_id', saleId)
+            .eq('product_id', restored.productId)
+            .eq('type', 'reversal')
+        }
+      }
+      throw error // Re-throw the original error
     }
 
     // Step 2: Update sale as voided
@@ -1296,6 +1432,21 @@ export async function voidSale(
       })
 
     if (auditError) throw new Error(`Failed to create audit log: ${auditError.message}`)
+
+    // Emit automation event (fire-and-forget)
+    emitEvent({
+      eventType: 'sale.voided',
+      source: 'pos',
+      entityType: 'sale',
+      entityId: saleId,
+      payload: {
+        saleId,
+        branchId,
+        total: saleData.total_amount,
+        reason: voidReason,
+        cashierName: 'Unknown',
+      },
+    }).catch(err => logger.warn('[Automation] Failed to emit sale.voided', { error: err.message }))
 
     return {
       success: true,
@@ -1379,40 +1530,130 @@ export async function returnSale(
       itemsToReturn = [{ ...item, quantity: returnDetails.quantity }]
     }
 
-    // Step 1: Restore inventory for returned items
-    for (const item of itemsToReturn) {
-      const { data: currentInventory, error: fetchError } = await supabaseAdmin
-        .from('inventory')
-        .select('id, quantity')
-        .eq('product_id', item.product_id)
-        .eq('branch_id', branchId)
-        .single()
+    // Step 1: Restore inventory for returned items with rollback on partial failure
+    const restoredItems: Array<{ inventoryId: string; quantity: number; productId: string }> = []
+    try {
+      for (const item of itemsToReturn) {
+        const { data: currentInventory, error: fetchError } = await supabaseAdmin
+          .from('inventory')
+          .select('id, quantity')
+          .eq('product_id', item.product_id)
+          .eq('branch_id', branchId)
+          .single()
 
-      if (fetchError) throw new Error(`Inventory not found for product ${item.product_id}`)
+        if (fetchError) throw new Error(`Inventory not found for product ${item.product_id}`)
 
-      const newQuantity = currentInventory.quantity + item.quantity
-      const { error: updateError } = await supabaseAdmin
-        .from('inventory')
-        .update({
-          quantity: newQuantity,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', currentInventory.id)
+        const newQuantity = currentInventory.quantity + item.quantity
+        const { data: updatedRows, error: updateError } = await supabaseAdmin
+          .from('inventory')
+          .update({
+            quantity: newQuantity,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', currentInventory.id)
+          .eq('quantity', currentInventory.quantity)
+          .select()
 
-      if (updateError) throw new Error(`Failed to restore inventory: ${updateError.message}`)
+        if (updateError) throw new Error(`Failed to restore inventory: ${updateError.message}`)
+        if (!updatedRows || updatedRows.length === 0) throw new Error(`Concurrent modification detected for inventory of product ${item.product_id}. Please retry.`)
 
-      const { error: movementError } = await supabaseAdmin
-        .from('stock_movements')
-        .insert({
-          product_id: item.product_id,
-          branch_id: branchId,
-          type: 'reversal',
+        // Track restored item for potential rollback
+        restoredItems.push({
+          inventoryId: currentInventory.id,
           quantity: item.quantity,
-          reference_id: saleId,
-          notes: `Return: ${returnReason}`,
+          productId: item.product_id,
         })
 
-      if (movementError) throw new Error(`Failed to create reversal movement: ${movementError.message}`)
+        const { error: movementError } = await supabaseAdmin
+          .from('stock_movements')
+          .insert({
+            product_id: item.product_id,
+            branch_id: branchId,
+            type: 'reversal',
+            quantity: item.quantity,
+            reference_id: saleId,
+            notes: `Return: ${returnReason}`,
+          })
+
+        if (movementError) throw new Error(`Failed to create reversal movement: ${movementError.message}`)
+      }
+    } catch (error) {
+      // Rollback already restored items
+      for (const restored of restoredItems) {
+        const { data: currentInv } = await supabaseAdmin
+          .from('inventory')
+          .select('id, quantity')
+          .eq('id', restored.inventoryId)
+          .single()
+
+        if (currentInv) {
+          const revertQuantity = currentInv.quantity - restored.quantity
+          await supabaseAdmin
+            .from('inventory')
+            .update({
+              quantity: revertQuantity,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', restored.inventoryId)
+
+          // Delete the reversal movement we created
+          await supabaseAdmin
+            .from('stock_movements')
+            .delete()
+            .eq('reference_id', saleId)
+            .eq('product_id', restored.productId)
+            .eq('type', 'reversal')
+        }
+      }
+      throw error // Re-throw the original error
+    }
+
+    // Step 1b: Reverse loyalty points if customer was present
+    if (saleData.customer_id) {
+      const reverseResult = await reverseLoyaltyPoints(
+        saleId,
+        saleData.customer_id,
+        branchId,
+        userId
+      )
+      if (reverseResult) {
+        logger.info(`[LOYALTY] Reversed ${reverseResult.pointsReversed} points. New balance: ${reverseResult.newBalance}`)
+      }
+
+      // Restore redeemed points (import on demand)
+      const { restoreRedeemedPoints } = await import('@/lib/loyalty-actions')
+      const restoreResult = await restoreRedeemedPoints(
+        saleId,
+        saleData.customer_id,
+        branchId,
+        userId
+      )
+      if (restoreResult) {
+        logger.info(`[LOYALTY] Restored ${restoreResult.pointsRestored} redeemed points. New balance: ${restoreResult.newBalance}`)
+      }
+    }
+
+    // Step 1c: Insert structured return_items records for reporting
+    const unitRefunds = itemsToReturn.map((item: Record<string, unknown>) => {
+      const unitPrice = (item.unit_price as number) || 0
+      const discountPercent = (item.discount_percent as number) || 0
+      const qty = (item.quantity as number) || 0
+      const unitRefund = Math.round(unitPrice * (1 - discountPercent / 100))
+      return {
+        sale_id: saleId,
+        product_id: item.product_id as string,
+        quantity_returned: qty,
+        unit_refund_amount: unitRefund,
+        total_refund: unitRefund * qty,
+        reason: returnReason,
+        created_by: userId,
+      }
+    })
+    const { error: returnItemsError } = await supabaseAdmin
+      .from('return_items')
+      .insert(unitRefunds)
+    if (returnItemsError) {
+      logger.warn('[RETURN] Failed to insert return_items', { error: returnItemsError.message })
     }
 
     // Step 2: Update sale status
@@ -1425,6 +1666,10 @@ export async function returnSale(
         sale_status: newStatus,
         returned_at: new Date().toISOString(),
         returned_qty: itemsToReturn.reduce((sum, i) => sum + i.quantity, 0),
+        returned_amount: itemsToReturn.reduce(
+          (sum, i) => sum + Math.round(i.unit_price * (1 - (i.discount_percent || 0) / 100) * i.quantity),
+          0
+        ),
         return_reason: returnReason,
         returned_by: userId,
         updated_at: new Date().toISOString(),
@@ -1452,6 +1697,23 @@ export async function returnSale(
       })
 
     if (auditError) throw new Error(`Failed to create audit log: ${auditError.message}`)
+
+    // Emit automation event (fire-and-forget)
+    emitEvent({
+      eventType: 'sale.returned',
+      source: 'pos',
+      entityType: 'sale',
+      entityId: saleId,
+      payload: {
+        saleId,
+        branchId,
+        total: saleData.total_amount,
+        reason: returnReason,
+        itemCount: itemsToReturn.length,
+        isFullReturn,
+        cashierName: 'Unknown',
+      },
+    }).catch(err => logger.warn('[Automation] Failed to emit sale.returned', { error: err.message }))
 
     return {
       success: true,
@@ -1486,5 +1748,336 @@ export async function getSaleAuditTrail(saleId: string) {
   } catch (error) {
     logger.error('Error fetching audit trail', error)
     return []
+  }
+}
+
+// ─── Hold Sale ──────────────────────────────────────────────────────────────
+
+interface HeldSaleItem {
+  id: string
+  product_id: string
+  quantity: number
+  unit_price: number
+  discount_percent: number
+  line_total: number
+  product: {
+    id: string
+    name: string
+    sku: string
+    selling_price: number
+  }
+}
+
+export interface HeldSale {
+  id: string
+  receipt_number: string
+  subtotal: number
+  discount_amount: number
+  total_amount: number
+  customer_id: string | null
+  customer_name: string | null
+  hold_notes: string | null
+  created_at: string
+  items: HeldSaleItem[]
+}
+
+/**
+ * Put a sale on hold.
+ * Creates a sale row (payment_status='pending', sale_status='on_hold')
+ * with sale_items so the cashier can resume it later.
+ * Does NOT deduct inventory.
+ */
+export async function holdSale(
+  branchId: string,
+  cashierId: string,
+  items: Array<{
+    productId: string
+    name: string
+    sku: string
+    quantity: number
+    unitPrice: number
+    discountPercent: number
+    sellingPrice: number
+  }>,
+  customerId: string | null,
+  subtotal: number,
+  discountAmount: number,
+  totalAmount: number,
+  holdNotes?: string
+) {
+  try {
+    const { profile } = await authenticateServerAction()
+    if (!profile) {
+      return { success: false, error: 'Unauthorized' }
+    }
+    if (profile.branch_id !== branchId) {
+      return { success: false, error: 'Cannot hold sales for another branch' }
+    }
+
+    const receiptNumber = `HLD-${crypto.randomUUID().substring(0, 8).toUpperCase()}`
+    const saleId = crypto.randomUUID()
+    const now = new Date().toISOString()
+
+    // 1. Insert the sale row
+    const { error: saleError } = await supabaseAdmin
+      .from('sales')
+      .insert({
+        id: saleId,
+        branch_id: branchId,
+        cashier_id: cashierId,
+        customer_id: customerId || null,
+        subtotal: Math.round(subtotal),
+        discount_amount: Math.round(discountAmount),
+        tax_amount: 0,
+        total_amount: Math.round(totalAmount),
+        payment_method: 'cash',
+        payment_status: 'pending',
+        sale_status: 'on_hold',
+        receipt_number: receiptNumber,
+        notes: holdNotes || null,
+        hold_notes: holdNotes || null,
+      })
+
+    if (saleError) {
+      logger.error('[HOLD SALE] Failed to insert sale row', saleError)
+      return { success: false, error: saleError.message }
+    }
+
+    // 2. Insert sale items
+    const saleItemRows = items.map((item) => ({
+      sale_id: saleId,
+      product_id: item.productId,
+      quantity: item.quantity,
+      unit_price: Math.round(item.unitPrice),
+      discount_percent: item.discountPercent,
+      line_total: Math.round(item.unitPrice * item.quantity * (1 - item.discountPercent / 100)),
+    }))
+
+    const { error: itemsError } = await supabaseAdmin
+      .from('sale_items')
+      .insert(saleItemRows)
+
+    if (itemsError) {
+      logger.error('[HOLD SALE] Failed to insert sale items', itemsError)
+      // Attempt cleanup
+      await supabaseAdmin.from('sales').delete().eq('id', saleId)
+      return { success: false, error: itemsError.message }
+    }
+
+    logger.info('[HOLD SALE] Sale placed on hold', { saleId, receiptNumber, itemCount: items.length })
+
+    return {
+      success: true,
+      saleId,
+      receiptNumber,
+    }
+  } catch (error) {
+    logger.error('[HOLD SALE] Unexpected error', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to hold sale',
+    }
+  }
+}
+
+/**
+ * List held (on_hold) sales for a branch and optionally a specific cashier.
+ */
+export async function getHeldSales(
+  branchId: string,
+  cashierId?: string
+): Promise<HeldSale[]> {
+  try {
+    let query = supabaseAdmin
+      .from('sales')
+      .select(`
+        id,
+        receipt_number,
+        subtotal,
+        discount_amount,
+        total_amount,
+        customer_id,
+        hold_notes,
+        created_at,
+        customers!left(name),
+        sale_items(
+          id,
+          product_id,
+          quantity,
+          unit_price,
+          discount_percent,
+          line_total,
+          product:products(id, name, sku, selling_price)
+        )
+      `)
+      .eq('sale_status', 'on_hold')
+      .eq('branch_id', branchId)
+      .order('created_at', { ascending: false })
+
+    if (cashierId) {
+      query = query.eq('cashier_id', cashierId)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      logger.error('[HOLD SALE] Failed to fetch held sales', error)
+      return []
+    }
+
+    const heldSales: HeldSale[] = (data || []).map((row: any) => ({
+      id: row.id,
+      receipt_number: row.receipt_number,
+      subtotal: row.subtotal,
+      discount_amount: row.discount_amount,
+      total_amount: row.total_amount,
+      customer_id: row.customer_id,
+      customer_name: row.customers?.name || null,
+      hold_notes: row.hold_notes || null,
+      created_at: row.created_at,
+      items: (row.sale_items || []).map((item: any) => ({
+        id: item.id,
+        product_id: item.product_id,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        discount_percent: item.discount_percent,
+        line_total: item.line_total,
+        product: item.product || {
+          id: item.product_id,
+          name: 'Unknown',
+          sku: '',
+          selling_price: item.unit_price,
+        },
+      })),
+    }))
+
+    return heldSales
+  } catch (error) {
+    logger.error('[HOLD SALE] Error fetching held sales', error)
+    return []
+  }
+}
+
+/**
+ * Resume (release) a held sale.
+ * Deletes the held sale row and items, returning the data needed
+ * to restore the cart. Does NOT modify inventory.
+ */
+export async function resumeHeldSale(
+  saleId: string,
+  branchId: string
+): Promise<{
+  success: boolean
+  heldSale?: HeldSale
+  error?: string
+}> {
+  try {
+    // 1. Fetch the held sale with items
+    const { data: saleData, error: fetchError } = await supabaseAdmin
+      .from('sales')
+      .select(`
+        id,
+        receipt_number,
+        subtotal,
+        discount_amount,
+        total_amount,
+        customer_id,
+        hold_notes,
+        created_at,
+        customers!left(name),
+        sale_items(
+          id,
+          product_id,
+          quantity,
+          unit_price,
+          discount_percent,
+          line_total,
+          product:products(id, name, sku, selling_price)
+        )
+      `)
+      .eq('id', saleId)
+      .eq('sale_status', 'on_hold')
+      .eq('branch_id', branchId)
+      .single()
+
+    if (fetchError || !saleData) {
+      logger.error('[HOLD SALE] Failed to fetch held sale for resume', fetchError)
+      return { success: false, error: 'Held sale not found' }
+    }
+
+    const heldSale: HeldSale = {
+      id: saleData.id,
+      receipt_number: saleData.receipt_number,
+      subtotal: saleData.subtotal,
+      discount_amount: saleData.discount_amount,
+      total_amount: saleData.total_amount,
+      customer_id: saleData.customer_id,
+      customer_name: (saleData as any).customers?.name || null,
+      hold_notes: (saleData as any).hold_notes || null,
+      created_at: saleData.created_at,
+      items: ((saleData as any).sale_items || []).map((item: any) => ({
+        id: item.id,
+        product_id: item.product_id,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        discount_percent: item.discount_percent,
+        line_total: item.line_total,
+        product: item.product || {
+          id: item.product_id,
+          name: 'Unknown',
+          sku: '',
+          selling_price: item.unit_price,
+        },
+      })),
+    }
+
+    // 2. Delete the held sale (cascades to sale_items via FK)
+    const { error: deleteError } = await supabaseAdmin
+      .from('sales')
+      .delete()
+      .eq('id', saleId)
+      .eq('sale_status', 'on_hold')
+
+    if (deleteError) {
+      logger.error('[HOLD SALE] Failed to delete held sale on resume', deleteError)
+      return { success: false, error: deleteError.message }
+    }
+
+    logger.info('[HOLD SALE] Sale resumed', { saleId })
+
+    return { success: true, heldSale }
+  } catch (error) {
+    logger.error('[HOLD SALE] Error resuming held sale', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to resume held sale',
+    }
+  }
+}
+
+/**
+ * Cancel (discard) a held sale without resuming it.
+ */
+export async function cancelHeldSale(saleId: string, branchId: string) {
+  try {
+    const { error } = await supabaseAdmin
+      .from('sales')
+      .delete()
+      .eq('id', saleId)
+      .eq('sale_status', 'on_hold')
+      .eq('branch_id', branchId)
+
+    if (error) {
+      logger.error('[HOLD SALE] Failed to cancel held sale', error)
+      return { success: false, error: error.message }
+    }
+
+    return { success: true }
+  } catch (error) {
+    logger.error('[HOLD SALE] Error cancelling held sale', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to cancel held sale',
+    }
   }
 }

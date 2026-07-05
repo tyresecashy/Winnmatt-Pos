@@ -80,7 +80,7 @@ export function ShiftOperations({ branchId, cashierId, cashierName }: ShiftOpera
 
     try {
       setIsLoading(true)
-      const amountInCents = Math.round(Number(openingFloat) * 100)
+      const amountInCents = Math.round(Number(openingFloat))
       const result = await openShift(branchId, cashierId, amountInCents)
 
       if (!result.success) {
@@ -124,7 +124,7 @@ export function ShiftOperations({ branchId, cashierId, cashierName }: ShiftOpera
 
     try {
       setIsLoading(true)
-      const amountInCents = Math.round(Number(countedCash) * 100)
+      const amountInCents = Math.round(Number(countedCash))
       const result = await closeShift(activeShift.id, amountInCents, closingNotes, cashierId)
 
       if (!result.success) {
