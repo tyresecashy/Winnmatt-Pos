@@ -40,8 +40,9 @@ export default function LoginPage() {
 
     try {
       await signIn(email, password)
-    } catch (err: any) {
-      setError(err.message || 'Login failed. Please check your credentials.')
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Login failed. Please check your credentials.'
+      setError(message)
       setIsLoading(false)
     }
   }

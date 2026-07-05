@@ -8,7 +8,7 @@ export type Database = {
           email: string
           full_name: string
           branch_id: string | null
-          role: 'owner' | 'admin' | 'manager' | 'cashier'
+          role: 'super_admin' | 'admin' | 'manager' | 'cashier'
           status: 'active' | 'inactive'
           created_at: string
           updated_at: string
@@ -78,6 +78,13 @@ export type Database = {
           loyalty_points: number
           credit_limit: number
           credit_balance: number
+          tier: 'bronze' | 'silver' | 'gold' | 'platinum' | 'vip'
+          birthday: string | null
+          total_lifetime_spend_cents: number
+          total_visits: number
+          last_purchase_date: string | null
+          notes: string | null
+          tags: string[]
           created_at: string
           updated_at: string
         }
@@ -99,6 +106,22 @@ export type Database = {
         Insert: Omit<Database['public']['Tables']['suppliers']['Row'], 'id' | 'created_at' | 'updated_at'>
         Update: Partial<Database['public']['Tables']['suppliers']['Insert']>
       }
+      warehouses: {
+        Row: {
+          id: string
+          name: string
+          code: string
+          branch_id: string | null
+          location: string | null
+          manager_id: string | null
+          type: 'central' | 'branch' | 'regional'
+          status: 'active' | 'inactive'
+          created_at: string
+          updated_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['warehouses']['Row'], 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Database['public']['Tables']['warehouses']['Insert']>
+      }
       sales: {
         Row: {
           id: string
@@ -113,6 +136,8 @@ export type Database = {
           payment_status: 'pending' | 'completed' | 'failed'
           receipt_number: string
           notes: string | null
+          sale_status: 'completed' | 'voided' | 'returned' | 'on_hold' | null
+          hold_notes: string | null
           created_at: string
           updated_at: string
         }
@@ -138,10 +163,14 @@ export type Database = {
           id: string
           product_id: string
           branch_id: string
-          type: 'sale' | 'receipt' | 'transfer' | 'adjustment' | 'damage'
+          from_warehouse_id: string | null
+          to_warehouse_id: string | null
+          type: 'sale' | 'receipt' | 'transfer' | 'adjustment' | 'damage' | 'receive' | 'issue'
           quantity: number
+          reference_type: string | null
           reference_id: string | null
           notes: string | null
+          created_by: string
           created_at: string
         }
         Insert: Omit<Database['public']['Tables']['stock_movements']['Row'], 'id' | 'created_at'>
@@ -152,7 +181,7 @@ export type Database = {
           id: string
           supplier_id: string
           branch_id: string
-          status: 'draft' | 'pending' | 'received' | 'cancelled'
+          status: 'draft' | 'pending' | 'approved' | 'received' | 'cancelled'
           subtotal: number
           tax_amount: number
           total_amount: number
@@ -177,6 +206,34 @@ export type Database = {
         }
         Insert: Omit<Database['public']['Tables']['purchase_order_items']['Row'], 'id' | 'created_at'>
         Update: Partial<Database['public']['Tables']['purchase_order_items']['Insert']>
+      }
+      purchase_receipts: {
+        Row: {
+          id: string
+          purchase_order_id: string
+          supplier_id: string
+          received_by: string
+          notes: string | null
+          status: 'draft' | 'completed' | 'cancelled'
+          created_at: string
+          updated_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['purchase_receipts']['Row'], 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Database['public']['Tables']['purchase_receipts']['Insert']>
+      }
+      purchase_receipt_items: {
+        Row: {
+          id: string
+          purchase_receipt_id: string
+          product_id: string
+          quantity_received: number
+          unit_cost: number
+          batch_number: string | null
+          expiry_date: string | null
+          created_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['purchase_receipt_items']['Row'], 'id' | 'created_at'>
+        Update: Partial<Database['public']['Tables']['purchase_receipt_items']['Insert']>
       }
       stock_transfers: {
         Row: {
@@ -268,7 +325,7 @@ export interface UserProfile {
   email: string
   full_name: string
   branch_id: string | null
-  role: 'owner' | 'admin' | 'manager' | 'cashier'
+  role: 'super_admin' | 'admin' | 'manager' | 'cashier'
   status: 'active' | 'inactive'
   created_at: string
   updated_at: string
@@ -286,16 +343,30 @@ export interface UserProfile {
 export interface LoyaltySettings {
   id: string
   earn_enabled: boolean
-  earn_threshold_cents: number // 1 point per X cents (e.g., 10000 = 1 point per 100 KSh)
+  earn_threshold_cents: number // 1 point per X cents (e.g., 15000 = 1 point per 150 KSh)
+  earn_rate_cents_per_point: number // New earn rate field (default 15000)
   earn_minimum_basket_cents: number // Min basket to earn (0 = no minimum)
   earn_on_discounted: boolean // Earn on discounted items
   redeem_enabled: boolean // Enable/disable redemption
   redeem_value_cents: number // 1 point = X cents (e.g., 50 = 0.5 KSh per point)
+  point_value_cents: number // New point value field (default 50)
   redeem_minimum_points: number // Minimum points required to redeem (e.g., 25)
-  redeem_minimum_basket_cents: number // Minimum basket to allow redemption (e.g., 5000 cents)
+  redeem_minimum_basket_cents: number // Minimum basket to allow redemption (e.g., 0 cents)
   redeem_max_percent_per_sale: number // Max percentage of sale total that can be redeemed (0-100)
   expiry_enabled: boolean
-  expiry_days?: number
+  expiry_days: number // Points expire after N days (default 365)
+  enable_tiers: boolean // Enable/disable tier multipliers
+  enable_birthday_bonus: boolean // Enable/disable birthday multiplier
+  enable_holiday_bonus: boolean // Enable/disable holiday multiplier
+  enable_weekend_bonus: boolean // Enable/disable weekend multiplier
+  tier_bronze_multiplier: number // Bronze tier point multiplier (default 1.0)
+  tier_silver_multiplier: number // Silver tier point multiplier (default 1.25)
+  tier_gold_multiplier: number // Gold tier point multiplier (default 1.5)
+  tier_platinum_multiplier: number // Platinum tier point multiplier (default 2.0)
+  holiday_multiplier: number // Holiday bonus multiplier (default 2.0)
+  birthday_multiplier: number // Birthday bonus multiplier (default 3.0)
+  weekend_multiplier: number // Weekend bonus multiplier (default 1.5)
+  campaign_multiplier: number // Campaign bonus multiplier (default 2.0)
   updated_by: string | null
   updated_at: string
   created_at: string

@@ -98,8 +98,8 @@ export function CSVUploadDialog({ onImportComplete }: CSVUploadDialogProps) {
         setFile(null)
         setResult(null)
       }, 2000)
-    } catch (err: any) {
-      const message = err.message || 'Upload failed'
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Upload failed'
       setError(message)
       toast({
         title: 'Import failed',

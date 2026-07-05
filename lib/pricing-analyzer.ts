@@ -1,4 +1,20 @@
 import { logger } from '@/lib/logger';
+
+/** Minimal product shape used by analyzePriceAnomalies */
+interface PriceAnalysisProduct {
+  brand?: string
+  unit?: string
+}
+
+/** Shape of a pricing_suggestions row for getPricingStatistics */
+interface SuggestionRow {
+  normalized_name?: string
+  brand?: string
+  min_price?: number | null
+  max_price?: number | null
+  avg_price?: number | null
+}
+
 /**
  * Pricing Analyzer Service
  * Detects price anomalies and calculates pricing suggestions
@@ -18,7 +34,7 @@ const uuidv4 = () => crypto.randomUUID()
  */
 export function analyzePriceAnomalies(
   price: number | undefined,
-  product: any
+  product: PriceAnalysisProduct
 ): Array<{
   type: AnomalyType
   severity: AnomalySeverity
@@ -124,7 +140,7 @@ export async function getPricingStatistics(
   // Filter by normalized name or brand
   const filtered = suggestions
     .filter(
-      (s: any) =>
+      (s: SuggestionRow) =>
         s.normalized_name === normalizedName ||
         (brand && s.brand === brand)
     )
@@ -140,8 +156,8 @@ export async function getPricingStatistics(
   }
 
   const prices = filtered
-    .map((s: any) => s.min_price || s.max_price || s.avg_price)
-    .filter((p: any) => p)
+    .map((s: SuggestionRow) => s.min_price || s.max_price || s.avg_price)
+    .filter((p: number | null | undefined): p is number => p != null)
 
   if (prices.length === 0) {
     return {

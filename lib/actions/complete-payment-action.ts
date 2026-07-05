@@ -2,7 +2,7 @@
 import { logger } from '@/lib/logger';
 
 import { createCashSaveTimingTracker } from '@/lib/cash-save-timing'
-import type { SaleItem, SaleReceiptSeed } from '@/lib/sales-actions'
+import type { SaleItem, SaleReceiptSeed, PaymentSplit } from '@/lib/sales-actions'
 import type { SaleDetailsData } from '@/components/receipt-preview'
 import {
   getAuthenticatedServerActionUser,
@@ -12,8 +12,10 @@ import {
 } from '@/lib/auth-helpers'
 import { supabaseAdmin } from '@/lib/supabase-server'
 import { getRedemptionEligibility, redeemLoyaltyPoints } from '@/lib/loyalty-actions'
-import { buildReceiptPayload } from '@/lib/receipt-builder'
+import { buildReceiptPayload, type RawSaleData, type RawItem } from '@/lib/receipt-builder'
 import { createSaleWithContext, getSaleByIdForAuthorizedContext } from '@/lib/sales-actions'
+import { applyPromotionToSale } from '@/lib/promotion-actions'
+import { emitEvent } from '@/lib/automation'
 
 interface CreateSaleResult {
   success: boolean
@@ -26,6 +28,12 @@ interface CreateSaleResult {
 
 // Full sale record used to build receipt payload - shape matches the return of buildReceiptSaleFromSeed and getSaleByIdForAuthorizedContext
 
+export interface CompletePaymentPromotion {
+  promotionId: string
+  discountCents: number
+  couponCode?: string
+}
+
 export interface CompletePaymentRequest {
   branchId: string
   cashierId: string
@@ -36,6 +44,8 @@ export interface CompletePaymentRequest {
   receiptSettings: Record<string, unknown>
   redemptionPoints?: number
   redemptionDiscount?: number
+  promotions?: CompletePaymentPromotion[]
+  paymentSplits?: PaymentSplit[]
 }
 
 export interface CompletePaymentResponse {
@@ -59,10 +69,10 @@ async function buildReceiptSaleFromSeed(
   customerId: string | undefined,
   receiptSeed: SaleReceiptSeed,
   loyaltyBalance?: number
-) {
+): Promise<RawSaleData> {
   const branchPromise =
     profile?.branch?.id === effectiveBranchId && profile.branch?.name && profile.branch?.code
-      ? Promise.resolve(profile.branch)
+      ? Promise.resolve(profile.branch as { id: string; name: string; code: string })
       : supabaseAdmin
           .from('branches')
           .select('id, name, code')
@@ -96,13 +106,13 @@ async function buildReceiptSaleFromSeed(
 
   return {
     ...receiptSeed.sale,
-    branch,
+    branch: branch as { id: string; name: string; code: string },
     cashier: {
-      id: profile?.id,
-      full_name: profile?.full_name,
+      id: profile?.id ?? '',
+      full_name: profile?.full_name ?? '',
     },
-    customer,
-    items: receiptSeed.items,
+    customer: customer as RawSaleData['customer'],
+    items: receiptSeed.items as RawItem[],
   }
 }
 
@@ -122,9 +132,14 @@ async function buildReceiptSaleFromSeed(
 export async function completePaymentAction(
   request: CompletePaymentRequest
 ): Promise<CompletePaymentResponse> {
+  // If payment splits provided, derive primary method (largest split)
+  const effectivePaymentMethod = request.paymentSplits && request.paymentSplits.length > 0
+    ? request.paymentSplits.reduce((max, s) => s.amount > max.amount ? s : max).method
+    : request.paymentMethod
+
   const timing = createCashSaveTimingTracker(
     'complete_payment_action',
-    request.paymentMethod === 'cash'
+    effectivePaymentMethod === 'cash'
   )
   let resolvedBranchId: string | null = null
   let resolvedSaleId: string | null = null
@@ -213,10 +228,6 @@ export async function completePaymentAction(
 
     if ((request.redemptionPoints || 0) > 0) {
       validatedRedemption = await timing.measure('redemption_validation', async () => {
-        if (request.paymentMethod !== 'cash') {
-          throw new Error('Failed at: VALIDATION - Loyalty redemption is only available for cash sales')
-        }
-
         if (!request.customerId) {
           throw new Error('Failed at: VALIDATION - Only named customers can redeem loyalty points')
         }
@@ -224,7 +235,7 @@ export async function completePaymentAction(
         const requestedPoints = Math.floor(request.redemptionPoints || 0)
         const eligibility = await getRedemptionEligibility(
           request.customerId,
-          Math.round(saleTotalBeforeRedemption * 100)
+          Math.round(saleTotalBeforeRedemption)
         )
 
         if (!eligibility || !eligibility.eligible) {
@@ -238,10 +249,10 @@ export async function completePaymentAction(
         }
 
         const expectedDiscount = Math.round(
-          (requestedPoints * eligibility.redeemValueCents) / 100
+          requestedPoints * eligibility.redeemValueCents
         )
         const maxRedeemableDiscountKSh = Math.round(
-          eligibility.maxRedeemableDiscount / 100
+          eligibility.maxRedeemableDiscount
         )
 
         if (expectedDiscount > maxRedeemableDiscountKSh) {
@@ -251,7 +262,7 @@ export async function completePaymentAction(
         return {
           points: requestedPoints,
           discount: expectedDiscount,
-          discountCents: Math.round(expectedDiscount * 100),
+          discountCents: Math.round(expectedDiscount),
           currentBalance: eligibility.currentBalance,
         }
       })
@@ -283,10 +294,12 @@ export async function completePaymentAction(
             cashierId: profile.id,
           },
           request.items,
-          request.paymentMethod,
+          effectivePaymentMethod,
           request.customerId,
           totalDiscountForSale,
-          'POS Sale'
+          'POS Sale',
+          undefined,
+          request.paymentSplits
         )
       )
     } catch (error) {
@@ -327,6 +340,8 @@ export async function completePaymentAction(
         }
       | null = null
 
+    let redemptionWarning: string | null = null
+
     if (request.customerId && validatedRedemption && validatedRedemption.points > 0) {
       const redemptionCustomerId = request.customerId
       try {
@@ -339,8 +354,12 @@ export async function completePaymentAction(
             effectiveBranchId,
             profile.id,
             {
-              currentBalance: validatedRedemption.currentBalance,
               skipSettingsCheck: true,
+              // NOTE: Do NOT pass currentBalance here — let redeemLoyaltyPoints
+              // fetch the fresh balance from the DB. The sale creation above may
+              // have already added earned points, so the validated balance is stale.
+              // Without currentBalance, redeemLoyaltyPoints re-fetches the current
+              // value and uses it for the optimistic concurrency check.
             }
           )
         )
@@ -356,10 +375,32 @@ export async function completePaymentAction(
           saleId,
           error: String(error),
         })
+        redemptionWarning = 'Sale completed but loyalty redemption failed. Please apply manual discount if needed.'
       }
     }
 
-    let fullSale: any
+    // ── Apply promotions after sale creation ─────────────────────────
+    if (Array.isArray(request.promotions) && request.promotions.length > 0) {
+      for (const promo of request.promotions) {
+        try {
+          await applyPromotionToSale(
+            promo.promotionId,
+            saleId,
+            promo.discountCents,
+            promo.couponCode,
+            undefined // bonusMultiplier not set from coupon validation
+          )
+        } catch (error) {
+          logger.warn('[completePaymentAction] Failed to apply promotion to sale:', {
+            saleId,
+            promotionId: promo.promotionId,
+            error: String(error),
+          })
+        }
+      }
+    }
+
+    let fullSale: RawSaleData | null
     try {
       const receiptSeed = createResult.receiptSeed as SaleReceiptSeed | undefined
       const expectedLoyaltyBalance =
@@ -459,10 +500,28 @@ export async function completePaymentAction(
       customerType,
     })
 
+    // Emit automation event (fire-and-forget)
+    emitEvent({
+      eventType: 'sale.completed',
+      source: 'pos',
+      entityType: 'sale',
+      entityId: receiptPayload.id,
+      payload: {
+        saleId: receiptPayload.id,
+        branchId: resolvedBranchId || '',
+        total: receiptPayload.total_amount,
+        paymentMethod: request.paymentMethod,
+        customerId: request.customerId || undefined,
+        itemCount: request.items.length,
+        cashierName: profile.full_name || 'Unknown',
+      },
+    }).catch(err => logger.warn('[Automation] Failed to emit sale.completed', { error: err.message }))
+
     return {
       success: true,
       receiptData: receiptPayload,
-      saleId: receiptPayload.id
+      saleId: receiptPayload.id,
+      error: redemptionWarning || undefined,
     }
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : 'Unknown error'

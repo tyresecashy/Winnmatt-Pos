@@ -1,8 +1,8 @@
 'use client'
 import { logger } from '@/lib/logger';
 
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { ProductSearch } from '@/components/pos/product-search'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { ProductSearchBar } from '@/components/pos/product-search-bar'
 import { ShoppingCart } from '@/components/pos/shopping-cart'
 import { PaymentPanel } from '@/components/pos/payment-panel'
 import { CustomerLookup } from '@/components/pos/customer-lookup'
@@ -11,16 +11,43 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Kbd } from '@/components/ui/kbd'
-import { MapPin, User, Clock, Receipt } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { formatKSh } from "@/lib/currency"
+import { MapPin, User, Clock, Receipt, Pause, Play, Trash2, Archive, Loader2, Keyboard, RotateCcw, Plus, Package, Shield } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
 import { useToast } from '@/components/ui/use-toast'
-import { getProductsForPOS } from '@/lib/products-actions'
+import { getProductsForPOS, createProduct } from '@/lib/products-actions'
 import { getRedemptionEligibility } from '@/lib/loyalty-actions'
-import { createSale, getSaleById } from '@/lib/sales-actions'
-import { completePaymentAction } from '@/lib/actions/complete-payment-action'
+import { verifySupervisorRole } from '@/lib/auth-helpers'
+import { createSale, getSaleById, holdSale, getHeldSales, resumeHeldSale, cancelHeldSale } from '@/lib/sales-actions'
+import { completePaymentAction, type CompletePaymentPromotion } from '@/lib/actions/complete-payment-action'
+import { PromotionPanel, type AppliedPromotion } from '@/components/pos/promotion-panel'
+import { QuickActionBar } from '@/components/pos/quick-action-bar'
+import { applyPromotionToSale } from '@/lib/promotion-actions'
 import { useReceiptSettings } from '@/hooks/use-receipt-settings'
-import type { SaleItem } from '@/lib/sales-actions'
+import type { SaleItem, HeldSale } from '@/lib/sales-actions'
 import type { SaleDetailsData } from '@/components/receipt-preview'
+
+/** Minimal product shape used in POS product lists. */
+export interface POSProduct {
+  id: string
+  name: string
+  sku: string
+  selling_price?: number
+  purchase_price?: number
+  quantity: number
+  category?: { id: string; name: string; icon?: string } | null
+}
 
 export interface CartItem {
   id: string
@@ -37,6 +64,7 @@ export interface SelectedCustomer {
   email?: string
   type: string
   loyalty_points: number
+  tier?: string
 }
 
 interface LoyaltyRedemptionState {
@@ -51,16 +79,44 @@ interface LoyaltyRedemptionState {
   redemptionDiscount: number
 }
 
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode; fallback?: React.ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: { children: React.ReactNode; fallback?: React.ReactNode }) {
+    super(props)
+    this.state = { hasError: false }
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true }
+  }
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback || (
+        <div className="flex items-center justify-center h-64 text-muted-foreground">
+          <div className="text-center">
+            <p className="text-lg font-medium">Something went wrong</p>
+            <p className="text-sm mt-1">Please refresh the page or contact support.</p>
+          </div>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
 export default function POSPage() {
   const { profile } = useAuth()
   const { toast } = useToast()
   const { settings: receiptSettings } = useReceiptSettings(profile?.branch_id ?? undefined)
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const customerLookupRef = useRef<HTMLButtonElement>(null)
+  const [showShortcuts, setShowShortcuts] = useState(false)
   const productRefreshPromiseRef = useRef<Promise<void> | null>(null)
   const lastProductRefreshAtRef = useRef(0)
   const postSaleRefreshTimeoutRef = useRef<number | null>(null)
   const refreshProductsRef = useRef(refreshProducts)
-  const [allProducts, setAllProducts] = useState<any[]>([])
+  const [allProducts, setAllProducts] = useState<POSProduct[]>([])
   const [productsLoading, setProductsLoading] = useState(true)
   const [cart, setCart] = useState<CartItem[]>([])
   const [searchTerm, setSearchTerm] = useState('')
@@ -69,6 +125,8 @@ export default function POSPage() {
   const [isWholesale, setIsWholesale] = useState(false)
   const [showPayment, setShowPayment] = useState(false)
   const [cartDiscount, setCartDiscount] = useState(0)
+  const [appliedPromotions, setAppliedPromotions] = useState<AppliedPromotion[]>([])
+  const [promotionDiscountCents, setPromotionDiscountCents] = useState(0)
   const [showRecent, setShowRecent] = useState(false)
   const [isProcessingSale, setIsProcessingSale] = useState(false)
   const [fullSaleData, setFullSaleData] = useState<SaleDetailsData | null>(null)
@@ -84,6 +142,27 @@ export default function POSPage() {
     redemptionDiscount: 0,
   })
 
+  // Hold sale state
+  const [showHoldDialog, setShowHoldDialog] = useState(false)
+  const [holdNotes, setHoldNotes] = useState("")
+  const [isHoldingSale, setIsHoldingSale] = useState(false)
+  const [showHeldSales, setShowHeldSales] = useState(false)
+  const [heldSales, setHeldSales] = useState<HeldSale[]>([])
+  const [heldSalesLoading, setHeldSalesLoading] = useState(false)
+  const [heldSalesError, setHeldSalesError] = useState<string | null>(null)
+
+  // Quick product create
+  const [showQuickCreate, setShowQuickCreate] = useState(false)
+  const [quickCreateForm, setQuickCreateForm] = useState({ name: '', sku: '', price: '' })
+  const [quickCreateSaving, setQuickCreateSaving] = useState(false)
+
+  // Price override approval
+  const [pendingPriceOverride, setPendingPriceOverride] = useState<{ productId: string; newPrice: number } | null>(null)
+  const [showApprovalDialog, setShowApprovalDialog] = useState(false)
+  const [approvalPassword, setApprovalPassword] = useState('')
+  const [approvalError, setApprovalError] = useState<string | null>(null)
+  const isSupervisor = profile?.role === 'super_admin' || profile?.role === 'admin'
+
   async function refreshProducts(
     showLoadingState: boolean = false,
     options?: {
@@ -92,11 +171,6 @@ export default function POSPage() {
     }
   ) {
     const branchId = profile?.branch_id
-    if (!branchId) {
-      setAllProducts([])
-      setProductsLoading(false)
-      return
-    }
 
     const minIntervalMs = options?.minIntervalMs ?? 0
     const now = Date.now()
@@ -202,13 +276,13 @@ export default function POSPage() {
   }, [profile?.branch_id])
 
   // Extract unique categories from database products
-  const categories = useMemo(
+  const categories: (string | null)[] = useMemo(
     () =>
       Array.from(
         new Set(
           allProducts
             .map((p) => p.category?.name)
-            .filter(Boolean)
+            .filter((n): n is string => n != null)
         )
       ).sort(),
     [allProducts]
@@ -258,8 +332,12 @@ export default function POSPage() {
     const product = allProducts.find((p) => p.id === productId)
     if (!product) return
     
-    // Prevent adding out-of-stock items
+    // Prevent adding out-of-stock or unpriced items
     if (product.quantity <= 0) return
+    if (product.selling_price == null) return
+
+    const productPrice = product.selling_price
+    const effectivePrice = isWholesale ? Math.round(productPrice * 0.85) : productPrice
 
     setCart((prev) => {
       const existing = prev.find((item) => item.id === productId)
@@ -279,7 +357,7 @@ export default function POSPage() {
         {
           id: product.id,
           name: product.name,
-          price: isWholesale ? Math.round(product.selling_price * 0.85) : product.selling_price,
+          price: effectivePrice,
           quantity: 1,
           discount: 0,
         },
@@ -313,11 +391,96 @@ export default function POSPage() {
   }
 
   const updateItemDiscount = (productId: string, discount: number) => {
+    // For non-supervisor users, price override requires approval
+    if (!isSupervisor && discount > 0) {
+      const item = cart.find((i) => i.id === productId)
+      if (item) {
+        const newEffectivePrice = item.price - discount
+        if (newEffectivePrice < item.price) {
+          setPendingPriceOverride({ productId, newPrice: newEffectivePrice })
+          setApprovalPassword('')
+          setApprovalError(null)
+          setShowApprovalDialog(true)
+          return
+        }
+      }
+    }
     setCart((prev) =>
       prev.map((item) =>
         item.id === productId ? { ...item, discount } : item
       )
     )
+  }
+
+  const handleApprovePriceOverride = async () => {
+    try {
+      const result = await verifySupervisorRole()
+      if (result.isSupervisor) {
+        if (pendingPriceOverride) {
+          setCart((prev) =>
+            prev.map((item) =>
+              item.id === pendingPriceOverride.productId
+                ? { ...item, discount: item.price - pendingPriceOverride.newPrice }
+                : item
+            )
+          )
+        }
+        setShowApprovalDialog(false)
+        setPendingPriceOverride(null)
+        setApprovalPassword('')
+        setApprovalError(null)
+        toast({ title: 'Price Override Approved', description: 'The price change has been approved.' })
+      } else {
+        setApprovalError(result.error || 'Only supervisors can approve price overrides. Please call a supervisor.')
+      }
+    } catch {
+      setApprovalError('Verification failed. Please try again.')
+    }
+  }
+
+  const handleQuickCreate = () => {
+    // Pre-fill SKU and name from current search term
+    setQuickCreateForm({
+      name: searchTerm || '',
+      sku: searchTerm || '',
+      price: '',
+    })
+    setShowQuickCreate(true)
+  }
+
+  const handleQuickCreateSave = async () => {
+    if (!profile?.branch_id || !quickCreateForm.name.trim() || !quickCreateForm.price) return
+    setQuickCreateSaving(true)
+    try {
+      // Create product with minimal fields
+      const result = await createProduct(
+        quickCreateForm.sku.trim() || `Q-${Date.now()}`,
+        quickCreateForm.name.trim(),
+        '',
+        null, // no category - use null not '' to avoid FK violation
+        0, // purchase price
+        parseFloat(quickCreateForm.price),
+        0, // reorder level
+        profile.branch_id,
+        1 // initial stock
+      )
+      if (!result.success) throw new Error(result.error || 'Failed to create product')
+      setShowQuickCreate(false)
+      // Refresh products and add to cart
+      await refreshProducts(true, { force: true })
+      if (result.data?.id) {
+        addToCart(result.data.id, true)
+      }
+      toast({ title: 'Product Created', description: `${quickCreateForm.name.trim()} added to inventory and cart.` })
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to create product',
+        variant: 'destructive',
+      })
+    } finally {
+      setQuickCreateSaving(false)
+    }
   }
 
   const removeFromCart = (productId: string) => {
@@ -332,6 +495,8 @@ export default function POSPage() {
     setCart([])
     setSelectedCustomer(null)
     setCartDiscount(0)
+    setAppliedPromotions([])
+    setPromotionDiscountCents(0)
     // Focus search input after clearing cart
     setTimeout(() => {
       searchInputRef.current?.focus()
@@ -340,8 +505,14 @@ export default function POSPage() {
 
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0)
   const itemDiscounts = cart.reduce((sum, item) => sum + item.discount * item.quantity, 0)
-  const totalDiscount = itemDiscounts + cartDiscount
+  const promotionDiscount = promotionDiscountCents
+  const totalDiscount = itemDiscounts + cartDiscount + promotionDiscount
   const total = Math.max(0, subtotal - totalDiscount)
+
+  const handleAppliedPromotionsChange = (applied: AppliedPromotion[], totalDiscountCents: number) => {
+    setAppliedPromotions(applied)
+    setPromotionDiscountCents(totalDiscountCents)
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -371,7 +542,7 @@ export default function POSPage() {
       try {
         const eligibility = await getRedemptionEligibility(
           selectedCustomer.id,
-          Math.round(total * 100)
+          total
         )
 
         if (cancelled || !eligibility) {
@@ -383,7 +554,7 @@ export default function POSPage() {
             ? Math.min(current.pointsToRedeem, eligibility.maxRedeemablePoints)
             : 0
           const nextDiscount = Math.round(
-            (nextPoints * eligibility.redeemValueCents) / 100
+            nextPoints * eligibility.redeemValueCents
           )
 
           return {
@@ -392,9 +563,7 @@ export default function POSPage() {
             reason: eligibility.reason || null,
             currentBalance: eligibility.currentBalance,
             maxRedeemablePoints: eligibility.maxRedeemablePoints,
-            maxRedeemableDiscount: Math.round(
-              eligibility.maxRedeemableDiscount / 100
-            ),
+            maxRedeemableDiscount: eligibility.maxRedeemableDiscount,
             redeemValueCents: eligibility.redeemValueCents,
             pointsToRedeem: nextPoints,
             redemptionDiscount: nextDiscount,
@@ -446,12 +615,211 @@ export default function POSPage() {
         setCart([])
         setSelectedCustomer(null)
         setCartDiscount(0)
+        setAppliedPromotions([])
+        setPromotionDiscountCents(0)
         setSearchTerm('')
+      }
+      // Ctrl+Enter / Cmd+Enter → open checkout
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault()
+        if (cart.length > 0) {
+          setShowPayment(true)
+        }
+      }
+      // F2 → hold sale (when cart has items)
+      if (e.key === 'F2') {
+        e.preventDefault()
+        if (cart.length > 0) {
+          setShowHoldDialog(true)
+        }
+      }
+      // Ctrl+L / Cmd+L → open customer lookup
+      if ((e.ctrlKey || e.metaKey) && e.key === 'l') {
+        e.preventDefault()
+        customerLookupRef.current?.click()
+      }
+      // F1 → keyboard shortcuts help
+      if (e.key === 'F1') {
+        e.preventDefault()
+        setShowShortcuts((prev) => !prev)
+      }
+
+      // F3 → returns page
+      if (e.key === 'F3') {
+        e.preventDefault()
+        window.location.href = '/returns'
+      }
+      // Ctrl+Shift+P → quick product create
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'P') {
+        e.preventDefault()
+        setQuickCreateForm({ name: searchTerm || '', sku: searchTerm || '', price: '' })
+        setShowQuickCreate(true)
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [showRecent, cart.length])
+  }, [showRecent, cart.length, searchTerm])
+
+  // ─── Hold Sale Handlers ──────────────────────────────────────────────
+
+  const handleHoldSale = async () => {
+    if (!profile?.id || !profile?.branch_id || cart.length === 0) return
+
+    setIsHoldingSale(true)
+    try {
+      const items = cart.map((item) => ({
+        productId: item.id,
+        name: item.name,
+        sku: '',
+        quantity: item.quantity,
+        unitPrice: item.price,
+        discountPercent: item.discount > 0 ? Math.round((item.discount / item.price) * 100) : 0,
+        sellingPrice: item.price,
+      }))
+
+      const result = await holdSale(
+        profile.branch_id,
+        profile.id,
+        items,
+        selectedCustomer?.id || null,
+        subtotal,
+        cartDiscount,
+        total,
+        holdNotes || undefined,
+      )
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to hold sale')
+      }
+
+      // Clear cart for next customer
+      setCart([])
+      setSelectedCustomer(null)
+      setCartDiscount(0)
+      setAppliedPromotions([])
+      setPromotionDiscountCents(0)
+      setShowHoldDialog(false)
+      setHoldNotes("")
+
+      toast({
+        title: 'Sale Placed on Hold',
+        description: `Receipt #${result.receiptNumber}. You can resume it from the Held Sales button.`,
+      })
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to hold sale',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsHoldingSale(false)
+    }
+  }
+
+  const loadHeldSales = async () => {
+    if (!profile?.branch_id) return
+
+    setHeldSalesLoading(true)
+    setHeldSalesError(null)
+    try {
+      const sales = await getHeldSales(profile.branch_id, profile?.id)
+      setHeldSales(sales)
+    } catch (error) {
+      setHeldSalesError('Failed to load held sales')
+    } finally {
+      setHeldSalesLoading(false)
+    }
+  }
+
+  const handleResumeHeldSale = async (sale: HeldSale) => {
+    if (!profile?.branch_id) return
+
+    try {
+      // Skip calling resumeHeldSale if cart is not empty
+      if (cart.length > 0) {
+        toast({
+          title: 'Cart Not Empty',
+          description: 'Clear the current cart first before resuming a held sale.',
+          variant: 'destructive',
+        })
+        return
+      }
+
+      const result = await resumeHeldSale(sale.id, profile.branch_id)
+
+      if (!result.success || !result.heldSale) {
+        throw new Error(result.error || 'Failed to resume held sale')
+      }
+
+      const heldSale = result.heldSale
+
+      // Restore cart items
+      const restoredItems: CartItem[] = heldSale.items.map((item) => ({
+        id: item.product_id,
+        name: item.product.name,
+        price: item.unit_price,
+        quantity: item.quantity,
+        discount: item.unit_price * (item.discount_percent / 100),
+      }))
+      setCart(restoredItems)
+
+      // Restore customer if applicable
+      if (heldSale.customer_id) {
+        setSelectedCustomer({
+          id: heldSale.customer_id,
+          name: heldSale.customer_name || 'Unknown',
+          phone: '',
+          type: 'retail',
+          loyalty_points: 0,
+        })
+      }
+
+      // Restore discount
+      if (heldSale.discount_amount > 0) {
+        setCartDiscount(heldSale.discount_amount)
+      }
+
+      // Close held sales dialog
+      setShowHeldSales(false)
+      setHeldSales([])
+
+      toast({
+        title: 'Sale Resumed',
+        description: `${restoredItems.length} item(s) restored to cart.`,
+      })
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to resume held sale',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  const handleCancelHeldSale = async (saleId: string) => {
+    if (!profile?.branch_id) return
+    if (!window.confirm('Discard this held sale permanently?')) return
+
+    try {
+      const result = await cancelHeldSale(saleId, profile.branch_id)
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to cancel held sale')
+      }
+
+      setHeldSales((prev) => prev.filter((s) => s.id !== saleId))
+      toast({
+        title: 'Held Sale Discarded',
+        description: 'The held sale has been cancelled.',
+      })
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to cancel held sale',
+        variant: 'destructive',
+      })
+    }
+  }
 
   const buildReceiptData = (sale: any): SaleDetailsData => ({
     ...sale,
@@ -468,9 +836,10 @@ export default function POSPage() {
   })
 
   return (
+    <ErrorBoundary>
     <div className="flex flex-col h-[calc(100vh-4rem)]">
       {/* POS Header */}
-      <div role="region" aria-label="Point of Sale header" className="flex items-center justify-between px-4 py-3 bg-card border-b">
+      <div role="region" aria-label="Point of Sale header" className="flex items-center justify-between px-2 sm:px-4 py-2 sm:py-3 bg-card border-b">
         <div className="flex items-center gap-3">
           <div className="h-9 w-9 rounded-lg bg-primary flex items-center justify-center">
             <Receipt className="h-5 w-5 text-primary-foreground" />
@@ -494,7 +863,7 @@ export default function POSPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="hidden md:flex items-center gap-1.5 text-xs text-muted-foreground">
+          <div className="hidden md:flex items-center gap-1.5 text-xs text-muted-foreground pos-header-shortcuts">
             <span className="mr-1">Search:</span>
             <Kbd className="text-[10px]">Ctrl+K</Kbd>
             <span className="mx-1.5">New:</span>
@@ -507,6 +876,37 @@ export default function POSPage() {
           >
             <Clock className="h-4 w-4 mr-2" />
             Recent
+          </Button>
+          {cart.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowHoldDialog(true)}
+            >
+              <Pause className="h-4 w-4 mr-2" />
+              Hold Sale
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setShowHeldSales(true)
+              void loadHeldSales()
+            }}
+          >
+            <Archive className="h-4 w-4 mr-2" />
+            Held
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            asChild
+          >
+            <a href="/returns">
+              <RotateCcw className="h-4 w-4 mr-2" />
+              Returns
+            </a>
           </Button>
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/50">
             <User className="h-4 w-4 text-muted-foreground" />
@@ -523,24 +923,21 @@ export default function POSPage() {
         </div>
       </div>
 
-      {/* Main Content - Single Column: Search + Cart */}
-      <div className="flex flex-1 overflow-hidden gap-0">
-        {/* Left: Search Bar + Results */}
-        <div role="region" aria-label="Product search and selection" className="flex-1 flex flex-col bg-card border-r overflow-hidden max-w-md">
+      {/* Main Content - Fullscreen Cart */}
+      <div className="flex-1 flex flex-col overflow-hidden relative">
+        {/* Search Bar + Customer - compact single row */}
+        <div className="px-2 sm:px-4 py-1.5 bg-card border-b flex-shrink-0">
           {productsLoading && allProducts.length === 0 ? (
-            <div className="p-4 space-y-3">
-              <Skeleton className="h-10 w-full" />
+            <div className="max-w-2xl mx-auto space-y-2">
+              <Skeleton className="h-9 w-full" />
               <div className="flex gap-2">
                 {Array.from({ length: 4 }).map((_, i) => (
-                  <Skeleton key={i} className="h-7 w-16 rounded-full" />
+                  <Skeleton key={i} className="h-6 w-16 rounded-full" />
                 ))}
               </div>
-              {Array.from({ length: 5 }).map((_, i) => (
-                <Skeleton key={i} className="h-16 w-full" />
-              ))}
             </div>
           ) : (
-            <ProductSearch
+            <ProductSearchBar
               ref={searchInputRef}
               searchTerm={searchTerm}
               onSearchChange={setSearchTerm}
@@ -551,36 +948,93 @@ export default function POSPage() {
               categories={categories}
               filteredProducts={filteredProducts}
               onAddToCart={addToCart}
+              onQuickCreate={handleQuickCreate}
             />
           )}
         </div>
 
-        {/* Right: Cart & Checkout (Primary Focus) */}
-        <div role="region" aria-label="Cart and checkout" className="flex-1 flex flex-col bg-card overflow-hidden min-h-0">
-          <CustomerLookup
-            selectedCustomer={selectedCustomer}
-            onSelectCustomer={setSelectedCustomer}
-            loyaltyRedeemValue={loyaltyRedemption.redeemValueCents}
-          />
-
-          {/* Cart Section - Grows to fill available space */}
-          <div className="flex-1 overflow-hidden min-h-0">
-            <ShoppingCart
-              items={cart}
-              onUpdateQuantity={updateQuantity}
-              onUpdateDiscount={updateItemDiscount}
-              onRemoveItem={removeFromCart}
-              onClearCart={clearCart}
-              onHoldSale={() => {
-                // Hold sale feature disabled for this phase
-              }}
-              allProducts={allProducts}
-              searchInputRef={searchInputRef}
+        {/* Cart - fills remaining space */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Customer bar - compact */}
+          <div className="flex items-center gap-2 sm:gap-3 px-2 sm:px-4 py-1.5 border-b flex-shrink-0">
+            <CustomerLookup
+              selectedCustomer={selectedCustomer}
+              onSelectCustomer={setSelectedCustomer}
+              loyaltyRedeemValue={loyaltyRedemption.redeemValueCents}
+              searchTriggerRef={customerLookupRef}
             />
           </div>
 
-          {/* Payment Section - Fixed height */}
-          <div className="flex-shrink-0">
+          {/* Scrollable content: Cart Items + Quick Actions + Payment */}
+          <div className="flex-1 overflow-y-auto min-h-0">
+            {/* Cart Items - main content */}
+            <div className="min-h-[200px]">
+              <ShoppingCart
+                items={cart}
+                onUpdateQuantity={updateQuantity}
+                onUpdateDiscount={updateItemDiscount}
+                onRemoveItem={removeFromCart}
+                onClearCart={clearCart}
+                onHoldSale={() => setShowHoldDialog(true)}
+                allProducts={allProducts}
+                searchInputRef={searchInputRef}
+              />
+            </div>
+
+            {/* Quick Actions Toolbar */}
+            <div className="px-3 py-1.5 border-t">
+              <QuickActionBar
+                cartEmpty={cart.length === 0}
+                hasCustomer={selectedCustomer !== null}
+                isSupervisor={isSupervisor}
+                onHold={() => setShowHoldDialog(true)}
+                onDuplicate={() => {
+                  if (cart.length === 0) return
+                  // Duplicate all cart items (add them again)
+                  setCart(prev => {
+                    const newCart = [...prev]
+                    for (const item of prev) {
+                      newCart.push({ ...item })
+                    }
+                    return newCart
+                  })
+                  toast({ title: 'Cart Duplicated', description: `Added ${cart.length} items to cart` })
+                }}
+                onConvertToQuote={() => toast({ title: 'Coming Soon', description: 'Quote conversion in development' })}
+                onVoid={() => {
+                  if (cart.length === 0) return
+                  setCart([])
+                  setCartDiscount(0)
+                  setAppliedPromotions([])
+                  setPromotionDiscountCents(0)
+                  setSelectedCustomer(null)
+                  setLoyaltyRedemption({
+                    loading: false, eligible: false, reason: null, currentBalance: 0,
+                    maxRedeemablePoints: 0, maxRedeemableDiscount: 0, redeemValueCents: 50,
+                    pointsToRedeem: 0, redemptionDiscount: 0,
+                  })
+                  toast({ title: 'Cart Cleared', description: 'Cart has been voided' })
+                }}
+                onEmailReceipt={() => toast({ title: 'Coming Soon', description: 'Email receipt in development' })}
+                onSMSReceipt={() => toast({ title: 'Coming Soon', description: 'SMS receipt in development' })}
+                onReprint={() => {
+                  // Trigger the browser print dialog for the current page
+                  window.print()
+                  toast({ title: 'Print Dialog', description: 'Opening print dialog for receipt...' })
+                }}
+                onManagerApproval={() => toast({ title: 'Approval', description: 'Request sent to manager' })}
+              />
+            </div>
+
+            {/* Promotions Section */}
+            <PromotionPanel
+              cartTotalCents={subtotal}
+              cartItemCategoryIds={cart.map(item => allProducts.find(p => p.id === item.id)?.category?.id).filter(Boolean) as string[]}
+              onAppliedPromotionsChange={handleAppliedPromotionsChange}
+              disabled={isProcessingSale}
+            />
+
+            {/* Payment Section */}
             <PaymentPanel
             subtotal={subtotal}
             itemDiscounts={itemDiscounts}
@@ -595,6 +1049,8 @@ export default function POSPage() {
               setCart([])
               setSelectedCustomer(null)
               setCartDiscount(0)
+              setAppliedPromotions([])
+              setPromotionDiscountCents(0)
               setLoyaltyRedemption({
                 loading: false,
                 eligible: false,
@@ -614,6 +1070,7 @@ export default function POSPage() {
                 searchInputRef.current?.focus()
               }, 0)
             }}
+            promotionDiscount={promotionDiscountCents}
             onCompletePayment={async (receiptNumber, paymentMethod, options) => {
               if (paymentMethod === 'mpesa' && options?.skipSaleCreation && options?.saleId) {
                 const fullSale = await getSaleById(options.saleId)
@@ -622,10 +1079,69 @@ export default function POSPage() {
                   throw new Error('Failed to load the confirmed M-Pesa sale. Please check recent sales.')
                 }
 
+                // Apply promotions after M-Pesa payment confirmed
+                if (appliedPromotions.length > 0) {
+                  for (const promo of appliedPromotions) {
+                    try {
+                      await applyPromotionToSale(
+                        promo.id,
+                        options.saleId,
+                        promo.discountCents,
+                        promo.couponCode,
+                      )
+                    } catch (error) {
+                      logger.warn('[POS] Failed to apply promotion to M-Pesa sale:', {
+                        saleId: options.saleId,
+                        promotionId: promo.id,
+                        error: String(error),
+                      })
+                    }
+                  }
+                }
+
                 setFullSaleData(buildReceiptData(fullSale))
 
                 toast({
                   title: 'M-Pesa Payment Confirmed',
+                  description: `Receipt #${fullSale.receipt_number} is ready`,
+                  variant: 'default',
+                })
+
+                return
+              }
+
+              // ── Card skip-sale-creation (post-Stripe-confirmation) ──
+              if (paymentMethod === 'card' && options?.skipSaleCreation && options?.saleId) {
+                const fullSale = await getSaleById(options.saleId)
+
+                if (!fullSale || !fullSale.id) {
+                  throw new Error('Failed to load the confirmed card sale. Please check recent sales.')
+                }
+
+                // Apply promotions after card payment confirmed
+                if (appliedPromotions.length > 0) {
+                  for (const promo of appliedPromotions) {
+                    try {
+                      await applyPromotionToSale(
+                        promo.id,
+                        options.saleId,
+                        promo.discountCents,
+                        promo.couponCode,
+                      )
+                    } catch (error) {
+                      logger.warn('[POS] Failed to apply promotion to card sale:', {
+                        saleId: options.saleId,
+                        promotionId: promo.id,
+                        error: String(error),
+                      })
+                    }
+                  }
+                }
+
+                setFullSaleData(buildReceiptData(fullSale))
+
+                toast({
+                  title: 'Card Payment Confirmed',
                   description: `Receipt #${fullSale.receipt_number} is ready`,
                   variant: 'default',
                 })
@@ -702,20 +1218,60 @@ export default function POSPage() {
                   return
                 }
 
-                if (paymentMethod !== 'cash') {
+                if (paymentMethod === 'card') {
+                  const createResult = await createSale(
+                    profile.branch_id,
+                    profile.id,
+                    saleItems,
+                    'card',
+                    selectedCustomer?.id || undefined,
+                    cartDiscount,
+                    'POS Sale',
+                    'pending'
+                  )
+
+                  if (!createResult.success || !createResult.sale?.id) {
+                    throw new Error(createResult.error || 'Failed to create pending card sale')
+                  }
+
+                  options?.onSaleCreated?.(
+                    createResult.sale.id,
+                    createResult.receiptNumber || createResult.sale.receipt_number
+                  )
+
+                  return
+                }
+
+                if (paymentMethod !== 'cash' && !options?.splits) {
                   throw new Error('Unsupported payment method')
                 }
+
+                const promoPayload: CompletePaymentPromotion[] | undefined = appliedPromotions.length > 0
+                  ? appliedPromotions.map((p) => ({
+                      promotionId: p.id,
+                      discountCents: p.discountCents,
+                      couponCode: p.couponCode,
+                    }))
+                  : undefined
+
+                // Handle split payments
+                const paymentSplits = options?.splits as Array<{ method: string; amount: number }> | undefined
+                const effectivePaymentMethod = paymentSplits && paymentSplits.length > 0
+                  ? paymentSplits.reduce((max, s) => s.amount > max.amount ? s : max).method
+                  : 'cash'
 
                 const paymentResult = await completePaymentAction({
                   branchId: profile.branch_id,
                   cashierId: profile.id,
                   items: saleItems,
-                  paymentMethod: 'cash',
+                  paymentMethod: effectivePaymentMethod as 'cash' | 'card' | 'bank_transfer' | 'cheque' | 'credit',
                   customerId: selectedCustomer?.id,
                   cartDiscount,
                   receiptSettings: (receiptSettings ?? {}) as Record<string, unknown>,
                   redemptionPoints: options?.redemption?.pointsToRedeem || undefined,
                   redemptionDiscount: options?.redemption?.discountApplied || undefined,
+                  promotions: promoPayload,
+                  paymentSplits: paymentSplits as Array<{ method: 'cash' | 'card' | 'bank_transfer' | 'cheque' | 'credit' | 'mpesa'; amount: number; reference?: string }> | undefined,
                 })
 
                 if (!paymentResult.success) {
@@ -765,7 +1321,6 @@ export default function POSPage() {
               }
             }}
             customer={selectedCustomer}
-            branchId={profile?.branch_id ?? undefined}
             loyaltyRedemption={loyaltyRedemption}
             onRedemptionPointsChange={(points) => {
               setLoyaltyRedemption((current) => {
@@ -786,7 +1341,7 @@ export default function POSPage() {
                   ...current,
                   pointsToRedeem: safePoints,
                   redemptionDiscount: Math.round(
-                    (safePoints * current.redeemValueCents) / 100
+                    safePoints * current.redeemValueCents
                   ),
                 }
               })
@@ -794,14 +1349,373 @@ export default function POSPage() {
           />
           </div>
         </div>
-
-        {/* Recent Transactions Sidebar */}
         {showRecent && (
-          <div role="region" aria-label="Recent transactions">
+          <div className="absolute right-0 top-0 bottom-0 z-40">
             <RecentTransactions onClose={() => setShowRecent(false)} />
           </div>
         )}
       </div>
+
+      {/* Hold Sale Dialog */}
+      <Dialog open={showHoldDialog} onOpenChange={(open) => { if (!open && !isHoldingSale) { setShowHoldDialog(false); setHoldNotes("") } }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <div className="h-8 w-8 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                <Pause className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              </div>
+              Hold Sale
+            </DialogTitle>
+            <DialogDescription>
+              Save the current cart so you can resume it later. The cart will be cleared
+              for the next customer.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-2">
+            <div className="rounded-lg bg-muted/30 p-3 space-y-1 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Items</span>
+                <span>{cart.length} lines, {cart.reduce((s, i) => s + i.quantity, 0)} units</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Total</span>
+                <span className="font-semibold">{formatKSh(total)}</span>
+              </div>
+              {selectedCustomer && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Customer</span>
+                  <span>{selectedCustomer.name}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="holdNotes">Notes (optional)</Label>
+              <Input
+                id="holdNotes"
+                placeholder="e.g. Customer went to get more money"
+                value={holdNotes}
+                onChange={(e) => setHoldNotes(e.target.value)}
+                disabled={isHoldingSale}
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => { setShowHoldDialog(false); setHoldNotes("") }}
+              disabled={isHoldingSale}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleHoldSale}
+              disabled={isHoldingSale}
+            >
+              {isHoldingSale ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Holding Sale...
+                </>
+              ) : (
+                <>
+                  <Pause className="h-4 w-4 mr-2" />
+                  Hold Sale
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Held Sales Dialog — Enhanced */}
+      <Dialog open={showHeldSales} onOpenChange={setShowHeldSales}>
+        <DialogContent className="sm:max-w-xl max-h-[85vh] flex flex-col overflow-hidden p-0">
+          <DialogHeader className="px-6 pt-6 pb-2">
+            <DialogTitle className="flex items-center gap-2">
+              <div className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center">
+                <Archive className="h-4 w-4" />
+              </div>
+              Held Sales
+            </DialogTitle>
+            <DialogDescription>
+              {heldSales.length} sale{heldSales.length !== 1 ? 's' : ''} on hold. Click Resume to restore to the cart.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto px-6 pb-6 min-h-0">
+            {heldSalesLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : heldSalesError ? (
+              <div className="text-center py-8 text-sm text-destructive">
+                {heldSalesError}
+              </div>
+            ) : heldSales.length === 0 ? (
+              <div className="text-center py-8">
+                <Archive className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
+                <p className="text-sm text-muted-foreground">No sales on hold</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {[...heldSales]
+                  .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                  .map((sale) => {
+                    const heldDuration = getHeldDuration(sale.created_at)
+                    return (
+                      <div
+                        key={sale.id}
+                        className="p-4 rounded-lg border bg-card hover:bg-muted/30 transition-colors"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-start gap-3 flex-1 min-w-0">
+                            {/* Customer Avatar */}
+                            <div className={`rounded-full p-2 shrink-0 ${
+                              heldDuration === 'critical' ? 'bg-red-100' :
+                              heldDuration === 'long' ? 'bg-amber-100' : 'bg-blue-100'
+                            }`}>
+                              <User className={`h-4 w-4 ${
+                                heldDuration === 'critical' ? 'text-red-600' :
+                                heldDuration === 'long' ? 'text-amber-600' : 'text-blue-600'
+                              }`} />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-mono text-xs text-muted-foreground">
+                                  {sale.receipt_number}
+                                </span>
+                                <HeldTimeBadge createdAt={sale.created_at} />
+                                {sale.customer_name && (
+                                  <Badge variant="secondary" className="text-[10px]">
+                                    {sale.customer_name}
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className="text-sm font-medium mt-1">
+                                {sale.items.length} item{sale.items.length !== 1 ? 's' : ''}
+                                {' '}&middot; <span className="font-semibold">{formatKSh(sale.total_amount)}</span>
+                              </p>
+                              {sale.hold_notes && (
+                                <p className="text-xs text-muted-foreground mt-1 italic line-clamp-1">
+                                  &ldquo;{sale.hold_notes}&rdquo;
+                                </p>
+                              )}
+                              <p className="text-[10px] text-muted-foreground mt-1">
+                                {new Date(sale.created_at).toLocaleString('en-KE')}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            <Button
+                              size="sm"
+                              onClick={() => handleResumeHeldSale(sale)}
+                              title="Resume this sale"
+                            >
+                              <Play className="h-3.5 w-3.5 mr-1" />
+                              Resume
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleCancelHeldSale(sale.id)}
+                              className="text-muted-foreground hover:text-destructive"
+                              title="Discard this held sale"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Keyboard Shortcuts Help ────────────────────────────────────── */}
+      <Dialog open={showShortcuts} onOpenChange={setShowShortcuts}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <div className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center">
+                <Keyboard className="h-4 w-4" />
+              </div>
+              Keyboard Shortcuts
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            {[
+              { keys: 'Ctrl + K', label: 'Focus product search' },
+              { keys: 'Ctrl + L', label: 'Open customer lookup' },
+              { keys: 'Ctrl + N', label: 'New transaction (clear cart)' },
+              { keys: 'Ctrl + Enter', label: 'Open checkout / payment' },
+              { keys: 'Ctrl + Shift + P', label: 'Quick product create' },
+              { keys: 'F2', label: 'Hold current sale' },
+              { keys: 'F3', label: 'Open Returns page' },
+              { keys: 'F1', label: 'Toggle this help' },
+              { keys: 'Esc', label: 'Close sidebar / dialogs' },
+            ].map((shortcut) => (
+              <div key={shortcut.keys} className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">{shortcut.label}</span>
+                <kbd className="px-2 py-1 text-xs font-mono font-semibold rounded border bg-muted">
+                  {shortcut.keys}
+                </kbd>
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowShortcuts(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Quick Product Create Dialog ────────────────────────────────── */}
+      <Dialog open={showQuickCreate} onOpenChange={(open) => { if (!open && !quickCreateSaving) setShowQuickCreate(false) }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <div className="h-8 w-8 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                <Package className="h-4 w-4 text-green-600 dark:text-green-400" />
+              </div>
+              Quick Create Product
+            </DialogTitle>
+            <DialogDescription>
+              Create a new product and add it to the current cart immediately.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="qc-name">Product Name</Label>
+              <Input
+                id="qc-name"
+                placeholder="e.g. Fresh Milk 1L"
+                value={quickCreateForm.name}
+                onChange={(e) => setQuickCreateForm((prev) => ({ ...prev, name: e.target.value }))}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="qc-sku">SKU / Barcode</Label>
+                <Input
+                  id="qc-sku"
+                  placeholder="Auto-generated if empty"
+                  value={quickCreateForm.sku}
+                  onChange={(e) => setQuickCreateForm((prev) => ({ ...prev, sku: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="qc-price">Selling Price (KES)</Label>
+                <Input
+                  id="qc-price"
+                  type="number"
+                  step="0.5"
+                  min="0"
+                  placeholder="e.g. 150"
+                  value={quickCreateForm.price}
+                  onChange={(e) => setQuickCreateForm((prev) => ({ ...prev, price: e.target.value }))}
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowQuickCreate(false)} disabled={quickCreateSaving}>
+              Cancel
+            </Button>
+            <Button onClick={handleQuickCreateSave} disabled={quickCreateSaving || !quickCreateForm.name.trim() || !quickCreateForm.price}>
+              {quickCreateSaving ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Creating...</>
+              ) : (
+                <><Plus className="h-4 w-4 mr-2" /> Create & Add to Cart</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Price Override Approval Dialog ──────────────────────────────── */}
+      <Dialog open={showApprovalDialog} onOpenChange={(open) => { if (!open) { setShowApprovalDialog(false); setPendingPriceOverride(null); setApprovalError(null) } }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <div className="h-8 w-8 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                <Shield className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              </div>
+              Price Override Requires Approval
+            </DialogTitle>
+            <DialogDescription>
+              {pendingPriceOverride && (
+                <>A supervisor must approve the price change to {formatKSh(pendingPriceOverride.newPrice)}.</>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="rounded-lg bg-muted/30 p-3 text-sm space-y-1">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Original Price</span>
+                <span>{pendingPriceOverride ? formatKSh(cart.find(i => i.id === pendingPriceOverride.productId)?.price || 0) : '—'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">New Price</span>
+                <span className="font-semibold text-amber-600">{pendingPriceOverride ? formatKSh(pendingPriceOverride.newPrice) : '—'}</span>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="approval-pin">Supervisor PIN</Label>
+              <Input
+                id="approval-pin"
+                type="password"
+                placeholder="Enter supervisor PIN"
+                value={approvalPassword}
+                onChange={(e) => { setApprovalPassword(e.target.value); setApprovalError(null) }}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleApprovePriceOverride() }}
+                autoFocus
+              />
+              {approvalError && <p className="text-xs text-destructive">{approvalError}</p>}
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => { setShowApprovalDialog(false); setPendingPriceOverride(null); setApprovalError(null) }}>
+              Cancel
+            </Button>
+            <Button onClick={handleApprovePriceOverride} disabled={!approvalPassword}>
+              <Shield className="h-4 w-4 mr-2" />
+              Approve Override
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
+    </ErrorBoundary>
   )
+}
+
+// ─── Held Sale Helpers ─────────────────────────────────────────────────────────
+
+function getHeldDuration(createdAt: string): 'recent' | 'long' | 'critical' {
+  const diff = Date.now() - new Date(createdAt).getTime()
+  const hours = diff / (1000 * 60 * 60)
+  if (hours > 4) return 'critical'
+  if (hours > 1) return 'long'
+  return 'recent'
+}
+
+function HeldTimeBadge({ createdAt }: { createdAt: string }) {
+  const diff = Date.now() - new Date(createdAt).getTime()
+  const mins = Math.floor(diff / (1000 * 60))
+  const hours = Math.floor(diff / (1000 * 60 * 60))
+
+  let label: string
+  let variant: 'default' | 'secondary' | 'outline' | 'destructive'
+
+  if (mins < 1) { label = 'Just now'; variant = 'default' }
+  else if (mins < 60) { label = `${mins}m ago`; variant = 'default' }
+  else if (hours < 24) { label = `${hours}h ${mins % 60}m ago`; variant = 'secondary' }
+  else { const days = Math.floor(hours / 24); label = `${days}d ago`; variant = 'destructive' }
+
+  return <Badge variant={variant} className="text-[9px] px-1.5 py-0 h-4">{label}</Badge>
 }

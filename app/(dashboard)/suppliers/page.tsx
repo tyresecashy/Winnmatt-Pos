@@ -2,6 +2,7 @@
 import { logger } from '@/lib/logger';
 
 import { useEffect, useState, useDeferredValue } from 'react'
+import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -29,7 +30,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
-import { Plus, Search, Truck, Phone, Mail, MoreHorizontal, Pencil, Trash2, AlertCircle, Filter, DollarSign } from 'lucide-react'
+import { Plus, Search, SearchX, Truck, Phone, Mail, MoreHorizontal, Pencil, Trash2, AlertCircle, Filter, DollarSign, ExternalLink } from 'lucide-react'
 import { getSuppliers, createSupplier, updateSupplier, deleteSupplier, type Supplier } from '@/lib/suppliers-actions'
 import { formatKSh } from '@/lib/currency'
 import {
@@ -46,6 +47,7 @@ import { useToast } from '@/components/ui/use-toast'
 
 export default function SuppliersPage() {
   const { toast } = useToast()
+  const router = useRouter()
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -275,7 +277,7 @@ export default function SuppliersPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6 fade-in">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Suppliers</h1>
@@ -356,8 +358,21 @@ export default function SuppliersPage() {
         </CardHeader>
         <CardContent>
           {filteredSuppliers.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              {suppliers.length === 0 ? 'No suppliers yet. Add one to get started.' : 'No suppliers match your search.'}
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
+                {suppliers.length === 0
+                  ? <Truck className="h-6 w-6 text-muted-foreground" />
+                  : <SearchX className="h-6 w-6 text-muted-foreground" />
+                }
+              </div>
+              <p className="text-lg font-medium">
+                {suppliers.length === 0 ? 'No suppliers yet' : 'No suppliers match your search'}
+              </p>
+              <p className="text-sm text-muted-foreground mt-1">
+                {suppliers.length === 0
+                  ? 'Add your first supplier to start managing purchases.'
+                  : 'Try different search terms or clear your filters.'}
+              </p>
             </div>
           ) : (
             <Table>
@@ -448,6 +463,10 @@ export default function SuppliersPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => router.push(`/suppliers/${supplier.id}`)}>
+                              <ExternalLink className="mr-2 h-4 w-4" />
+                              View Details
+                            </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => openEditDialog(supplier)}>
                               <Pencil className="mr-2 h-4 w-4" />
                               Edit

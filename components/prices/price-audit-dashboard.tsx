@@ -83,11 +83,12 @@ export function PriceAuditDashboard() {
         const data = await response.json()
         setAnomalies(data.anomalies || [])
         setPage(1)
-      } catch (error: any) {
-        setError(error.message || 'Failed to load price anomalies')
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error)
+        setError(message)
         toast({
           title: 'Error',
-          description: error.message,
+          description: message,
           variant: 'destructive',
         })
       } finally {
@@ -137,10 +138,10 @@ export function PriceAuditDashboard() {
 
       setDialogOpen(false)
       setRetryCount((c) => c + 1)
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: 'Error',
-        description: error.message,
+        description: error instanceof Error ? error.message : String(error),
         variant: 'destructive',
       })
     } finally {

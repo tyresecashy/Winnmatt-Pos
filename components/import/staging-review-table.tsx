@@ -47,6 +47,7 @@ import {
   rejectStagingProduct,
   updateStagingPrice,
 } from '@/lib/staging-actions'
+import type { PriceAnomaly, ProductDeduplication } from '@/lib/product-ingestion.types'
 
 interface StagingProduct {
   product_id: string
@@ -59,8 +60,8 @@ interface StagingProduct {
   suggested_selling_price?: number
   review_status: string
   confidence_score: number
-  anomalies: any[]
-  deduplications: any[]
+  anomalies: PriceAnomaly[]
+  deduplications: ProductDeduplication[]
   created_at: string
 }
 
@@ -96,10 +97,10 @@ export function StagingReviewTable({
       })
       setApproveAlert(null)
       onApprove?.()
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: 'Approval failed',
-        description: error.message,
+        description: error instanceof Error ? error.message : String(error),
         variant: 'destructive',
       })
     } finally {
@@ -120,10 +121,10 @@ export function StagingReviewTable({
       setRejectAlert(null)
       setRejectReason('')
       onReject?.()
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: 'Rejection failed',
-        description: error.message,
+        description: error instanceof Error ? error.message : String(error),
         variant: 'destructive',
       })
     } finally {
@@ -149,10 +150,10 @@ export function StagingReviewTable({
         return updated
       })
       onApprove?.()
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: 'Update failed',
-        description: error.message,
+        description: error instanceof Error ? error.message : String(error),
         variant: 'destructive',
       })
     } finally {
@@ -299,7 +300,7 @@ export function StagingReviewTable({
                           .filter((a) => a.severity === 'critical')
                           .map((a) => (
                             <p key={a.id} className="mb-1">
-                              {a.message}
+                              {a.description}
                             </p>
                           ))}
                       </div>
@@ -312,7 +313,7 @@ export function StagingReviewTable({
                         <p className="font-semibold mb-1">Potential Duplicates:</p>
                         {product.deduplications.slice(0, 3).map((d) => (
                           <p key={d.id} className="mb-1">
-                            {d.match_type} ({d.confidence}%)
+                            {d.dedup_method} ({d.confidence}%)
                           </p>
                         ))}
                       </div>

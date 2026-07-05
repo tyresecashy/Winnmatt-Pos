@@ -318,7 +318,7 @@ export function SalesHistoryClient({
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6 fade-in">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Sales History</h1>
@@ -395,8 +395,21 @@ export function SalesHistoryClient({
         </CardHeader>
         <CardContent>
           {filteredSales.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              No sales found matching your criteria
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
+                {sales.length === 0
+                  ? <Receipt className="h-6 w-6 text-muted-foreground" />
+                  : <Search className="h-6 w-6 text-muted-foreground" />
+                }
+              </div>
+              <p className="text-lg font-medium">
+                {sales.length === 0 ? 'No sales yet' : 'No sales match your filters'}
+              </p>
+              <p className="text-sm text-muted-foreground mt-1">
+                {sales.length === 0
+                  ? 'Sales will appear here once you start processing transactions.'
+                  : 'Try different dates or search terms.'}
+              </p>
             </div>
           ) : (
             <Table>

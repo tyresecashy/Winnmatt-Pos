@@ -8,6 +8,35 @@ import {
   resolveAuthorizedBranchId,
 } from '@/lib/auth-helpers'
 import { supabaseAdmin } from '@/lib/supabase-server'
+import { emitEvent } from '@/lib/automation/events'
+
+/** Minimal product row shape for inventory/display. */
+interface ProductRow {
+  id: string
+  sku: string
+  name: string
+  selling_price?: number
+  purchase_price?: number
+  reorder_level?: number
+  category_id?: string
+  category?: { id: string; name: string; icon?: string } | null
+  inventory?: Array<{ quantity: number }>
+  quantity?: number
+}
+
+/** Minimal inventory row shape. */
+interface InventoryRow {
+  id: string
+  product_id: string
+  branch_id: string
+  quantity: number
+  min_stock?: number
+  max_stock?: number
+  reorder_point?: number
+  created_at?: string
+  updated_at?: string
+  product?: ProductRow | null
+}
 
 export async function getCategories() {
   try {
@@ -33,19 +62,26 @@ export async function getProductsForPOS(branchId: string) {
     }
 
     const profile = authResult.profile
-    const effectiveBranchId =
-      profile.role === 'owner' ? branchId : profile.branch_id
+    let effectiveBranchId =
+      profile.role === 'super_admin' || profile.role === 'admin' ? branchId || profile.branch_id : profile.branch_id
+
+    // For admin users without a branch, find the first available branch
+    if (!effectiveBranchId && (profile.role === 'super_admin' || profile.role === 'admin')) {
+      const { data: firstBranch } = await supabaseAdmin
+        .from('branches')
+        .select('id')
+        .eq('status', 'active')
+        .limit(1)
+        .single()
+      effectiveBranchId = firstBranch?.id || null
+    }
 
     if (!effectiveBranchId) {
-      logger.warn('[POS] Product fetch denied: no branch context', {
-        userId: profile.id,
-        role: profile.role,
-        requestedBranchId: branchId || null,
-      })
+      logger.warn('[POS] No branch available')
       return []
     }
 
-    if (profile.role !== 'owner' && branchId && branchId !== profile.branch_id) {
+    if (profile.role !== 'super_admin' && branchId && branchId !== profile.branch_id) {
       logger.warn('[POS] Ignoring mismatched branch id for product fetch', {
         userId: profile.id,
         requestedBranchId: branchId,
@@ -64,18 +100,24 @@ export async function getProductsForPOS(branchId: string) {
         reorder_level,
         category_id,
         category:categories(id, name, icon),
-        inventory!inner(quantity)
+        inventory!inner(branch_id, quantity)
       `)
       .eq('inventory.branch_id', effectiveBranchId)
       .order('name')
 
     if (error) throw error
     
-    // Transform the data to include inventory quantity at root level
-    return data?.map((product: any) => ({
-      ...product,
-      quantity: product.inventory?.[0]?.quantity || 0,
-    })) || []
+    // Transform the data to normalize category
+    return (data || []).map((product) => {
+      const category = Array.isArray(product.category)
+        ? product.category[0] ?? null
+        : (product.category ?? null)
+      return {
+        ...product,
+        quantity: Array.isArray(product.inventory) ? (product.inventory[0]?.quantity || 0) : ((product.inventory as any)?.quantity || 0),
+        category,
+      }
+    })
   } catch (error) {
     logger.error('Error fetching products for POS:', error)
     return []
@@ -201,15 +243,15 @@ export async function getInventoryForBranch(branchId: string) {
         if (productError) {
           logger.error('[INVENTORY] Failed to fetch products:', productError.message)
           // Return inventory without product details as fallback
-          return (inventoryRows as any[]).map(row => ({ ...row, product: null }))
+          return (inventoryRows as InventoryRow[]).map(row => ({ ...row, product: null }))
         }
 
         // Merge products back into inventory rows
-        const productMap: any = Object.fromEntries(
-          (products || []).map((p: any) => [p.id, p])
+        const productMap = Object.fromEntries(
+          (products || []).map((p) => [p.id, p as unknown as ProductRow])
         )
 
-        const result = inventoryRows.map((invRow: any) => ({
+        const result = inventoryRows.map((invRow: InventoryRow) => ({
           ...invRow,
           product: productMap[invRow.product_id] || null,
         }))
@@ -233,7 +275,7 @@ export async function getInventoryForProduct(productId: string) {
       .from('inventory')
       .select(`
         *,
-        branch:branches(id, name, code)
+        branch:branches!branch_id(id, name, code)
       `)
       .eq('product_id', productId)
 
@@ -367,11 +409,14 @@ export async function createProduct(
       `)
       .single()
 
-    if (productError) throw productError
+    if (productError) {
+      logger.error('[Phase1] Error creating product in DB:', { sku, name, categoryId, error: productError })
+      throw new Error(`Database error creating product: ${productError.message} (sku=${sku})`)
+    }
 
     // Step 2: Validate branchId is not empty
     if (!branchId || branchId.trim() === '') {
-      logger.error('Error: branchId is required for inventory creation')
+      logger.error('[Phase1] Error: branchId is required for inventory creation')
       return { success: false, error: 'Branch ID is required to create product inventory' }
     }
 
@@ -388,6 +433,14 @@ export async function createProduct(
       logger.error('Error creating inventory row:', inventoryError)
       return { success: false, error: 'Product created but inventory row could not be created' }
     }
+
+    // Emit product.created event
+    await emitEvent('product.created', {
+      product_id: productData.id,
+      name: productData.name,
+      sku: productData.sku,
+      branch_id: branchId,
+    }, { source: 'inventory', entity_type: 'product', entity_id: productData.id })
 
     return { success: true, data: productData }
   } catch (error) {

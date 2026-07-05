@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     .eq('id', user.id)
     .single()
 
-  if (userData?.role !== 'admin') {
+  if (userData?.role !== 'admin' && userData?.role !== 'super_admin') {
     return NextResponse.json({ error: 'Admin only' }, { status: 403 })
   }
 

@@ -1,7 +1,7 @@
 /* eslint-disable no-console */
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
-import { cookies } from 'next/headers'
 import { SUPABASE_AUTH_STORAGE_KEY } from '@/lib/supabase'
+import type { Database } from '@/lib/types/database'
 
 function requireEnv(name: string, value: string | undefined): string {
   if (!value || value.includes('placeholder')) {
@@ -85,6 +85,7 @@ export function createClient(request?: Request) {
 }
 
 export async function createServerActionClient() {
+  const { cookies } = await import('next/headers')
   const cookieStore = await cookies()
   const sessionCookie = cookieStore.get(SUPABASE_AUTH_STORAGE_KEY)?.value
   const accessToken = extractAccessTokenFromSessionCookie(sessionCookie)
@@ -93,6 +94,7 @@ export async function createServerActionClient() {
 }
 
 export async function getServerActionAccessToken() {
+  const { cookies } = await import('next/headers')
   const cookieStore = await cookies()
   const sessionCookie = cookieStore.get(SUPABASE_AUTH_STORAGE_KEY)?.value
   return extractAccessTokenFromSessionCookie(sessionCookie)
@@ -102,7 +104,7 @@ export function getServerAuthVerifierClient() {
   return sharedServerAuthVerifierClient
 }
 
-export const supabaseAdmin = createSupabaseClient(supabaseUrl, supabaseServiceRoleKey, {
+export const supabaseAdmin = createSupabaseClient<Database>(supabaseUrl, supabaseServiceRoleKey, {
   auth: {
     autoRefreshToken: false,
     persistSession: false,

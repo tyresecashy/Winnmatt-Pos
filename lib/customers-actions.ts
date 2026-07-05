@@ -3,6 +3,7 @@ import { logger } from '@/lib/logger';
 
 import { authenticateServerAction, authorizePOSProfile } from '@/lib/auth-helpers'
 import { supabaseAdmin } from '@/lib/supabase-server'
+import { emitEvent } from '@/lib/automation'
 
 export interface Customer {
   id: string
@@ -13,6 +14,13 @@ export interface Customer {
   loyalty_points: number
   credit_limit: number
   credit_balance: number
+  tier: 'bronze' | 'silver' | 'gold' | 'platinum' | 'vip'
+  birthday: string | null
+  tags: string[]
+  notes: string | null
+  total_lifetime_spend_cents: number
+  total_visits: number
+  last_purchase_date: string | null
   created_at: string
   updated_at: string
 }
@@ -22,6 +30,18 @@ export interface CustomerWithStats extends Customer {
   purchase_count: number
   last_visit?: string
   visit_count: number
+}
+
+export interface CustomerFormData {
+  name: string
+  phone?: string
+  email?: string
+  type: 'retail' | 'wholesale' | 'business'
+  credit_limit: number
+  tier: 'bronze' | 'silver' | 'gold' | 'platinum' | 'vip'
+  birthday: string | null
+  notes: string | null
+  tags: string[]
 }
 
 interface DuplicateCustomerMatch {
@@ -111,7 +131,8 @@ export async function getCustomerById(customerId: string) {
  */
 export async function searchCustomers(query: string) {
   try {
-    if (!query.trim()) return []
+    const normalized = query.trim().replace(/\s+/g, ' ')
+    if (!normalized) return []
 
     const authResult = await authenticateServerAction()
     if (!authResult.success || !authResult.profile) {
@@ -127,8 +148,8 @@ export async function searchCustomers(query: string) {
 
     const { data, error } = await supabaseAdmin
       .from('customers')
-      .select('id, name, phone, email, type, loyalty_points, updated_at, created_at')
-      .or(`name.ilike.%${query}%,phone.ilike.%${query}%,email.ilike.%${query}%`)
+      .select('id, name, phone, email, type, loyalty_points, tier, tags, birthday, updated_at, created_at')
+      .or(`name.ilike.%${normalized}%,phone.ilike.%${normalized}%,email.ilike.%${normalized}%`)
       .order('name', { ascending: true })
       .order('updated_at', { ascending: false })
       .limit(20)
@@ -168,7 +189,13 @@ export async function createCustomer(
   type: 'retail' | 'wholesale' | 'business' = 'retail',
   phone?: string,
   email?: string,
-  creditLimit: number = 0
+  creditLimit: number = 0,
+  additionalFields?: {
+    tier?: 'bronze' | 'silver' | 'gold' | 'platinum' | 'vip'
+    birthday?: string | null
+    notes?: string | null
+    tags?: string[]
+  }
 ) {
   try {
     const authResult = await authenticateServerAction()
@@ -246,11 +273,30 @@ export async function createCustomer(
         credit_limit: creditLimit,
         credit_balance: 0,
         loyalty_points: 0,
+        tier: additionalFields?.tier || 'bronze',
+        birthday: additionalFields?.birthday || null,
+        notes: additionalFields?.notes || null,
+        tags: additionalFields?.tags || [],
       })
       .select()
       .single()
 
     if (error) throw error
+
+    // Emit automation event (fire-and-forget)
+    emitEvent({
+      eventType: 'customer.created',
+      source: 'customer',
+      entityType: 'customer',
+      entityId: data.id,
+      payload: {
+        customerId: data.id,
+        customerName: data.name,
+        customerType: data.type,
+        branchId: '',
+        createdBy: authResult.profile.id,
+      },
+    }).catch(err => logger.warn('[Automation] Failed to emit customer.created', { error: err.message }))
 
     return {
       success: true,
@@ -277,6 +323,10 @@ export async function updateCustomer(
     email?: string
     type?: 'retail' | 'wholesale' | 'business'
     credit_limit?: number
+    tier?: 'bronze' | 'silver' | 'gold' | 'platinum' | 'vip'
+    birthday?: string | null
+    notes?: string | null
+    tags?: string[]
   }
 ) {
   try {
@@ -284,7 +334,7 @@ export async function updateCustomer(
       return { success: false, error: 'Customer name cannot be empty' }
     }
 
-    const cleanUpdates: any = {
+    const cleanUpdates: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
     }
 
@@ -293,6 +343,10 @@ export async function updateCustomer(
     if (updates.email !== undefined) cleanUpdates.email = updates.email?.trim() || null
     if (updates.type) cleanUpdates.type = updates.type
     if (updates.credit_limit !== undefined) cleanUpdates.credit_limit = updates.credit_limit
+    if (updates.tier) cleanUpdates.tier = updates.tier
+    if (updates.birthday !== undefined) cleanUpdates.birthday = updates.birthday || null
+    if (updates.notes !== undefined) cleanUpdates.notes = updates.notes || null
+    if (updates.tags !== undefined) cleanUpdates.tags = updates.tags
 
     const { data, error } = await supabaseAdmin
       .from('customers')
@@ -344,7 +398,7 @@ export async function getCustomersWithStats() {
     }
 
     // Calculate stats per customer
-    const statsMap: Record<string, any> = {}
+    const statsMap: Record<string, { total_purchases: number; purchase_count: number }> = {}
     stats?.forEach((sale) => {
       if (!statsMap[sale.customer_id]) {
         statsMap[sale.customer_id] = {
@@ -390,7 +444,7 @@ export async function getCustomerPurchases(customerId: string, limit: number = 1
     return data?.map((sale) => ({
       ...sale,
       item_count:
-        sale.sale_items?.reduce((sum: number, item: any) => sum + (item.quantity || 0), 0) || 0,
+        sale.sale_items?.reduce((sum: number, item: { quantity?: number }) => sum + (item.quantity || 0), 0) || 0,
     })) || []
   } catch (error) {
     logger.error('Error fetching customer purchases:', error)

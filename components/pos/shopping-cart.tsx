@@ -22,7 +22,7 @@ interface ShoppingCartProps {
   onRemoveItem: (productId: string) => void
   onClearCart: () => void
   onHoldSale: () => void
-  allProducts?: any[]
+  allProducts?: Array<{ id: string; quantity: number }>
   searchInputRef?: RefObject<HTMLInputElement | null>
 }
 
@@ -95,6 +95,20 @@ export function ShoppingCart({
           )}
         </div>
         <div className="flex items-center gap-1">
+          {items.length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onHoldSale}
+              className="text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30"
+            >
+              <svg className="h-4 w-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="6" y="4" width="4" height="16" />
+                <rect x="14" y="4" width="4" height="16" />
+              </svg>
+              Hold
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="sm"

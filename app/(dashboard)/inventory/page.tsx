@@ -23,7 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Search, AlertTriangle, Package, Loader2, Edit2, History, Lock } from "lucide-react"
+import { Search, SearchX, AlertTriangle, Package, Loader2, Edit2, History, Lock, Warehouse } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 import { getInventoryForBranch } from "@/lib/products-actions"
 import { StockAdjustmentDialog } from "@/components/inventory/stock-adjustment-dialog"
@@ -49,7 +49,7 @@ export default function InventoryPage() {
   const deferredSearchTerm = useDeferredValue(searchTerm)
   const hasInventoryRef = useRef(false)
 
-  const canManageInventory = ["owner", "admin", "manager"].includes(profile?.role || "")
+  const canManageInventory = ["super_admin", "admin", "manager"].includes(profile?.role || "")
 
   useEffect(() => {
     hasInventoryRef.current = inventory.length > 0
@@ -148,7 +148,7 @@ export default function InventoryPage() {
 
   if (!profile.branch_id) {
     return (
-      <div className="p-6 space-y-6">
+      <div className="p-6 space-y-6 fade-in">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Inventory</h1>
           <p className="text-muted-foreground">Track stock levels by branch</p>
@@ -158,7 +158,7 @@ export default function InventoryPage() {
           <CardHeader>
             <CardTitle className="text-base text-yellow-900">Branch context required</CardTitle>
             <CardDescription className="text-yellow-800">
-              {profile.role === "owner"
+              {profile.role === "super_admin"
                 ? "Inventory is branch-specific. Choose or assign a branch before loading stock levels."
                 : "Your account must be assigned to a branch before inventory can be loaded."}
             </CardDescription>
@@ -171,7 +171,7 @@ export default function InventoryPage() {
   const activeBranchId = profile.branch_id
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6 fade-in">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Inventory</h1>
@@ -186,14 +186,14 @@ export default function InventoryPage() {
           <CardContent className="flex items-start gap-3 pt-6 text-sm text-blue-900">
             <Lock className="mt-0.5 h-4 w-4 shrink-0" />
             <p>
-              Stock adjustments are limited to owners, admins, and managers. You can still review live stock levels and movement history.
+              Stock adjustments are limited to super admins, admins, and managers. You can still review live stock levels and movement history.
             </p>
           </CardContent>
         </Card>
       )}
 
       <div className="grid gap-4 md:grid-cols-4">
-        <Card>
+        <Card className="card-hover">
           <CardHeader className="pb-2">
             <CardDescription>Total Stock Value</CardDescription>
             <CardTitle className="text-2xl">{formatKSh(totalStockValue)}</CardTitle>
@@ -202,7 +202,7 @@ export default function InventoryPage() {
             <p className="text-xs text-muted-foreground">Based on cost prices</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="card-hover">
           <CardHeader className="pb-2">
             <CardDescription>Total Items</CardDescription>
             <CardTitle className="text-2xl">
@@ -213,7 +213,7 @@ export default function InventoryPage() {
             <p className="text-xs text-muted-foreground">Units in stock</p>
           </CardContent>
         </Card>
-        <Card className="border-yellow-200">
+        <Card className="card-hover border-yellow-200">
           <CardHeader className="pb-2">
             <CardDescription className="flex items-center gap-1">
               <AlertTriangle className="h-3 w-3 text-yellow-600" />
@@ -227,7 +227,7 @@ export default function InventoryPage() {
             <p className="text-xs text-muted-foreground">Items below reorder level</p>
           </CardContent>
         </Card>
-        <Card className="border-destructive/30">
+        <Card className="card-hover border-destructive/30">
           <CardHeader className="pb-2">
             <CardDescription className="flex items-center gap-1 text-destructive">
               <Package className="h-3 w-3" />
@@ -283,6 +283,18 @@ export default function InventoryPage() {
                     <Skeleton key={i} className="h-16 w-full" />
                   ))}
                 </div>
+              ) : filteredInventory.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
+                    <Warehouse className="h-6 w-6 text-muted-foreground" />
+                  </div>
+                  <p className="text-lg font-medium">No products found</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {searchTerm || alertFilter !== 'all'
+                      ? 'Try adjusting your search or filters.'
+                      : 'No inventory items available.'}
+                  </p>
+                </div>
               ) : (
                 <Table>
                   <TableHeader>
@@ -296,14 +308,7 @@ export default function InventoryPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredInventory.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={6} className="py-8 text-center">
-                          <p className="text-muted-foreground">No products found</p>
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      filteredInventory.map((item) => {
+                    {filteredInventory.map((item) => {
                         const reorderLevel = item.product?.reorder_level || 10
                         const status = item.quantity === 0
                           ? { label: "Out of Stock", color: "destructive" as const, className: "" }
@@ -368,7 +373,7 @@ export default function InventoryPage() {
                           </TableRow>
                         )
                       })
-                    )}
+                    }
                   </TableBody>
                 </Table>
               )}

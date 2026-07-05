@@ -35,7 +35,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Plus, Search, MoreHorizontal, Pencil, Shield, ShieldCheck, User, Key, MapPin, AlertCircle, Loader2, XCircle } from "lucide-react"
+import { Plus, Search, MoreHorizontal, Pencil, Shield, ShieldCheck, User, Key, MapPin, AlertCircle, Loader2, XCircle, SearchX } from "lucide-react"
 import { formatDate } from "@/lib/date-time"
 import { getUsers, resetUserPassword, deactivateUser, reactivateUser } from "@/lib/user-management"
 import { AddUserDialog } from "@/components/users/add-user-dialog"
@@ -219,7 +219,7 @@ export default function UsersPage() {
   // Access denied screen
   if (!isAdmin) {
     return (
-      <div className="p-6 space-y-6">
+      <div className="p-6 space-y-6 fade-in">
         <h1 className="text-2xl font-bold tracking-tight">Users & Roles</h1>
         <Alert className="border-red-200 bg-red-50">
           <AlertCircle className="h-4 w-4 text-red-600" />
@@ -255,7 +255,7 @@ export default function UsersPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6 fade-in">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Users & Roles</h1>
@@ -326,9 +326,21 @@ export default function UsersPage() {
             </CardHeader>
             <CardContent>
               {filteredUsers.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
-                  <User className="h-8 w-8 mb-2 opacity-50" />
-                  <p>No users found</p>
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
+                    {users.length === 0
+                      ? <User className="h-6 w-6 text-muted-foreground" />
+                      : <SearchX className="h-6 w-6 text-muted-foreground" />
+                    }
+                  </div>
+                  <p className="text-lg font-medium">
+                    {users.length === 0 ? 'No users yet' : 'No users match your search'}
+                  </p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {users.length === 0
+                      ? 'Invite users to collaborate on this workspace.'
+                      : 'Try different search terms.'}
+                  </p>
                 </div>
               ) : (
                 <Table>

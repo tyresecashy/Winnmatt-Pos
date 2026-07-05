@@ -65,7 +65,7 @@ export async function processBatch(batchId: string) {
       deduplication: dedup,
       pricing: pricing,
     }
-  } catch (error: any) {
+    } catch (error: unknown) {
     logger.error('Batch processing failed:', error)
 
     // Mark batch as failed
@@ -74,7 +74,7 @@ export async function processBatch(batchId: string) {
       .update({ status: 'failed' })
       .eq('id', batchId)
 
-    throw new Error(`Processing failed: ${error.message}`)
+    throw new Error(`Processing failed: ${error instanceof Error ? error.message : String(error)}`)
   }
 }
 
@@ -294,9 +294,9 @@ export async function publishBatchToLive(batchId: string, publisherUserId: strin
       total: publishedCount + updatedCount,
       success: true,
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error('Publish failed:', error)
-    throw new Error(`Publish failed: ${error.message}`)
+    throw new Error(`Publish failed: ${error instanceof Error ? error.message : String(error)}`)
   }
 }
 

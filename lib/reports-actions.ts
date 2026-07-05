@@ -221,7 +221,7 @@ export async function getInventoryValueByCategory(branchId: string) {
     const productIds = items.map((i) => i.product_id)
     const { data: products } = await supabaseAdmin
       .from('products')
-      .select('id, name, category, cost_price')
+      .select('id, name, category_id, purchase_price')
       .in('id', productIds)
 
     const productMap: Record<string, any> = {}
@@ -234,7 +234,7 @@ export async function getInventoryValueByCategory(branchId: string) {
     items.forEach((item) => {
       const product = productMap[item.product_id]
       const category = product?.category || 'Other'
-      const itemValue = (item.quantity * (product?.cost_price || 0)) || 0
+      const itemValue = (item.quantity * (product?.purchase_price || 0)) || 0
 
       if (!categoryMap[category]) {
         categoryMap[category] = { value: 0, count: 0 }

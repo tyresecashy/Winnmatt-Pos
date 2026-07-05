@@ -23,8 +23,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Plus, Search, Phone, Loader2 } from "lucide-react"
+import { Plus, Search, SearchX, Phone, Loader2, Users, X } from "lucide-react"
 import { getCustomersWithStats } from "@/lib/customers-actions"
+import { getSegments, getCustomerSegments } from "@/lib/segment-actions"
+import type { Segment } from "@/lib/segment-actions"
 import { CustomerFormDialog } from "@/components/customers/customer-form-dialog"
 import { CustomerDetailsDialog } from "@/components/customers/customer-details-dialog"
 
@@ -40,6 +42,14 @@ const customerTypeColors: Record<string, string> = {
   retail: "bg-blue-100 text-blue-700",
   wholesale: "bg-green-100 text-green-700",
   business: "bg-purple-100 text-purple-700",
+}
+
+const tierColors: Record<string, string> = {
+  bronze: "bg-amber-100 text-amber-800",
+  silver: "bg-slate-100 text-slate-700",
+  gold: "bg-yellow-100 text-yellow-800",
+  platinum: "bg-teal-100 text-teal-800",
+  vip: "bg-purple-100 text-purple-800",
 }
 
 export default function CustomersPage() {
@@ -75,10 +85,43 @@ export default function CustomersPage() {
     }
   }, [])
 
+  // ─── Segments ────────────────────────────────────────────────────────────────
+  const [segments, setSegments] = useState<Segment[]>([])
+  const [customerSegmentsMap, setCustomerSegmentsMap] = useState<Record<string, Segment[]>>({})
+  const [segmentFilter, setSegmentFilter] = useState<string>("all")
+
+  useEffect(() => {
+    void (async () => {
+      const segs = await getSegments()
+      setSegments(segs)
+    })()
+  }, [])
+
+  const loadCustomerSegments = useCallback(async (customersList: any[]) => {
+    if (customersList.length === 0) return
+    const results = await Promise.allSettled(
+      customersList.map((c) => getCustomerSegments(c.id))
+    )
+    const map: Record<string, Segment[]> = {}
+    customersList.forEach((c, i) => {
+      const r = results[i]
+      if (r.status === 'fulfilled' && r.value.length > 0) {
+        map[c.id] = r.value
+      }
+    })
+    setCustomerSegmentsMap(map)
+  }, [])
+
   useEffect(() => {
     const timer = setTimeout(() => void loadCustomers())
     return () => clearTimeout(timer)
   }, [loadCustomers])
+
+  useEffect(() => {
+    if (customers.length > 0) {
+      void loadCustomerSegments(customers)
+    }
+  }, [customers, loadCustomerSegments])
 
   const filteredCustomers = useMemo(() => {
     const normalizedSearch = deferredSearchTerm.trim().toLowerCase()
@@ -91,9 +134,16 @@ export default function CustomersPage() {
         (customer.email && customer.email.toLowerCase().includes(normalizedSearch))
 
       const matchesType = typeFilter === "all" || customer.type === typeFilter
-      return matchesSearch && matchesType
+
+      const customerSegs = customerSegmentsMap[customer.id] || []
+      const matchesSegment =
+        segmentFilter === "all" ||
+        (segmentFilter === "none" && customerSegs.length === 0) ||
+        customerSegs.some((s) => s.id === segmentFilter)
+
+      return matchesSearch && matchesType && matchesSegment
     })
-  }, [customers, deferredSearchTerm, typeFilter])
+  }, [customers, deferredSearchTerm, typeFilter, segmentFilter, customerSegmentsMap])
 
   const counts = useMemo(() => {
     return customers.reduce(
@@ -129,7 +179,7 @@ export default function CustomersPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6 fade-in">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Customers</h1>
@@ -192,7 +242,7 @@ export default function CustomersPage() {
               />
             </div>
             <Select value={typeFilter} onValueChange={setTypeFilter}>
-              <SelectTrigger className="w-[150px]">
+              <SelectTrigger className="w-[140px]">
                 <SelectValue placeholder="Type" />
               </SelectTrigger>
               <SelectContent>
@@ -200,6 +250,20 @@ export default function CustomersPage() {
                 <SelectItem value="retail">Retail</SelectItem>
                 <SelectItem value="wholesale">Wholesale</SelectItem>
                 <SelectItem value="business">Business</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={segmentFilter} onValueChange={setSegmentFilter}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue placeholder="Segment" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Segments</SelectItem>
+                <SelectItem value="none">No Segment</SelectItem>
+                {segments.map((seg) => (
+                  <SelectItem key={seg.id} value={seg.id}>
+                    {seg.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground whitespace-nowrap">
@@ -214,6 +278,23 @@ export default function CustomersPage() {
                 <Skeleton key={i} className="h-16 w-full" />
               ))}
             </div>
+          ) : filteredCustomers.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
+                {customers.length === 0
+                  ? <Users className="h-6 w-6 text-muted-foreground" />
+                  : <SearchX className="h-6 w-6 text-muted-foreground" />
+                }
+              </div>
+              <p className="text-lg font-medium">
+                {customers.length === 0 ? 'No customers yet' : 'No customers match your search'}
+              </p>
+              <p className="text-sm text-muted-foreground mt-1">
+                {customers.length === 0
+                  ? 'Add your first customer to start tracking purchases.'
+                  : 'Try different search terms or clear your filters.'}
+              </p>
+            </div>
           ) : (
             <Table>
               <TableHeader>
@@ -221,6 +302,8 @@ export default function CustomersPage() {
                   <TableHead>Customer</TableHead>
                   <TableHead>Phone</TableHead>
                   <TableHead>Type</TableHead>
+                  <TableHead>Tier</TableHead>
+                  <TableHead>Segments</TableHead>
                   <TableHead className="text-right">Total Spent</TableHead>
                   <TableHead className="text-center">Purchases</TableHead>
                   <TableHead className="text-right">Points</TableHead>
@@ -228,13 +311,7 @@ export default function CustomersPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredCustomers.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8">
-                      <p className="text-muted-foreground">No customers found</p>
-                    </TableCell>
-                  </TableRow>
-                ) : (
+                {
                   filteredCustomers.map((customer) => (
                     <TableRow key={customer.id}>
                       <TableCell>
@@ -273,6 +350,32 @@ export default function CustomersPage() {
                           {customer.type}
                         </Badge>
                       </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className={tierColors[customer.tier] || tierColors.bronze}
+                        >
+                          {customer.tier ? customer.tier.charAt(0).toUpperCase() + customer.tier.slice(1) : "Bronze"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1 max-w-[180px]">
+                          {(customerSegmentsMap[customer.id] || []).slice(0, 3).map((seg) => (
+                            <span
+                              key={seg.id}
+                              className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium"
+                              style={{ backgroundColor: seg.color + '20', color: seg.color }}
+                            >
+                              {seg.name}
+                            </span>
+                          ))}
+                          {(customerSegmentsMap[customer.id] || []).length > 3 && (
+                            <span className="text-[10px] text-muted-foreground">
+                              +{customerSegmentsMap[customer.id].length - 3}
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell className="text-right font-medium">
                         {formatKSh(customer.total_purchases || 0)}
                       </TableCell>
@@ -302,10 +405,10 @@ export default function CustomersPage() {
                       </TableCell>
                     </TableRow>
                   ))
-                )}
-              </TableBody>
-            </Table>
-          )}
+                    }
+                  </TableBody>
+                </Table>
+              )}
         </CardContent>
       </Card>
 

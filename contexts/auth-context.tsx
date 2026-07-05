@@ -10,7 +10,7 @@ export interface UserProfile {
   email: string
   full_name: string
   branch_id: string | null
-  role: 'owner' | 'admin' | 'manager' | 'cashier'
+  role: 'super_admin' | 'admin' | 'manager' | 'cashier'
   status: 'active' | 'inactive'
   created_at: string
   updated_at: string
@@ -109,6 +109,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return false
       }
 
+      if (response.status === 401) {
+        // Session expired or invalid — user needs to log in again
+        logger.warn('⚠️  [AUTH] Session expired or invalid (401) for:', { userEmail })
+        setProfile(null)
+        setAuthState('unauthenticated')
+        setProvisioningError(null)
+        return false
+      }
+
       if (response.status === 403) {
         logger.warn('⚠️  [AUTH] User account is inactive:', { userEmail })
         setProfile(null)
@@ -130,8 +139,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       logger.error('❌ [AUTH] Error loading profile:', error)
       setProfile(null)
-      setAuthState('provisioning_error')
-      setProvisioningError('Failed to load your account profile. Please try again.')
+      setAuthState('unauthenticated')
+      setProvisioningError(null)
       return false
     }
   }

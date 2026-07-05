@@ -9,6 +9,7 @@ import { LowStockAlerts } from "@/components/dashboard/low-stock-alerts"
 import { RecentTransactions } from "@/components/dashboard/recent-transactions"
 import { SeasonalInsights } from "@/components/dashboard/seasonal-insights"
 import { PaymentBreakdown } from "@/components/dashboard/payment-breakdown"
+import { RecentAutomations } from "@/components/dashboard/recent-automations"
 import { Button } from '@/components/ui/button'
 import { RefreshCw } from 'lucide-react'
 
@@ -24,7 +25,7 @@ export default function DashboardPage() {
   }, [])
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6 fade-in">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
@@ -64,7 +65,7 @@ export default function DashboardPage() {
         <div className="lg:col-span-2">
           <RecentTransactions key={`txns-${refreshKey}`} />
         </div>
-        <SeasonalInsights key={`seasonal-${refreshKey}`} />
+        <RecentAutomations key={`automations-${refreshKey}`} />
       </div>
     </div>
   )

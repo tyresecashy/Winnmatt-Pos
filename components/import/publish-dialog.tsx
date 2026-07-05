@@ -82,10 +82,10 @@ export function PublishDialog({
         setOpen(false)
         onPublishComplete?.()
       }, 3000)
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: 'Publish failed',
-        description: error.message,
+        description: error instanceof Error ? error.message : String(error),
         variant: 'destructive',
       })
     } finally {

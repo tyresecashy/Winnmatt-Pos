@@ -4,9 +4,29 @@ import { logger } from '@/lib/logger';
 import { supabaseAdmin } from '@/lib/supabase-server'
 import type { UserProfile } from '@/lib/db.types'
 
+/** Shape returned by the users + branches Supabase query */
+interface UserRow {
+  id: string
+  email: string
+  full_name: string
+  role: string
+  status: string
+  branch_id: string | null
+  created_at: string
+  updated_at: string
+  branch: { id: string; name: string; code: string } | null
+}
+
+/** Minimal branch shape */
+interface BranchInfo {
+  id: string
+  name: string
+  code: string
+}
+
 /**
  * User Management Server Functions
- * Updated to support Owner role (owner > admin > manager > cashier)
+ * Updated to support Super Admin role (super_admin > admin > manager > cashier)
  * All functions enforce proper role-based access control
  * All use service role key to bypass RLS
  */
@@ -34,8 +54,8 @@ export async function getBranches(): Promise<Array<{
 
 export async function getUsers(userRole: string): Promise<UserProfile[]> {
   // Owner or Admin can view all users
-  if (!['owner', 'admin'].includes(userRole)) {
-    throw new Error('Unauthorized: Only owner and admins can view users')
+  if (!['super_admin', 'admin'].includes(userRole)) {
+    throw new Error('Unauthorized: Only super admin and admins can view users')
   }
 
   const { data, error } = await supabaseAdmin
@@ -49,7 +69,7 @@ export async function getUsers(userRole: string): Promise<UserProfile[]> {
       branch_id,
       created_at,
       updated_at,
-      branch:branches(id, name, code)
+      branch:branches!branch_id(id, name, code)
     `)
     .order('created_at', { ascending: false })
 
@@ -58,14 +78,14 @@ export async function getUsers(userRole: string): Promise<UserProfile[]> {
     throw new Error(`Failed to fetch users: ${error.message}`)
   }
 
-  return (data as any[]).map(row => {
-    const branch = row.branch as any
+  return (data as unknown as UserRow[]).map(row => {
+    const branch = row.branch
     return {
       id: row.id,
       email: row.email,
       full_name: row.full_name,
-      role: row.role,
-      status: row.status,
+      role: row.role as 'super_admin' | 'admin' | 'manager' | 'cashier',
+      status: row.status as 'active' | 'inactive',
       branch_id: row.branch_id,
       created_at: row.created_at,
       updated_at: row.updated_at,
@@ -82,8 +102,8 @@ export async function getUsers(userRole: string): Promise<UserProfile[]> {
  * Get single user by ID (owner or admin only)
  */
 export async function getUserById(userId: string, userRole: string): Promise<UserProfile | null> {
-  if (!['owner', 'admin'].includes(userRole)) {
-    throw new Error('Unauthorized: Only owner and admins can view users')
+  if (!['super_admin', 'admin'].includes(userRole)) {
+    throw new Error('Unauthorized: Only super admin and admins can view users')
   }
 
   const { data, error } = await supabaseAdmin
@@ -97,7 +117,7 @@ export async function getUserById(userId: string, userRole: string): Promise<Use
       branch_id,
       created_at,
       updated_at,
-      branch:branches(id, name, code)
+      branch:branches!branch_id(id, name, code)
     `)
     .eq('id', userId)
     .single()
@@ -110,9 +130,10 @@ export async function getUserById(userId: string, userRole: string): Promise<Use
     throw new Error(`Failed to fetch user: ${error.message}`)
   }
 
-  const branch = data.branch as any
+  const userRow = data as unknown as UserRow
+  const branch = userRow.branch
   return {
-    id: data.id,
+    id: userRow.id,
     email: data.email,
     full_name: data.full_name,
     role: data.role,
@@ -132,13 +153,13 @@ export async function getUserById(userId: string, userRole: string): Promise<Use
  * Create new user: Auth account + profile entry
  *
  * Authorization rules:
- * - Only Owner can create Owner accounts
- * - Only Owner/Admin can create Admin accounts
+ * - Only Super Admin can create Super Admin accounts
+ * - Only Super Admin/Admin can create Admin accounts
  * - Admin can create Manager/Cashier for their branch
  *
  * Constraints:
- * - Owner accounts must have NULL branch_id
- * - Non-owner accounts must have a branch_id
+ * - Super Admin accounts must have NULL branch_id
+ * - Non-super-admin accounts must have a branch_id
  *
  * Process:
  * 1. Validate permissions based on role being created
@@ -152,23 +173,23 @@ export async function createUser(
   userRole: string,
   email: string,
   fullName: string,
-  role: 'owner' | 'admin' | 'manager' | 'cashier',
+  role: 'super_admin' | 'admin' | 'manager' | 'cashier',
   branchId: string | null,
   password: string
 ): Promise<{
   user: UserProfile
 }> {
   // Validate permission based on role being created
-  if (role === 'owner' && userRole !== 'owner') {
-    throw new Error('Unauthorized: Only owner can create owner accounts')
+  if (role === 'super_admin' && userRole !== 'super_admin') {
+    throw new Error('Unauthorized: Only super admin can create super admin accounts')
   }
 
-  if (role === 'admin' && !['owner', 'admin'].includes(userRole)) {
-    throw new Error('Unauthorized: Only owner and admins can create admin accounts')
+  if (role === 'admin' && !['super_admin', 'admin'].includes(userRole)) {
+    throw new Error('Unauthorized: Only super admin and admins can create admin accounts')
   }
 
-  if (!['owner', 'admin'].includes(userRole)) {
-    throw new Error('Unauthorized: Only owner and admins can create users')
+  if (!['super_admin', 'admin'].includes(userRole)) {
+    throw new Error('Unauthorized: Only super admin and admins can create users')
   }
 
   // Validate inputs
@@ -176,18 +197,18 @@ export async function createUser(
     throw new Error('Missing required fields')
   }
 
-  if (!['owner', 'admin', 'manager', 'cashier'].includes(role)) {
+  if (!['super_admin', 'admin', 'manager', 'cashier'].includes(role)) {
     throw new Error('Invalid role')
   }
 
-  // Owner accounts must have NULL branch
-  if (role === 'owner' && branchId) {
-    throw new Error('Owner accounts cannot be assigned to a branch')
+  // Super Admin accounts must have NULL branch
+  if (role === 'super_admin' && branchId) {
+    throw new Error('Super admin accounts cannot be assigned to a branch')
   }
 
-  // Non-owner accounts must have a branch
-  if (role !== 'owner' && !branchId) {
-    throw new Error('Non-owner accounts must be assigned to a branch')
+  // Non-super-admin accounts must have a branch
+  if (role !== 'super_admin' && !branchId) {
+    throw new Error('Non-super-admin accounts must be assigned to a branch')
   }
 
   if (password.length < 8) {
@@ -231,7 +252,7 @@ export async function createUser(
         branch_id,
         created_at,
         updated_at,
-        branch:branches(id, name, code)
+        branch:branches!branch_id(id, name, code)
       `
       )
       .single()
@@ -247,7 +268,7 @@ export async function createUser(
       throw new Error(`Failed to create user profile: ${profileError.message}`)
     }
 
-    const branch = profileData.branch as any
+    const branch = (profileData as unknown as UserRow).branch
     logger.info(`[USER-MANAGEMENT] Created user: ${email} with role ${role}`)
     
     return {
@@ -279,21 +300,21 @@ export async function createUser(
  * Cannot update: email (tied to Supabase Auth)
  * 
  * Authorization rules:
- * - Only Owner can promote/demote to/from Owner
- * - Only Owner/Admin can change other users
+ * - Only Super Admin can promote/demote to/from Super Admin
+ * - Only Super Admin/Admin can change other users
  */
 export async function updateUser(
   userId: string,
   userRole: string,
   updates: {
     full_name?: string
-    role?: 'owner' | 'admin' | 'manager' | 'cashier'
+    role?: 'super_admin' | 'admin' | 'manager' | 'cashier'
     branch_id?: string | null
     status?: 'active' | 'inactive'
   }
 ): Promise<UserProfile> {
-  if (!['owner', 'admin'].includes(userRole)) {
-    throw new Error('Unauthorized: Only owner and admins can update users')
+  if (!['super_admin', 'admin'].includes(userRole)) {
+    throw new Error('Unauthorized: Only super admin and admins can update users')
   }
 
   if (!userId) {
@@ -301,26 +322,26 @@ export async function updateUser(
   }
 
   // Validate role change
-  if (updates.role && !['owner', 'admin', 'manager', 'cashier'].includes(updates.role)) {
+  if (updates.role && !['super_admin', 'admin', 'manager', 'cashier'].includes(updates.role)) {
     throw new Error('Invalid role')
   }
 
-  // Only owner can create/change owner role
-  if (updates.role === 'owner' && userRole !== 'owner') {
-    throw new Error('Only owner can assign owner role')
+  // Only super admin can create/change super admin role
+  if (updates.role === 'super_admin' && userRole !== 'super_admin') {
+    throw new Error('Only super admin can assign super admin role')
   }
 
-  // If changing to owner, clear branch_id
-  if (updates.role === 'owner') {
+  // If changing to super admin, clear branch_id
+  if (updates.role === 'super_admin') {
     updates.branch_id = null
   }
 
-  // If changing to non-owner and no branch provided, reject
-  if (updates.role && updates.role !== 'owner' && !updates.branch_id) {
-    throw new Error('Non-owner accounts must be assigned to a branch')
+  // If changing to non-super-admin and no branch provided, reject
+  if (updates.role && updates.role !== 'super_admin' && !updates.branch_id) {
+    throw new Error('Non-super-admin accounts must be assigned to a branch')
   }
 
-  const updateData: any = {}
+  const updateData: Record<string, unknown> = {}
   if (updates.full_name !== undefined) updateData.full_name = updates.full_name
   if (updates.role !== undefined) updateData.role = updates.role
   if (updates.branch_id !== undefined) updateData.branch_id = updates.branch_id
@@ -341,7 +362,7 @@ export async function updateUser(
       branch_id,
       created_at,
       updated_at,
-      branch:branches(id, name, code)
+      branch:branches!branch_id(id, name, code)
     `
     )
     .single()
@@ -351,16 +372,17 @@ export async function updateUser(
     throw new Error(`Failed to update user: ${error.message}`)
   }
 
-  const branch = data.branch as any
+  const userRow = data as unknown as UserRow
+  const branch = userRow.branch
   return {
-    id: data.id,
-    email: data.email,
-    full_name: data.full_name,
-    role: data.role,
-    status: data.status,
-    branch_id: data.branch_id,
-    created_at: data.created_at,
-    updated_at: data.updated_at,
+    id: userRow.id,
+    email: userRow.email,
+    full_name: userRow.full_name,
+    role: userRow.role,
+    status: userRow.status,
+    branch_id: userRow.branch_id,
+    created_at: userRow.created_at,
+    updated_at: userRow.updated_at,
     branch: branch ? {
       id: branch.id,
       name: branch.name,
@@ -377,19 +399,19 @@ export async function deactivateUser(
   userId: string,
   userRole: string
 ): Promise<{ success: boolean; message: string }> {
-  if (!['owner', 'admin'].includes(userRole)) {
-    throw new Error('Unauthorized: Only owner and admins can deactivate users')
+  if (!['super_admin', 'admin'].includes(userRole)) {
+    throw new Error('Unauthorized: Only super admin and admins can deactivate users')
   }
 
   if (!userId) {
     throw new Error('User ID required')
   }
 
-  // Prevent deactivating the last owner
+  // Prevent deactivating the last super admin
   const { data: owners, error: ownerCountError } = await supabaseAdmin
     .from('users')
     .select('id', { count: 'exact' })
-    .eq('role', 'owner')
+    .eq('role', 'super_admin')
     .eq('status', 'active')
 
   if (!ownerCountError && owners?.length <= 1) {
@@ -399,8 +421,8 @@ export async function deactivateUser(
       .eq('id', userId)
       .single()
 
-    if (targetUser?.role === 'owner') {
-      throw new Error('Cannot deactivate the last active owner user')
+    if (targetUser?.role === 'super_admin') {
+      throw new Error('Cannot deactivate the last active super admin user')
     }
   }
 
@@ -433,7 +455,7 @@ export async function resetUserPassword(
   tempPassword: string
   email: string
 }> {
-  if (userRole !== 'admin') {
+  if (userRole !== 'admin' && userRole !== 'super_admin') {
     throw new Error('Unauthorized: Only admins can reset passwords')
   }
 

@@ -24,7 +24,7 @@ export default async function PriceAuditPage() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="p-6 space-y-6 fade-in">
       <div>
         <h1 className="text-3xl font-bold">Price Audit & Protection</h1>
         <p className="text-gray-500 mt-2">

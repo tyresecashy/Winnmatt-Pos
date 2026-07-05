@@ -2,6 +2,8 @@
 import { logger } from '@/lib/logger';
 
 import { useEffect, useRef, useState } from 'react'
+import { motion } from 'framer-motion'
+import { chartAnimations } from '@/lib/motion'
 import { useAuth } from '@/contexts/auth-context'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -131,43 +133,71 @@ export function PaymentBreakdown() {
               No payment data
             </div>
           ) : (
-            <ResponsiveContainer width="100%" height={200}>
-              <PieChart>
-                <Pie
-                  data={paymentData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={50}
-                  outerRadius={70}
-                  paddingAngle={2}
-                  dataKey="value"
-                >
-                  {paymentData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  content={({ active, payload }) => {
-                    if (active && payload && payload.length) {
-                      const data = payload[0].payload as PaymentMethod
-                      return (
-                        <div className="rounded-lg border bg-background p-3 shadow-md">
-                          <p className="text-sm font-medium">{data.name}</p>
-                          <p className="text-sm text-muted-foreground">{formatKSh(data.value)}</p>
-                        </div>
-                      )
-                    }
-                    return null
-                  }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
+            <motion.div
+              variants={chartAnimations.pie}
+              initial="initial"
+              animate="animate"
+            >
+              <ResponsiveContainer width="100%" height={200}>
+                <PieChart>
+                  <Pie
+                    data={paymentData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={50}
+                    outerRadius={70}
+                    paddingAngle={2}
+                    dataKey="value"
+                  >
+                    {paymentData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (active && payload && payload.length) {
+                        const data = payload[0].payload as PaymentMethod
+                        return (
+                          <div className="rounded-lg border bg-background p-3 shadow-md">
+                            <p className="text-sm font-medium">{data.name}</p>
+                            <p className="text-sm text-muted-foreground">{formatKSh(data.value)}</p>
+                          </div>
+                        )
+                      }
+                      return null
+                    }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </motion.div>
           )}
         </div>
         {paymentData.length > 0 && (
-          <div className="grid grid-cols-2 gap-2 pt-4">
+          <motion.div
+            className="grid grid-cols-2 gap-2 pt-4"
+            initial="hidden"
+            animate="visible"
+            variants={{
+              hidden: { opacity: 0 },
+              visible: {
+                opacity: 1,
+                transition: { staggerChildren: 0.05, delayChildren: 0.15 },
+              },
+            }}
+          >
             {paymentData.map((method, index) => (
-              <div key={method.name} className="flex items-center gap-2">
+              <motion.div
+                key={method.name}
+                className="flex items-center gap-2"
+                variants={{
+                  hidden: { opacity: 0, y: 8 },
+                  visible: {
+                    opacity: 1,
+                    y: 0,
+                    transition: { duration: 0.2, ease: [0.16, 1, 0.3, 1] },
+                  },
+                }}
+              >
                 <div
                   className="h-3 w-3 rounded-full"
                   style={{ backgroundColor: COLORS[index % COLORS.length] }}
@@ -176,9 +206,9 @@ export function PaymentBreakdown() {
                   <p className="text-xs font-medium">{method.name}</p>
                   <p className="text-xs text-muted-foreground">{formatKSh(method.value)}</p>
                 </div>
-              </div>
+              </motion.div>
             ))}
-          </div>
+          </motion.div>
         )}
         {error && (
           <div className="flex items-center gap-2 p-3 mt-3 text-sm text-destructive bg-destructive/10 rounded-md">

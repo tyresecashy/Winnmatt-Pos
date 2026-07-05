@@ -41,22 +41,29 @@ import { Label } from '@/components/ui/label'
 import {
   Plus,
   Search,
+  SearchX,
   Package,
+  ClipboardList,
   MoreHorizontal,
   Eye,
   CheckCircle,
   Truck,
   Clock,
   AlertCircle,
+  ArrowLeft,
 } from 'lucide-react'
 import {
   getPurchaseOrders,
   createPurchaseOrder,
-  receivePurchaseOrder,
-  updatePurchaseOrderStatus,
   getPurchaseStats,
   type PurchaseOrderItem,
 } from '@/lib/purchase-actions'
+import {
+  updatePurchaseOrderStatus,
+  receivePurchaseOrder,
+  getPurchaseReceipts,
+  getPurchaseReceiptById,
+} from '@/lib/procurement-actions'
 import { getSuppliers } from '@/lib/suppliers-actions'
 import { getProductsForPOS } from '@/lib/products-actions'
 import { formatKSh } from '@/lib/currency'
@@ -66,7 +73,8 @@ import { useToast } from '@/components/ui/use-toast'
 const statusColors: Record<string, { bg: string; icon: React.ElementType }> = {
   draft: { bg: 'bg-gray-100 text-gray-700', icon: AlertCircle },
   pending: { bg: 'bg-yellow-100 text-yellow-700', icon: Clock },
-  received: { bg: 'bg-green-100 text-green-700', icon: CheckCircle },
+  approved: { bg: 'bg-green-100 text-green-700', icon: CheckCircle },
+  received: { bg: 'bg-blue-100 text-blue-700', icon: Package },
   cancelled: { bg: 'bg-red-100 text-red-700', icon: AlertCircle },
 }
 
@@ -74,7 +82,7 @@ interface PurchaseOrder {
   id: string
   supplier_id: string
   branch_id: string
-  status: 'draft' | 'pending' | 'received' | 'cancelled'
+  status: 'draft' | 'pending' | 'approved' | 'received' | 'cancelled'
   subtotal: number
   tax_amount: number
   total_amount: number
@@ -105,8 +113,10 @@ interface Product {
   id: string
   name: string
   sku: string
-  cost_price: number
-  selling_price: number
+  selling_price?: number
+  purchase_price?: number
+  quantity: number
+  category?: { id: string; name: string; icon?: string } | null
 }
 
 export default function PurchasesPage() {
@@ -120,6 +130,7 @@ export default function PurchasesPage() {
     total_spent: 0,
     draft: 0,
     pending: 0,
+    approved: 0,
     received: 0,
     cancelled: 0,
   })
@@ -130,7 +141,25 @@ export default function PurchasesPage() {
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [showDetailsDialog, setShowDetailsDialog] = useState(false)
   const [selectedPO, setSelectedPO] = useState<PurchaseOrder | null>(null)
+  const [showReceiveDialog, setShowReceiveDialog] = useState(false)
+  const [receiveNotes, setReceiveNotes] = useState('')
+  const [receiveItems, setReceiveItems] = useState<Array<{
+    product_id: string
+    product_name: string
+    quantity_ordered: number
+    quantity_received_so_far: number
+    quantity_received: number
+    unit_cost: number
+    batch_number: string
+    expiry_date: string
+  }>>([])
   const [isSaving, setIsSaving] = useState(false)
+  const [showReceiptHistory, setShowReceiptHistory] = useState(false)
+  const [receipts, setReceipts] = useState<any[]>([])
+  const [receiptsLoading, setReceiptsLoading] = useState(false)
+  const [selectedReceipt, setSelectedReceipt] = useState<any>(null)
+  const [receiptDetail, setReceiptDetail] = useState<any>(null)
+  const [receiptDetailLoading, setReceiptDetailLoading] = useState(false)
 
   // Form state for creating PO
   const [formData, setFormData] = useState({
@@ -161,6 +190,7 @@ export default function PurchasesPage() {
         total_spent: 0,
         draft: 0,
         pending: 0,
+        approved: 0,
         received: 0,
         cancelled: 0,
       })
@@ -325,35 +355,120 @@ export default function PurchasesPage() {
     }
   }
 
-  const handleReceiveGoods = async (order?: PurchaseOrder | null) => {
+  const handleOpenReceiveDialog = (order?: PurchaseOrder | null) => {
     const targetPO = order || selectedPO
     if (!targetPO) return
 
+    const items = (targetPO.items || []).map((item: any) => ({
+      product_id: item.product_id,
+      product_name: item.product?.name || 'Unknown',
+      quantity_ordered: item.quantity,
+      quantity_received_so_far: item.received_quantity || 0,
+      quantity_received: item.quantity - (item.received_quantity || 0),
+      unit_cost: item.unit_price,
+      batch_number: '',
+      expiry_date: '',
+    }))
+    setReceiveItems(items)
+    setReceiveNotes('')
+    setShowReceiveDialog(true)
+    setShowDetailsDialog(false)
+  }
+
+  const handleConfirmReceive = async () => {
+    if (!selectedPO) return
     setIsSaving(true)
     try {
-      const result = await receivePurchaseOrder(targetPO.id)
+      const result = await receivePurchaseOrder(
+        selectedPO.id,
+        receiveItems.map((item) => ({
+          product_id: item.product_id,
+          quantity_received: item.quantity_received,
+          unit_cost: item.unit_cost,
+          batch_number: item.batch_number || null,
+          expiry_date: item.expiry_date || null,
+        })),
+        receiveNotes || undefined
+      )
 
       if (result.success) {
-        setShowDetailsDialog(false)
+        setShowReceiveDialog(false)
         setSelectedPO(null)
-        toast({
-          title: 'Success',
-          description: result.message,
-        })
+        toast({ title: 'Success', description: result.message })
         await loadData()
       } else {
-        toast({
-          title: 'Error',
-          description: result.error,
-          variant: 'destructive',
-        })
+        toast({ title: 'Error', description: result.error, variant: 'destructive' })
       }
     } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'Failed to receive goods',
-        variant: 'destructive',
-      })
+      toast({ title: 'Error', description: 'Failed to receive goods', variant: 'destructive' })
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleOpenReceiptHistory = async (order: PurchaseOrder) => {
+    setSelectedPO(order)
+    setShowReceiptHistory(true)
+    setReceiptsLoading(true)
+    try {
+      const data = await getPurchaseReceipts(order.id)
+      setReceipts(data)
+    } catch (error) {
+      logger.error('Failed to load receipts:', error)
+    } finally {
+      setReceiptsLoading(false)
+    }
+  }
+
+  const handleViewReceiptDetail = async (receiptId: string) => {
+    setReceiptDetailLoading(true)
+    try {
+      const data = await getPurchaseReceiptById(receiptId)
+      setReceiptDetail(data)
+    } catch (error) {
+      logger.error('Failed to load receipt detail:', error)
+    } finally {
+      setReceiptDetailLoading(false)
+    }
+  }
+
+  const handleApproveOrder = async (order?: PurchaseOrder | null) => {
+    const targetPO = order || selectedPO
+    if (!targetPO) return
+    setIsSaving(true)
+    try {
+      const result = await updatePurchaseOrderStatus(targetPO.id, 'approved')
+      if (result.success) {
+        setSelectedPO(null)
+        setShowDetailsDialog(false)
+        toast({ title: 'Success', description: result.message })
+        await loadData()
+      } else {
+        toast({ title: 'Error', description: result.error, variant: 'destructive' })
+      }
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to approve order', variant: 'destructive' })
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleRejectOrder = async (order?: PurchaseOrder | null) => {
+    const targetPO = order || selectedPO
+    if (!targetPO) return
+    setIsSaving(true)
+    try {
+      const result = await updatePurchaseOrderStatus(targetPO.id, 'cancelled')
+      if (result.success) {
+        setSelectedPO(null)
+        setShowDetailsDialog(false)
+        toast({ title: 'Success', description: result.message })
+        await loadData()
+      } else {
+        toast({ title: 'Error', description: result.error, variant: 'destructive' })
+      }
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to reject order', variant: 'destructive' })
     } finally {
       setIsSaving(false)
     }
@@ -399,7 +514,7 @@ export default function PurchasesPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6 fade-in">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Purchases</h1>
@@ -411,7 +526,7 @@ export default function PurchasesPage() {
         </Button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-6">
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>Total Orders</CardDescription>
@@ -446,9 +561,18 @@ export default function PurchasesPage() {
           <CardHeader className="pb-2">
             <CardDescription className="flex items-center gap-1">
               <CheckCircle className="h-3 w-3 text-green-600" />
+              Approved
+            </CardDescription>
+            <CardTitle className="text-3xl text-green-600">{stats.approved}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription className="flex items-center gap-1">
+              <Package className="h-3 w-3 text-blue-600" />
               Received
             </CardDescription>
-            <CardTitle className="text-3xl text-green-600">{stats.received}</CardTitle>
+            <CardTitle className="text-3xl text-blue-600">{stats.received}</CardTitle>
           </CardHeader>
         </Card>
       </div>
@@ -472,7 +596,8 @@ export default function PurchasesPage() {
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
                 <SelectItem value="draft">Draft</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="pending">Pending Approval</SelectItem>
+                <SelectItem value="approved">Approved</SelectItem>
                 <SelectItem value="received">Received</SelectItem>
                 <SelectItem value="cancelled">Cancelled</SelectItem>
               </SelectContent>
@@ -484,10 +609,21 @@ export default function PurchasesPage() {
         </CardHeader>
         <CardContent>
           {filteredOrders.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              {purchaseOrders.length === 0
-                ? 'No purchase orders yet. Create one to get started.'
-                : 'No orders match your filters.'}
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
+                {purchaseOrders.length === 0
+                  ? <ClipboardList className="h-6 w-6 text-muted-foreground" />
+                  : <SearchX className="h-6 w-6 text-muted-foreground" />
+                }
+              </div>
+              <p className="text-lg font-medium">
+                {purchaseOrders.length === 0 ? 'No purchase orders yet' : 'No orders match your filters'}
+              </p>
+              <p className="text-sm text-muted-foreground mt-1">
+                {purchaseOrders.length === 0
+                  ? 'Create your first purchase order to start tracking inventory.'
+                  : 'Try different search terms or clear your filters.'}
+              </p>
             </div>
           ) : (
             <Table>
@@ -558,13 +694,31 @@ export default function PurchasesPage() {
                                 }}
                               >
                                 <Truck className="mr-2 h-4 w-4" />
-                                Submit Order
+                                Submit for Approval
                               </DropdownMenuItem>
                             )}
-                            {order.status === 'pending' && (
-                              <DropdownMenuItem onClick={() => void handleReceiveGoods(order)}>
-                                <CheckCircle className="mr-2 h-4 w-4" />
-                                Receive Goods
+                            {order.status === 'pending' && (profile?.role === 'super_admin' || profile?.role === 'admin') && (
+                              <>
+                                <DropdownMenuItem onClick={() => void handleApproveOrder(order)}>
+                                  <CheckCircle className="mr-2 h-4 w-4" />
+                                  Approve
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => void handleRejectOrder(order)}>
+                                  <AlertCircle className="mr-2 h-4 w-4" />
+                                  Reject
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                            {order.status === 'approved' && (
+                              <DropdownMenuItem onClick={() => void handleOpenReceiveDialog(order)}>
+                                <Package className="mr-2 h-4 w-4" />
+                                Receive Stock
+                              </DropdownMenuItem>
+                            )}
+                            {order.status === 'received' && (
+                              <DropdownMenuItem onClick={() => void handleOpenReceiptHistory(order)}>
+                                <ClipboardList className="mr-2 h-4 w-4" />
+                                View Receipts
                               </DropdownMenuItem>
                             )}
                           </DropdownMenuContent>
@@ -798,7 +952,8 @@ export default function PurchasesPage() {
                       <TableHeader>
                         <TableRow>
                           <TableHead>Product</TableHead>
-                          <TableHead className="text-right">Qty</TableHead>
+                          <TableHead className="text-right">Ordered</TableHead>
+                          <TableHead className="text-right">Received</TableHead>
                           <TableHead className="text-right">Unit Price</TableHead>
                           <TableHead className="text-right">Line Total</TableHead>
                         </TableRow>
@@ -808,6 +963,9 @@ export default function PurchasesPage() {
                           <TableRow key={item.id}>
                             <TableCell className="text-sm">{item.product?.name}</TableCell>
                             <TableCell className="text-right text-sm">{item.quantity}</TableCell>
+                            <TableCell className="text-right text-sm">
+                              {item.received_quantity || 0}
+                            </TableCell>
                             <TableCell className="text-right text-sm">{formatKSh(item.unit_price)}</TableCell>
                             <TableCell className="text-right text-sm font-medium">
                               {formatKSh(item.line_total)}
@@ -863,18 +1021,261 @@ export default function PurchasesPage() {
           <DialogFooter>
             {selectedPO?.status === 'draft' && (
               <Button onClick={() => void handleMarkAsPending()} disabled={isSaving}>
-                {isSaving ? 'Submitting...' : 'Submit Order'}
+                {isSaving ? 'Submitting...' : 'Submit for Approval'}
               </Button>
             )}
-            {selectedPO?.status === 'pending' && (
-              <Button onClick={() => void handleReceiveGoods()} disabled={isSaving}>
-                {isSaving ? 'Receiving...' : 'Receive Goods'}
+            {(selectedPO?.status === 'pending' && (profile?.role === 'super_admin' || profile?.role === 'admin')) && (
+              <>
+                <Button variant="outline" onClick={() => void handleRejectOrder()} disabled={isSaving}>
+                  Reject
+                </Button>
+                <Button onClick={() => void handleApproveOrder()} disabled={isSaving}>
+                  {isSaving ? 'Approving...' : 'Approve'}
+                </Button>
+              </>
+            )}
+            {selectedPO?.status === 'approved' && (
+              <Button onClick={() => void handleOpenReceiveDialog()} disabled={isSaving}>
+                <Package className="mr-2 h-4 w-4" />
+                {isSaving ? 'Opening...' : 'Receive Stock'}
               </Button>
             )}
             <Button variant="outline" onClick={() => setShowDetailsDialog(false)} disabled={isSaving}>
               Close
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Goods Received Note Dialog */}
+      <Dialog open={showReceiveDialog} onOpenChange={setShowReceiveDialog}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Receive Goods</DialogTitle>
+            <DialogDescription>
+              Record goods received for PO {selectedPO?.id.substring(0, 8)} — {selectedPO?.supplier?.name}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {receiveItems.map((item, idx) => (
+              <div key={item.product_id} className="border rounded-lg p-4 space-y-3">
+                <h4 className="font-semibold text-sm">{item.product_name}</h4>
+
+                <div className="grid grid-cols-3 gap-2 text-xs text-muted-foreground mb-2">
+                  <span>Ordered: {item.quantity_ordered}</span>
+                  <span>Received so far: {item.quantity_received_so_far}</span>
+                  <span>Remaining: {item.quantity_ordered - item.quantity_received_so_far}</span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs">Qty Receiving *</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      max={item.quantity_ordered - item.quantity_received_so_far}
+                      value={item.quantity_received}
+                      onChange={(e) => {
+                        const newItems = [...receiveItems]
+                        newItems[idx] = { ...newItems[idx], quantity_received: parseInt(e.target.value) || 0 }
+                        setReceiveItems(newItems)
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Unit Cost</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={item.unit_cost}
+                      onChange={(e) => {
+                        const newItems = [...receiveItems]
+                        newItems[idx] = { ...newItems[idx], unit_cost: parseFloat(e.target.value) || 0 }
+                        setReceiveItems(newItems)
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Batch Number</Label>
+                    <Input
+                      placeholder="Optional"
+                      value={item.batch_number}
+                      onChange={(e) => {
+                        const newItems = [...receiveItems]
+                        newItems[idx] = { ...newItems[idx], batch_number: e.target.value }
+                        setReceiveItems(newItems)
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Expiry Date</Label>
+                    <Input
+                      type="date"
+                      value={item.expiry_date}
+                      onChange={(e) => {
+                        const newItems = [...receiveItems]
+                        newItems[idx] = { ...newItems[idx], expiry_date: e.target.value }
+                        setReceiveItems(newItems)
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            <div>
+              <Label>Receipt Notes</Label>
+              <Input
+                placeholder="Optional notes about this receipt"
+                value={receiveNotes}
+                onChange={(e) => setReceiveNotes(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowReceiveDialog(false)} disabled={isSaving}>
+              Cancel
+            </Button>
+            <Button onClick={handleConfirmReceive} disabled={isSaving}>
+              {isSaving ? 'Receiving...' : 'Confirm Receive'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Receipt History Dialog */}
+      <Dialog open={showReceiptHistory} onOpenChange={setShowReceiptHistory}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Receipt History</DialogTitle>
+            <DialogDescription>
+              {selectedPO ? `PO #${selectedPO.id.substring(0, 8)}` : ''}
+            </DialogDescription>
+          </DialogHeader>
+
+          {receiptsLoading ? (
+            <div className="space-y-3 py-4">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-16 w-full" />
+              ))}
+            </div>
+          ) : receipts.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">No receipts recorded yet</p>
+          ) : selectedReceipt && receiptDetail ? (
+            /* Receipt detail view */
+            <div className="space-y-4">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSelectedReceipt(null)
+                  setReceiptDetail(null)
+                }}
+                className="gap-1.5"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back to Receipts
+              </Button>
+
+              <div className="rounded-lg bg-muted p-4">
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Date Received</span>
+                    <p className="font-medium">
+                      {new Date(receiptDetail.created_at).toLocaleDateString('en-KE', {
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Supplier</span>
+                    <p className="font-medium">{receiptDetail.supplier?.name || '-'}</p>
+                  </div>
+                  {receiptDetail.notes && (
+                    <div className="col-span-2">
+                      <span className="text-muted-foreground">Notes</span>
+                      <p className="font-medium">{receiptDetail.notes}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Product</TableHead>
+                    <TableHead className="text-right">Qty Received</TableHead>
+                    <TableHead className="text-right">Unit Cost</TableHead>
+                    <TableHead className="text-right">Total</TableHead>
+                    <TableHead>Batch</TableHead>
+                    <TableHead>Expiry</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {receiptDetail.items?.map((item: any) => (
+                    <TableRow key={item.id}>
+                      <TableCell className="font-medium">{item.product?.name || 'Unknown'}</TableCell>
+                      <TableCell className="text-right">{item.quantity_received}</TableCell>
+                      <TableCell className="text-right font-mono">{formatKSh(item.unit_cost)}</TableCell>
+                      <TableCell className="text-right font-mono">
+                        {formatKSh(item.quantity_received * item.unit_cost)}
+                      </TableCell>
+                      <TableCell className="text-xs">{item.batch_number || '-'}</TableCell>
+                      <TableCell className="text-xs">
+                        {item.expiry_date
+                          ? new Date(item.expiry_date).toLocaleDateString('en-KE', {
+                              day: '2-digit',
+                              month: 'short',
+                              year: 'numeric',
+                            })
+                          : '-'}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            /* Receipt list */
+            <div className="space-y-2">
+              {receipts.map((receipt) => (
+                <div
+                  key={receipt.id}
+                  className="flex cursor-pointer items-center justify-between rounded-lg border p-3 transition-colors hover:bg-muted/50"
+                  onClick={() => {
+                    setSelectedReceipt(receipt)
+                    void handleViewReceiptDetail(receipt.id)
+                  }}
+                >
+                  <div>
+                    <p className="text-sm font-medium">
+                      Receipt #{receipt.id.substring(0, 8)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(receipt.created_at).toLocaleDateString('en-KE', {
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-mono">{formatKSh(receipt.total_amount || 0)}</p>
+                    <p className="text-xs text-muted-foreground">{receipt.items_count || 0} items</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
