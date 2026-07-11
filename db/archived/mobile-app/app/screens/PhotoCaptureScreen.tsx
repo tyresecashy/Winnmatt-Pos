@@ -175,7 +175,7 @@ export default function PhotoCaptureScreen() {
           <ScrollView horizontal style={styles.photoList}>
             {photos.map((photo) => (
               <View key={photo.id} style={styles.photoItem}>
-                <Image source={{ uri: photo.uri }} style={styles.photoThumbnail} />
+                <Image source={{ uri: photo.uri }} style={styles.photoThumbnail} alt="" />
                 <View style={styles.photoOverlay}>
                   <Text style={styles.photoType}>{photo.type}</Text>
                 </View>

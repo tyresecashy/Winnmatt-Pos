@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, startTransition } from 'react';
 import {
   View,
   Text,
@@ -35,23 +35,6 @@ export default function TimeClockScreen() {
   });
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    // Check current status
-    checkCurrentStatus();
-
-    // Update elapsed time every second if clocked in
-    const interval = setInterval(() => {
-      if (state.isClockedIn && !state.isOnBreak) {
-        setState((prev) => ({
-          ...prev,
-          elapsedSeconds: prev.elapsedSeconds + 1,
-        }));
-      }
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [state.isClockedIn, state.isOnBreak]);
-
   const checkCurrentStatus = async () => {
     try {
       // In production, this would check the API
@@ -68,6 +51,25 @@ export default function TimeClockScreen() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    startTransition(() => {
+      // Check current status
+      checkCurrentStatus();
+    });
+
+    // Update elapsed time every second if clocked in
+    const interval = setInterval(() => {
+      if (state.isClockedIn && !state.isOnBreak) {
+        setState((prev) => ({
+          ...prev,
+          elapsedSeconds: prev.elapsedSeconds + 1,
+        }));
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [state.isClockedIn, state.isOnBreak]);
 
   const clockIn = async () => {
     Alert.alert(
@@ -290,7 +292,7 @@ export default function TimeClockScreen() {
 
       {/* Today's History */}
       <View style={styles.historySection}>
-        <Text style={styles.historyTitle}>Today's Activity</Text>
+        <Text style={styles.historyTitle}>Today&apos;s Activity</Text>
         <View style={styles.historyItem}>
           <Ionicons name="log-in-outline" size={20} color="#10b981" />
           <Text style={styles.historyText}>Clocked in at 8:00 AM</Text>

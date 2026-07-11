@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, startTransition } from 'react';
 import {
   View,
   Text,
@@ -111,7 +111,7 @@ export default function TaskDashboardScreen() {
   };
 
   useEffect(() => {
-    fetchTasks();
+    startTransition(() => { fetchTasks(); });
   }, []);
 
   const onRefresh = () => {

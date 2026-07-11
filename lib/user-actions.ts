@@ -1,6 +1,6 @@
-import { logger } from '@/lib/logger';
 'use server'
 
+import { logger } from '@/lib/logger';
 import { supabaseAdmin } from '@/lib/supabase-server'
 
 export async function getUserProfile(userId: string) {

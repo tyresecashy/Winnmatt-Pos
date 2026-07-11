@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, startTransition } from 'react';
 import {
   View,
   Text,
@@ -40,11 +40,7 @@ export default function TaskDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
 
-  useEffect(() => {
-    fetchTaskDetails();
-  }, [taskId]);
-
-  const fetchTaskDetails = async () => {
+  const fetchTaskDetails = useCallback(async () => {
     try {
       // Mock task details
       const mockTask: TaskDetail = {
@@ -72,7 +68,13 @@ export default function TaskDetailScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [taskId]);
+
+  useEffect(() => {
+    startTransition(() => {
+      fetchTaskDetails();
+    });
+  }, [taskId, fetchTaskDetails]);
 
   const toggleChecklistItem = (itemId: string) => {
     if (!task) return;

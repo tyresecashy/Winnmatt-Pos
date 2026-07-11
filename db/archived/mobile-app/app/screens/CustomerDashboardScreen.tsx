@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, startTransition } from 'react';
 import {
   View,
   Text,
@@ -42,10 +42,6 @@ export default function CustomerDashboardScreen() {
   const [availableRewards, setAvailableRewards] = useState<LoyaltyReward[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-
-  useEffect(() => {
-    loadDashboardData();
-  }, []);
 
   const loadDashboardData = async () => {
     try {
@@ -116,6 +112,12 @@ export default function CustomerDashboardScreen() {
       setRefreshing(false);
     }
   };
+
+  useEffect(() => {
+    startTransition(() => {
+      loadDashboardData();
+    });
+  }, []);
 
   const onRefresh = () => {
     setRefreshing(true);

@@ -5,6 +5,7 @@
  * Uses SQLite for local storage and Supabase for cloud sync.
  */
 
+/* eslint-disable no-console */
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as Network from 'expo-network'
 import { supabase } from './supabase'

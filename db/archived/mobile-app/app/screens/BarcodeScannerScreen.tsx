@@ -34,7 +34,7 @@ export default function BarcodeScannerScreen() {
     if (!permission) {
       requestPermission();
     }
-  }, [permission]);
+  }, [permission, requestPermission]);
 
   const handleBarcodeScanned = async (barcode: string) => {
     if (!scanning) return;
