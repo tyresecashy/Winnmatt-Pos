@@ -33,7 +33,28 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import Link from 'next/link'
 import { formatKSh } from '@/lib/currency'
 import { useToast } from '@/components/ui/use-toast'
-import { addEmployeeDocument, deleteEmployeeDocument, addEmployeeGoal, updateGoalProgress, deleteGoal } from '@/lib/employee-actions'
+import { EmptyState } from '@/components/ui/empty-state'
+import { addEmployeeDocument, deleteEmployeeDocument, addEmployeeGoal, updateGoalProgress, deleteGoal } from '@/lib/modules/workforce'
+
+interface EmployeeDocument {
+  id: string
+  document_name: string
+  document_type: string
+  file_url: string | null
+  created_at: string
+}
+
+interface EmployeeGoal {
+  id: string
+  title: string
+  description: string | null
+  target_value: number
+  current_value: number
+  status: string
+  metric?: string
+  start_date?: string
+  end_date?: string
+}
 
 interface EmployeeData {
   id: string
@@ -65,8 +86,8 @@ interface EmployeeData {
     branch?: { id: string; name: string; code: string } | null
   } | null
   department?: { id: string; name: string } | null
-  goals?: any[]
-  documents?: any[]
+  goals?: EmployeeGoal[]
+  documents?: EmployeeDocument[]
 }
 
 interface ClockEvent {
@@ -97,9 +118,9 @@ const employmentTypeLabels: Record<string, string> = {
   casual: 'Casual',
 }
 
-const statusColors: Record<string, 'default' | 'secondary' | 'destructive' | 'outline' | 'warning'> = {
+const statusColors: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
   active: 'default',
-  suspended: 'warning',
+  suspended: 'secondary',
   terminated: 'destructive',
   resigned: 'secondary',
 }
@@ -111,8 +132,8 @@ const eventTypeLabels: Record<string, string> = {
   break_end: 'Break End',
 }
 
-const leaveStatusConfig: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' | 'warning' }> = {
-  pending: { label: 'Pending', variant: 'warning' },
+const leaveStatusConfig: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
+  pending: { label: 'Pending', variant: 'secondary' },
   approved: { label: 'Approved', variant: 'default' },
   rejected: { label: 'Rejected', variant: 'destructive' },
   cancelled: { label: 'Cancelled', variant: 'outline' },
@@ -123,7 +144,7 @@ export function EmployeeDetailClient({
   clockEvents,
   leaveRequests,
 }: {
-  employee: any
+  employee: EmployeeData
   clockEvents: ClockEvent[]
   leaveRequests: LeaveRequestItem[]
 }) {
@@ -318,7 +339,7 @@ export function EmployeeDetailClient({
             </Button>
           </div>
           {(!emp.documents || emp.documents.length === 0) ? (
-            <Card><CardContent className="py-8 text-center text-muted-foreground">No documents uploaded yet</CardContent></Card>
+            <Card><CardContent className="py-8 text-center text-muted-foreground"><EmptyState title="No documents uploaded yet" compact /></CardContent></Card>
           ) : (
             <div className="rounded-md border">
               <Table>
@@ -332,7 +353,7 @@ export function EmployeeDetailClient({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {emp.documents.map((doc: any) => (
+                  {emp.documents.map((doc: EmployeeDocument) => (
                     <TableRow key={doc.id}>
                       <TableCell className="font-medium">{doc.document_name}</TableCell>
                       <TableCell><Badge variant="outline" className="capitalize">{doc.document_type}</Badge></TableCell>
@@ -366,10 +387,10 @@ export function EmployeeDetailClient({
             </Button>
           </div>
           {(!emp.goals || emp.goals.length === 0) ? (
-            <Card><CardContent className="py-8 text-center text-muted-foreground">No goals set yet</CardContent></Card>
+            <Card><CardContent className="py-8 text-center text-muted-foreground"><EmptyState title="No goals set yet" compact /></CardContent></Card>
           ) : (
             <div className="grid gap-3 md:grid-cols-2">
-              {emp.goals.map((goal: any) => {
+              {emp.goals.map((goal: EmployeeGoal) => {
                 const pct = goal.target_value > 0 ? Math.min(100, Math.round((goal.current_value / goal.target_value) * 100)) : 0
                 const isComplete = goal.status === 'completed' || pct >= 100
                 return (
@@ -386,7 +407,7 @@ export function EmployeeDetailClient({
                           ) : goal.status === 'cancelled' ? (
                             <Badge variant="outline">Cancelled</Badge>
                           ) : (
-                            <Badge variant="warning">Active</Badge>
+                            <Badge variant="secondary">Active</Badge>
                           )}
                           <Button variant="ghost" size="sm" onClick={() => handleDeleteGoal(goal.id)}>
                             <Trash2 className="h-3 w-3 text-destructive" />
@@ -420,7 +441,7 @@ export function EmployeeDetailClient({
         <TabsContent value="attendance" className="space-y-4">
           <h3 className="text-lg font-semibold">Recent Clock Events</h3>
           {clockEvents.length === 0 ? (
-            <Card><CardContent className="py-8 text-center text-muted-foreground">No clock events recorded</CardContent></Card>
+            <Card><CardContent className="py-8 text-center text-muted-foreground"><EmptyState title="No clock events recorded" compact /></CardContent></Card>
           ) : (
             <div className="rounded-md border">
               <Table>
@@ -455,7 +476,7 @@ export function EmployeeDetailClient({
         <TabsContent value="leave" className="space-y-4">
           <h3 className="text-lg font-semibold">Leave Request History</h3>
           {leaveRequests.length === 0 ? (
-            <Card><CardContent className="py-8 text-center text-muted-foreground">No leave requests</CardContent></Card>
+            <Card><CardContent className="py-8 text-center text-muted-foreground"><EmptyState title="No leave requests" compact /></CardContent></Card>
           ) : (
             <div className="rounded-md border">
               <Table>
@@ -479,7 +500,7 @@ export function EmployeeDetailClient({
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate">{lr.reason || '-'}</TableCell>
                         <TableCell>
-                          <Badge variant={cfg.variant as any}>{cfg.label}</Badge>
+                          <Badge variant={cfg.variant}>{cfg.label}</Badge>
                         </TableCell>
                         <TableCell className="text-xs">{lr.approved_by_name || '-'}</TableCell>
                       </TableRow>

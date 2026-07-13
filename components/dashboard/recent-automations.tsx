@@ -4,21 +4,21 @@ import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Zap, CheckCircle, AlertTriangle, Clock } from 'lucide-react'
-import { getAutomationStats, type AutomationEvent } from '@/lib/automation-actions'
+import { getAutomationStats, type AutomationEvent } from '@/lib/modules/automation'
 
 export function RecentAutomations() {
   const [events, setEvents] = useState<AutomationEvent[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    loadEvents()
+    let cancelled = false
+    getAutomationStats().then((stats) => {
+      if (cancelled) return
+      setEvents(stats.recentEvents)
+      setLoading(false)
+    })
+    return () => { cancelled = true }
   }, [])
-
-  async function loadEvents() {
-    const stats = await getAutomationStats()
-    setEvents(stats.recentEvents)
-    setLoading(false)
-  }
 
   function formatTime(iso: string) {
     return new Date(iso).toLocaleString('en-KE', {

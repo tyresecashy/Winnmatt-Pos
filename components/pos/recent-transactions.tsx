@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { formatKSh } from "@/lib/currency"
-import { getRecentTransactions } from "@/lib/dashboard-actions"
+import { getRecentTransactions } from "@/lib/modules/dashboard"
 import { X, Receipt } from "lucide-react"
 
 interface RecentTransactionsProps {

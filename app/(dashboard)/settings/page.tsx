@@ -22,8 +22,9 @@ import {
   updateBranchReceiptSettings,
   updateBusinessSettings,
 } from "@/lib/receipt-settings"
-import { getLoyaltySettings, updateLoyaltySettings } from "@/lib/loyalty-actions"
-import type { BranchReceiptSettings, BusinessSettings, LoyaltySettings } from "@/lib/db.types"
+import { getLoyaltySettings, updateLoyaltySettings } from "@/lib/modules/customers"
+import type { BranchReceiptSettings, BusinessSettings } from "@/lib/receipt-settings"
+import type { LoyaltySettings } from "@/lib/modules/customers"
 import { AlertCircle, CheckCircle, Gift, MapPin, Printer, Shield, Bell } from "lucide-react"
 
 interface BranchOption {
@@ -263,10 +264,10 @@ export default function SettingsPage() {
     setLoyaltySaveState("idle")
 
     try {
-      const updated = await updateLoyaltySettings(profile.id, profile.role, loyaltyForm)
-      if (updated) {
-        setLoyaltySettings(updated)
-        setLoyaltyForm(updated)
+      const result = await updateLoyaltySettings(loyaltyForm as any)
+      if (result.success) {
+        setLoyaltySettings(loyaltyForm as any)
+        setLoyaltyForm(loyaltyForm)
       }
       setLoyaltySaveState("success")
       setLoyaltyMessage("Loyalty settings saved.")
@@ -1072,7 +1073,7 @@ export default function SettingsPage() {
                     <div className="flex items-center justify-between rounded-lg border p-4 mt-4">
                       <div>
                         <p className="font-medium">Enable Birthday Bonus</p>
-                        <p className="text-sm text-muted-foreground">Apply birthday multiplier on the customer's birthday.</p>
+                        <p className="text-sm text-muted-foreground">Apply birthday multiplier on the customer&apos;s birthday.</p>
                       </div>
                       <Switch
                         checked={loyaltyForm.enable_birthday_bonus ?? true}

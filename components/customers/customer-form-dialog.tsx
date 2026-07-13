@@ -24,9 +24,9 @@ import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { AlertTriangle, Loader2, X, Check } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
-import { createCustomer, updateCustomer } from "@/lib/customers-actions"
-import { getSegments, getCustomerSegments, setCustomerSegments, assignCustomerToSegment } from "@/lib/segment-actions"
-import type { Segment } from "@/lib/segment-actions"
+import { createCustomer, updateCustomer } from "@/lib/modules/customers"
+import { getSegments, getCustomerSegments, setCustomerSegments, assignCustomerToSegment } from "@/lib/modules/crm"
+import type { Segment } from "@/lib/modules/crm"
 
 interface CustomerFormDialogProps {
   isOpen: boolean
@@ -182,7 +182,8 @@ export function CustomerFormDialog({
         })
       } else {
         // Create new customer
-        result = await createCustomer(name, type, phone, email, creditLimit, {
+        result = await createCustomer({
+          name, type, phone, email, credit_limit: creditLimit,
           tier: tier as "bronze" | "silver" | "gold" | "platinum" | "vip",
           birthday: birthday || null,
           notes: notes || null,
@@ -204,7 +205,7 @@ export function CustomerFormDialog({
       setDuplicateWarning(null)
 
       // Save segment assignments
-      const savedCustomerId = customer ? customer.id : (result as any).customer?.id
+      const savedCustomerId = customer ? customer.id : (result as { customer?: { id: string } }).customer?.id
       if (savedCustomerId && selectedSegmentIds.length > 0) {
         if (customer) {
           // Replace all segments for existing customer

@@ -18,12 +18,13 @@ import {
   toggleAutomationRule, deleteAutomationRule, upsertCondition, deleteCondition,
   upsertAction, deleteAction, getAutomationEvents, getAutomationLogs, getAutomationStats,
   type AutomationRule, type AutomationEvent, type AutomationLog
-} from '@/lib/automation-actions'
+} from '@/lib/modules/automation'
 import { getScheduledTasks, checkScheduledTasks, type ScheduledTask } from '@/lib/automation/scheduler'
 import {
   Zap, Activity, Clock, AlertTriangle, CheckCircle, XCircle, Plus, Trash2,
   Play, Pause, RefreshCw, Settings, Bell, FileText, Calendar
 } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 
 const EVENT_TYPES = [
   'sale.completed', 'sale.voided', 'sale.returned',
@@ -328,7 +329,7 @@ export default function AutomationPage() {
                   {rules.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                        No automation rules yet. Create one to get started.
+                        <EmptyState icon={Zap} title="No automation rules yet" description="Create one to get started." compact />
                       </TableCell>
                     </TableRow>
                   )}
@@ -377,7 +378,7 @@ export default function AutomationPage() {
                   {events.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                        No events recorded yet. Events appear when automations fire.
+                        <EmptyState icon={Activity} title="No events recorded yet" description="Events appear when automations fire." compact />
                       </TableCell>
                     </TableRow>
                   )}
@@ -430,7 +431,7 @@ export default function AutomationPage() {
                   {logs.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                        No action logs yet. Logs appear when rules execute actions.
+                        <EmptyState icon={FileText} title="No action logs yet" description="Logs appear when rules execute actions." compact />
                       </TableCell>
                     </TableRow>
                   )}
@@ -471,7 +472,7 @@ export default function AutomationPage() {
                   {schedules.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                        No scheduled tasks configured.
+                        <EmptyState icon={Clock} title="No scheduled tasks configured" compact />
                       </TableCell>
                     </TableRow>
                   )}

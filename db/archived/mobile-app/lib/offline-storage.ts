@@ -1,3 +1,4 @@
+// @ts-nocheck — archived mobile app, not part of active build
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const STORAGE_KEYS = {

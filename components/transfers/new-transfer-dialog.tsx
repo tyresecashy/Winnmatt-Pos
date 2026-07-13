@@ -51,7 +51,7 @@ import {
   getProductsAtBranch,
   createStockTransfer,
   type TransferItem,
-} from '@/lib/transfer-actions'
+} from '@/lib/modules/transfers'
 
 interface Branch {
   id: string
@@ -60,17 +60,12 @@ interface Branch {
 }
 
 interface Product {
-  productId: string
-  product: {
-    id: string
-    sku: string
-    name: string
-    category: {
-      id: string
-      name: string
-    } | null
-  }
+  id: string
+  name: string
+  sku: string
+  category_id: string | null
   availableQuantity: number
+  stock: Array<{ quantity: number; branch_id: string }>
 }
 
 interface TransferFormItem extends TransferItem {
@@ -226,7 +221,12 @@ export function NewTransferDialog({ open, onOpenChange, onSuccess }: NewTransfer
             return
           }
 
-          const validProducts = products.filter((p): p is Product => p.product !== null)
+          const validProducts = products
+            .map((p) => ({
+              ...p,
+              availableQuantity: (p.stock || []).reduce((sum: number, s: { quantity: number | null }) => sum + (s.quantity || 0), 0),
+            }))
+            .filter((p) => p.id != null) as Product[]
           setSourceProducts(validProducts)
           productsCacheRef.current[sourceBranch] = validProducts
         } catch (err) {
@@ -281,7 +281,7 @@ export function NewTransferDialog({ open, onOpenChange, onSuccess }: NewTransfer
     }
 
     const quantity = parseInt(selectedQuantity, 10)
-    const product = sourceProducts.find((item) => item.productId === selectedProductId)
+    const product = sourceProducts.find((item) => item.id === selectedProductId)
     if (!product) {
       setError('Product not found')
       return
@@ -302,7 +302,7 @@ export function NewTransferDialog({ open, onOpenChange, onSuccess }: NewTransfer
       {
         productId: selectedProductId,
         quantity,
-        productName: product.product.name,
+          productName: product.name,
         maxQuantity: product.availableQuantity,
       },
     ])
@@ -374,8 +374,8 @@ export function NewTransferDialog({ open, onOpenChange, onSuccess }: NewTransfer
 
     return sourceProducts.filter((product) =>
       !normalizedSearch ||
-      product.product.name.toLowerCase().includes(normalizedSearch) ||
-      product.product.sku.toLowerCase().includes(normalizedSearch)
+      product.name.toLowerCase().includes(normalizedSearch) ||
+      product.sku.toLowerCase().includes(normalizedSearch)
     )
   }, [deferredProductSearch, sourceProducts])
 
@@ -498,8 +498,8 @@ export function NewTransferDialog({ open, onOpenChange, onSuccess }: NewTransfer
                             disabled={sourceProducts.length === 0}
                           >
                             {selectedProductId
-                              ? sourceProducts.find((product) => product.productId === selectedProductId)?.product.name ||
-                                sourceProducts.find((product) => product.productId === selectedProductId)?.product.sku
+                              ? sourceProducts.find((product) => product.id === selectedProductId)?.name ||
+                                sourceProducts.find((product) => product.id === selectedProductId)?.sku
                               : 'Select product...'}
                             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                           </Button>
@@ -515,8 +515,8 @@ export function NewTransferDialog({ open, onOpenChange, onSuccess }: NewTransfer
                             <CommandGroup className="max-h-48 overflow-y-auto">
                               {filteredProducts.map((product) => (
                                 <CommandItem
-                                  key={product.productId}
-                                  value={product.productId}
+                                  key={product.id}
+                                  value={product.id}
                                   onSelect={(currentValue) => {
                                     setSelectedProductId(currentValue === selectedProductId ? '' : currentValue)
                                     setProductOpen(false)
@@ -526,11 +526,11 @@ export function NewTransferDialog({ open, onOpenChange, onSuccess }: NewTransfer
                                   <Check
                                     className={cn(
                                       'mr-2 h-4 w-4',
-                                      selectedProductId === product.productId ? 'opacity-100' : 'opacity-0'
+                                      selectedProductId === product.id ? 'opacity-100' : 'opacity-0'
                                     )}
                                   />
                                   <span className="text-sm">
-                                    {product.product.sku} - {product.product.name} ({product.availableQuantity} avail)
+                                    {product.sku} - {product.name} ({product.availableQuantity} avail)
                                   </span>
                                 </CommandItem>
                               ))}

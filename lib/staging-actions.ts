@@ -1,10 +1,12 @@
+'use server'
+
 import { logger } from '@/lib/logger';
+import { authenticateServerAction } from '@/lib/auth-helpers'
 /**
  * Staging Actions
  * Server actions for admin staging review and publish workflow
+ * Every exported action MUST authenticate the caller.
  */
-
-'use server'
 
 import { createClient } from '@/lib/supabase-server'
 import {
@@ -23,6 +25,11 @@ const uuidv4 = () => crypto.randomUUID()
  * 3. Analyze prices and detect anomalies
  */
 export async function processBatch(batchId: string) {
+  const user = await authenticateServerAction()
+  // Only admin/super_admin can process batches
+  if (!user.profile || (user.profile.role !== 'admin' && user.profile.role !== 'super_admin')) {
+    throw new Error('Unauthorized: only admins can process import batches')
+  }
   const supabase = await createClient()
 
   try {
@@ -74,7 +81,8 @@ export async function processBatch(batchId: string) {
       .update({ status: 'failed' })
       .eq('id', batchId)
 
-    throw new Error(`Processing failed: ${error instanceof Error ? error.message : String(error)}`)
+    logger.error('Operation failed', { error: error })
+    throw new Error('Operation failed')
   }
 }
 
@@ -86,6 +94,10 @@ export async function updateStagingPrice(
   stagingProductId: string,
   suggestedPrice: number
 ) {
+  const user = await authenticateServerAction()
+  if (!user.profile || (user.profile.role !== 'admin' && user.profile.role !== 'super_admin')) {
+    throw new Error('Unauthorized: only admins can update staging prices')
+  }
   const supabase = await createClient()
 
   // Validate price
@@ -102,7 +114,8 @@ export async function updateStagingPrice(
     .eq('product_id', stagingProductId)
 
   if (error) {
-    throw new Error(`Failed to update price: ${error.message}`)
+    logger.error('Operation failed', { error: error })
+    throw new Error('Operation failed')
   }
 
   return { success: true }
@@ -115,6 +128,10 @@ export async function approveStagingProduct(
   stagingProductId: string,
   approverUserId: string
 ) {
+  const user = await authenticateServerAction()
+  if (!user.profile || (user.profile.role !== 'admin' && user.profile.role !== 'super_admin')) {
+    throw new Error('Unauthorized: only admins can approve staging products')
+  }
   const supabase = await createClient()
 
   const { data: staging } = await supabase
@@ -151,7 +168,8 @@ export async function approveStagingProduct(
     .eq('product_id', stagingProductId)
 
   if (error) {
-    throw new Error(`Failed to approve: ${error.message}`)
+    logger.error('Operation failed', { error: error })
+    throw new Error('Operation failed')
   }
 
   return { success: true }
@@ -165,6 +183,10 @@ export async function rejectStagingProduct(
   reason: string,
   approverUserId: string
 ) {
+  const user = await authenticateServerAction()
+  if (!user.profile || (user.profile.role !== 'admin' && user.profile.role !== 'super_admin')) {
+    throw new Error('Unauthorized: only admins can reject staging products')
+  }
   const supabase = await createClient()
 
   const { error } = await supabase
@@ -177,7 +199,8 @@ export async function rejectStagingProduct(
     .eq('product_id', stagingProductId)
 
   if (error) {
-    throw new Error(`Failed to reject: ${error.message}`)
+    logger.error('Operation failed', { error: error })
+    throw new Error('Operation failed')
   }
 
   return { success: true }
@@ -189,6 +212,10 @@ export async function rejectStagingProduct(
  * DO NOT overwrite existing live prices unless explicitly approved
  */
 export async function publishBatchToLive(batchId: string, publisherUserId: string) {
+  const user = await authenticateServerAction()
+  if (!user.profile || (user.profile.role !== 'admin' && user.profile.role !== 'super_admin')) {
+    throw new Error('Unauthorized: only admins can publish batches to live')
+  }
   const supabase = await createClient()
 
   try {
@@ -296,7 +323,8 @@ export async function publishBatchToLive(batchId: string, publisherUserId: strin
     }
   } catch (error: unknown) {
     logger.error('Publish failed:', error)
-    throw new Error(`Publish failed: ${error instanceof Error ? error.message : String(error)}`)
+    logger.error('Operation failed', { error: error })
+    throw new Error('Operation failed')
   }
 }
 
@@ -310,6 +338,10 @@ export async function getBatchStagingWithRelated(
     hasCriticalAnomalies?: boolean
   }
 ) {
+  const user = await authenticateServerAction()
+  if (!user.profile || (user.profile.role !== 'admin' && user.profile.role !== 'super_admin' && user.profile.role !== 'manager')) {
+    throw new Error('Unauthorized: insufficient permissions to view staging data')
+  }
   const supabase = await createClient()
 
   let query = supabase
@@ -326,7 +358,8 @@ export async function getBatchStagingWithRelated(
   })
 
   if (stagingError) {
-    throw new Error(`Failed to get staging: ${stagingError.message}`)
+    logger.error('Operation failed', { error: stagingError })
+    throw new Error('Operation failed')
   }
 
   // Fetch related data for each product
@@ -359,6 +392,10 @@ export async function getBatchStagingWithRelated(
  * Get batch summary stats
  */
 export async function getBatchSummary(batchId: string) {
+  const user = await authenticateServerAction()
+  if (!user.profile || (user.profile.role !== 'admin' && user.profile.role !== 'super_admin' && user.profile.role !== 'manager')) {
+    throw new Error('Unauthorized: insufficient permissions to view batch summary')
+  }
   const supabase = await createClient()
 
   // Basic batch info

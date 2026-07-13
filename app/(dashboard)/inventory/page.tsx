@@ -24,10 +24,13 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Search, SearchX, AlertTriangle, Package, Loader2, Edit2, History, Lock, Warehouse } from "lucide-react"
+import { EmptyState } from "@/components/ui/empty-state"
 import { useAuth } from "@/contexts/auth-context"
-import { getInventoryForBranch } from "@/lib/products-actions"
+import { getInventoryForBranch } from "@/lib/modules/inventory"
 import { StockAdjustmentDialog } from "@/components/inventory/stock-adjustment-dialog"
 import { StockMovementsDialog } from "@/components/inventory/stock-movements-dialog"
+import { AIInsightBanner } from "@/components/ai/ai-insight-banner"
+import { analyzeInventoryAlertsAI } from "@/lib/modules/ai"
 
 function formatKSh(amount: number): string {
   return new Intl.NumberFormat("en-KE", {
@@ -39,13 +42,29 @@ function formatKSh(amount: number): string {
 
 export default function InventoryPage() {
   const { profile, authState } = useAuth()
-  const [inventory, setInventory] = useState<any[]>([])
+  const [inventory, setInventory] = useState<{
+    id: string
+    product_id: string
+    branch_id: string
+    quantity: number
+    product?: {
+      id: string
+      sku: string
+      name: string
+      selling_price?: number
+      purchase_price?: number
+      reorder_level?: number
+      category?: { id: string; name: string; icon?: string } | null
+    } | null
+  }[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [alertFilter, setAlertFilter] = useState<string>("all")
   const [adjustmentDialogOpen, setAdjustmentDialogOpen] = useState(false)
   const [movementsDialogOpen, setMovementsDialogOpen] = useState(false)
-  const [selectedItem, setSelectedItem] = useState<any>(null)
+  // Selected inventory item from Supabase join query — Row type varies by query
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [selectedItem, setSelectedItem] = useState<any | null>(null)
   const deferredSearchTerm = useDeferredValue(searchTerm)
   const hasInventoryRef = useRef(false)
 
@@ -192,6 +211,21 @@ export default function InventoryPage() {
         </Card>
       )}
 
+      <AIInsightBanner
+        analyzeFn={() => analyzeInventoryAlertsAI({
+          lowStockItems: (lowStockItems || []).map(i => ({
+            name: i.product?.name || 'Unknown',
+            stock: i.quantity || 0,
+            reorderLevel: i.product?.reorder_level || 10,
+          })),
+          outOfStockItems: (outOfStockItems || []).map(i => i.product?.name || 'Unknown').filter(Boolean),
+          overstockItems: (inventory || []).filter((i) => i.quantity > 200).map(i => ({
+            name: i.product?.name || 'Unknown',
+            stock: i.quantity || 0,
+          })),
+        })}
+      />
+
       <div className="grid gap-4 md:grid-cols-4">
         <Card className="card-hover">
           <CardHeader className="pb-2">
@@ -284,17 +318,12 @@ export default function InventoryPage() {
                   ))}
                 </div>
               ) : filteredInventory.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
-                    <Warehouse className="h-6 w-6 text-muted-foreground" />
-                  </div>
-                  <p className="text-lg font-medium">No products found</p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {searchTerm || alertFilter !== 'all'
-                      ? 'Try adjusting your search or filters.'
-                      : 'No inventory items available.'}
-                  </p>
-                </div>
+                <EmptyState
+                  icon={Warehouse}
+                  title="No products found"
+                  description={searchTerm || alertFilter !== 'all' ? 'Try adjusting your search or filters.' : 'No inventory items available.'}
+                  compact
+                />
               ) : (
                 <Table>
                   <TableHeader>

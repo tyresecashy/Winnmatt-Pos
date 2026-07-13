@@ -98,11 +98,11 @@ export async function getTenantConfig(tenantId: string): Promise<TenantConfig | 
 export async function getTenantByDomain(domain: string): Promise<TenantConfig | null> {
   try {
     const { data, error } = await supabaseAdmin
-      .rpc('get_tenant_by_domain', { p_domain: domain })
+      .rpc('get_tenant_by_domain' as never, { p_domain: domain } as never)
       .single()
 
     if (error) return null
-    return data as TenantConfig
+    return data as unknown as TenantConfig
   } catch (error) {
     logger.error('[WhiteLabel] Failed to get tenant by domain:', error)
     return null
@@ -126,7 +126,7 @@ export async function updateTenantConfig(
     return { success: true }
   } catch (error) {
     logger.error('[WhiteLabel] Failed to update tenant config:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -153,7 +153,7 @@ export async function createTenant(
     return { success: true, data: data as TenantConfig }
   } catch (error) {
     logger.error('[WhiteLabel] Failed to create tenant:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -231,7 +231,7 @@ export async function applyTheme(
     return { success: true }
   } catch (error) {
     logger.error('[WhiteLabel] Failed to apply theme:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -267,7 +267,7 @@ export async function createTheme(
     return { success: true, data: data as TenantTheme }
   } catch (error) {
     logger.error('[WhiteLabel] Failed to create theme:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -331,7 +331,7 @@ export async function uploadTenantAsset(
     return { success: true, data: data as TenantAsset }
   } catch (error) {
     logger.error('[WhiteLabel] Failed to upload tenant asset:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -349,7 +349,7 @@ export async function deleteTenantAsset(assetId: string): Promise<{ success: boo
     return { success: true }
   } catch (error) {
     logger.error('[WhiteLabel] Failed to delete tenant asset:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -416,7 +416,7 @@ export async function addTenantDomain(
     return { success: true, data: data as TenantDomain }
   } catch (error) {
     logger.error('[WhiteLabel] Failed to add tenant domain:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -434,7 +434,7 @@ export async function deleteTenantDomain(domainId: string): Promise<{ success: b
     return { success: true }
   } catch (error) {
     logger.error('[WhiteLabel] Failed to delete tenant domain:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 

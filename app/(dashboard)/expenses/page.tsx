@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { startTransition, useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@/contexts/auth-context'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -33,14 +33,15 @@ import {
   getExpenses, createExpense, updateExpense, deleteExpense,
   approveExpense, getExpenseStats, getExpenseById,
   getRecurringExpenses, createRecurringExpense, toggleRecurringExpense, deleteRecurringExpense,
-  type Expense, type ExpenseCategory, type ExpenseStats, type RecurringExpense,
-} from '@/lib/expenses-actions'
+} from '@/lib/modules/expenses'
+import type { Expense, ExpenseCategory, ExpenseStats, RecurringExpense } from '@/lib/modules/expenses'
 import {
   Search, Plus, MoreHorizontal, Receipt, Coins, AlertCircle, CheckCircle, XCircle,
   TrendingUp, TrendingDown, Loader2, Edit3, Trash2, Eye, RotateCcw,
   Banknote, Calendar, Building2, FileText, Check, X, ArrowUpDown,
   RefreshCw, Wallet, Download,
 } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 
 // ─── Icon mapping ────────────────────────────────────────────────────────────
 
@@ -125,7 +126,7 @@ export default function ExpensesPage() {
     amount_cents: 0,
     description: '',
     vendor: '',
-    frequency: 'monthly' as const,
+    frequency: 'monthly' as string,
     next_date: new Date().toISOString().split('T')[0],
     payment_method: 'bank_transfer',
     notes: '',
@@ -147,8 +148,8 @@ export default function ExpensesPage() {
         getRecurringExpenses(branchId),
       ])
       setCategories(cats)
-      setExpenses(expResult.data)
-      setTotalCount(expResult.total)
+      setExpenses((expResult as any).data ?? expResult as any)
+      setTotalCount((expResult as any).total ?? 0)
       setStats(statsData)
       setRecurring(recData)
     } catch (err) {
@@ -158,7 +159,7 @@ export default function ExpensesPage() {
     }
   }, [branchId, toast])
 
-  useEffect(() => { void loadData() }, [loadData])
+  useEffect(() => { startTransition(() => { void loadData() }) }, [loadData])
 
   // ── Filtered Expenses ──
   const filteredExpenses = useMemo(() => {
@@ -353,11 +354,7 @@ export default function ExpensesPage() {
   if (!branchId) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center">
-          <Wallet className="h-12 w-12 mx-auto text-muted-foreground/40 mb-3" />
-          <h2 className="text-lg font-semibold">No Branch Selected</h2>
-          <p className="text-sm text-muted-foreground mt-1">Select a branch to manage expenses.</p>
-        </div>
+        <EmptyState icon={Wallet} title="No Branch Selected" description="Select a branch to manage expenses." />
       </div>
     )
   }
@@ -507,13 +504,12 @@ export default function ExpensesPage() {
                   {[1,2,3,4,5].map(i => <Skeleton key={i} className="h-12 w-full" />)}
                 </div>
               ) : filteredExpenses.length === 0 ? (
-                <div className="text-center py-12">
-                  <Wallet className="h-12 w-12 mx-auto text-muted-foreground/40 mb-3" />
-                  <p className="text-muted-foreground">No expenses found</p>
-                  <Button variant="outline" className="mt-3" onClick={() => setShowCreateDialog(true)}>
-                    <Plus className="h-4 w-4 mr-2" /> Record First Expense
-                  </Button>
-                </div>
+                <EmptyState
+                  icon={Wallet}
+                  title="No expenses found"
+                  actions={[{ label: 'Record First Expense', onClick: () => setShowCreateDialog(true), variant: 'outline', icon: Plus }]}
+                  compact
+                />
               ) : (
                 <Table>
                   <TableHeader>
@@ -642,7 +638,7 @@ export default function ExpensesPage() {
                 </CardHeader>
                 <CardContent>
                   {(stats?.monthly_totals || []).length === 0 ? (
-                    <p className="text-sm text-muted-foreground py-8 text-center">No data yet</p>
+                    <EmptyState title="No data yet" compact />
                   ) : (
                     <div className="space-y-2">
                       {stats?.monthly_totals.slice(0, 12).map(m => {
@@ -743,13 +739,12 @@ export default function ExpensesPage() {
             </CardHeader>
             <CardContent>
               {recurring.length === 0 ? (
-                <div className="text-center py-12">
-                  <RefreshCw className="h-12 w-12 mx-auto text-muted-foreground/40 mb-3" />
-                  <p className="text-muted-foreground">No recurring expenses set up</p>
-                  <Button variant="outline" className="mt-3" onClick={() => setShowRecurringDialog(true)}>
-                    <Plus className="h-4 w-4 mr-2" /> Set Up Recurring
-                  </Button>
-                </div>
+                <EmptyState
+                  icon={RefreshCw}
+                  title="No recurring expenses set up"
+                  actions={[{ label: 'Set Up Recurring', onClick: () => setShowRecurringDialog(true), variant: 'outline', icon: Plus }]}
+                  compact
+                />
               ) : (
                 <div className="space-y-2">
                   {recurring.map(rec => (
@@ -1185,7 +1180,7 @@ export default function ExpensesPage() {
             </div>
             <div className="space-y-2">
               <Label>Frequency</Label>
-              <Select value={recurringForm.frequency} onValueChange={(v) => setRecurringForm(p => ({ ...p, frequency: v as any }))}>
+              <Select value={recurringForm.frequency} onValueChange={(v) => setRecurringForm(p => ({ ...p, frequency: v as 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly' }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="daily">Daily</SelectItem>

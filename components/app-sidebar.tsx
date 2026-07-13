@@ -4,6 +4,7 @@ import { logger } from '@/lib/logger';
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { usePathname } from "next/navigation"
+import { useState } from "react"
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -48,6 +49,10 @@ import {
   Puzzle,
   Webhook,
   CheckCircle,
+  Megaphone,
+  FileSpreadsheet,
+  MapPin,
+  ChevronDown,
 } from "lucide-react"
 import {
   Sidebar,
@@ -55,13 +60,18 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarSeparator,
+  useSidebar,
 } from "@/components/ui/sidebar"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/contexts/auth-context"
@@ -79,12 +89,17 @@ const inventoryNavItems = [
   { title: "Inventory", url: "/inventory", icon: Warehouse, roles: ['super_admin', 'admin', 'manager'] as const },
   { title: "Inventory Analytics", url: "/inventory-analytics", icon: TrendingUp, roles: ['super_admin', 'admin', 'manager'] as const },
   { title: "Warehouses", url: "/warehouses", icon: Building2, roles: ['super_admin', 'admin', 'manager'] as const },
+  { title: "Warehouse Locations", url: "/warehouse-locations", icon: MapPin, roles: ['super_admin', 'admin', 'manager'] as const },
   { title: "Stock Alerts", url: "/stock-alerts", icon: AlertTriangle, roles: ['super_admin', 'admin', 'manager'] as const },
   { title: "Stock Count", url: "/stock-count", icon: ClipboardList, roles: ['super_admin', 'admin', 'manager'] as const },
   { title: "Branch Transfers", url: "/transfers", icon: ArrowRightLeft, roles: ['super_admin', 'admin', 'manager'] as const },
   { title: "Suppliers", url: "/suppliers", icon: Truck, roles: ['super_admin', 'admin', 'manager'] as const },
   { title: "Purchases", url: "/purchases", icon: ClipboardCheck, roles: ['super_admin', 'admin', 'manager'] as const },
   { title: "Purchase Orders", url: "/purchase-orders", icon: ShoppingCart, roles: ['super_admin', 'admin', 'manager'] as const },
+  { title: "Goods Received Notes", url: "/goods-received-notes", icon: ClipboardList, roles: ['super_admin', 'admin', 'manager'] as const },
+  { title: "Supplier Invoices", url: "/supplier-invoices", icon: Receipt, roles: ['super_admin', 'admin', 'manager'] as const },
+  { title: "Supplier Returns", url: "/supplier-returns", icon: RotateCcw, roles: ['super_admin', 'admin', 'manager'] as const },
+  { title: "Backorders", url: "/backorders", icon: ArrowLeftRight, roles: ['super_admin', 'admin', 'manager'] as const },
   { title: "Batch Tracking", url: "/batch-tracking", icon: BookOpen, roles: ['super_admin', 'admin', 'manager'] as const },
 ]
 
@@ -92,6 +107,7 @@ const salesNavItems = [
   { title: "Sales History", url: "/sales-history", icon: History, roles: ['super_admin', 'admin', 'manager'] as const },
   { title: "Returns & Refunds", url: "/returns", icon: RotateCcw },
   { title: "Invoices", url: "/invoices", icon: FileText, roles: ['super_admin', 'admin', 'manager'] as const },
+  { title: "Invoice Matching", url: "/invoice-matching", icon: FileSpreadsheet, roles: ['super_admin', 'admin', 'manager'] as const },
   { title: "Reports", url: "/reports", icon: BarChart3, roles: ['super_admin', 'admin', 'manager'] as const },
 ]
 
@@ -107,6 +123,7 @@ const workforceNavItems = [
 const cashNavItems = [
   { title: "Cash Management", url: "/cash-management", icon: DollarSign },
   { title: "Registers", url: "/registers", icon: Monitor, roles: ['super_admin', 'admin', 'manager'] as const },
+  { title: "Shifts", url: "/shifts", icon: Clock },
 ]
 
 const financeNavItems = [
@@ -124,6 +141,7 @@ const customerNavItems = [
   { title: "Customers", url: "/customers", icon: Users },
   { title: "Customer Credit", url: "/customer-credit", icon: DollarSign, roles: ['super_admin', 'admin', 'manager'] as const },
   { title: "Loyalty", url: "/loyalty", icon: BadgePercent },
+  { title: "Campaigns", url: "/campaigns", icon: Megaphone, roles: ['super_admin', 'admin', 'manager'] as const },
 ]
 
 const opsNavItems = [
@@ -144,7 +162,7 @@ const analyticsNavItems = [
   { title: "Inventory Analytics", url: "/analytics/inventory", icon: Package, roles: ['super_admin', 'admin', 'manager'] as const },
   { title: "Customer Analytics", url: "/analytics/customers", icon: Users, roles: ['super_admin', 'admin', 'manager'] as const },
   { title: "Workforce Analytics", url: "/analytics/workforce", icon: Clock, roles: ['super_admin', 'admin'] as const },
-  { title: "Financial Analytics", url: "/analytics/financial", icon: DollarSign, roles: ['super_admin', 'admin'] as const },
+  { title: "Financial Analytics", url: "/analytics/finance", icon: DollarSign, roles: ['super_admin', 'admin'] as const },
   { title: "Report Builder", url: "/analytics/reports", icon: FileText, roles: ['super_admin', 'admin'] as const },
 ]
 
@@ -159,10 +177,97 @@ const enterpriseNavItems = [
   { title: "Configuration", url: "/enterprise/config", icon: Settings, roles: ['super_admin', 'admin'] as const },
 ]
 
+interface NavItem {
+  title: string
+  url: string
+  icon: React.ComponentType<{ className?: string }>
+  roles?: readonly string[]
+}
+
+/** Render a group of sidebar items inside a collapsible section. */
+function NavGroupMenu({
+  items,
+  pathname,
+}: {
+  items: NavItem[]
+  pathname: string
+}) {
+  const { setOpen } = useSidebar()
+
+  return (
+    <SidebarGroupContent>
+      <SidebarMenu>
+        {items.map((item) => (
+          <SidebarMenuItem key={item.title}>
+            <SidebarMenuButton
+              asChild
+              isActive={pathname === item.url}
+              className="data-[active=true]:bg-primary data-[active=true]:text-primary-foreground"
+            >
+              <Link href={item.url} onClick={() => setOpen(false)}>
+                <item.icon className="h-4 w-4" />
+                <span>{item.title}</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        ))}
+      </SidebarMenu>
+    </SidebarGroupContent>
+  )
+}
+
+/** A sidebar group with collapsible header (chevron toggle). */
+function SidebarCollapsibleGroup({
+  label,
+  open,
+  onOpenChange,
+  children,
+}: {
+  label: string
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  children: React.ReactNode
+}) {
+  return (
+    <SidebarGroup>
+      <Collapsible open={open} onOpenChange={onOpenChange}>
+        <CollapsibleTrigger asChild>
+          <div className="flex w-full cursor-pointer items-center justify-between rounded-md px-2 py-1.5 text-xs uppercase tracking-wider text-sidebar-foreground/50 transition-colors hover:text-sidebar-foreground select-none">
+            {label}
+            <ChevronDown className="h-3 w-3 transition-transform duration-200 data-[state=open]:rotate-180" />
+          </div>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          {children}
+        </CollapsibleContent>
+      </Collapsible>
+    </SidebarGroup>
+  )
+}
+
 export function AppSidebar() {
   const router = useRouter()
   const pathname = usePathname()
   const { profile, signOut } = useAuth()
+
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
+    main: false,
+    inventory: false,
+    sales: false,
+    finance: false,
+    customers: false,
+    workforce: false,
+    cash: false,
+    operations: false,
+    analytics: false,
+    enterprise: false,
+    admin: false,
+  })
+
+  const toggleSection = (key: string) => (value: boolean) => {
+    setOpenSections((prev) => ({ ...prev, [key]: value }))
+  }
+
   const adminNavItems = [
     ...(["super_admin", "admin"].includes(profile?.role || "")
       ? [{ title: "Admin Console", url: "/admin", icon: Settings }]
@@ -220,8 +325,11 @@ export function AppSidebar() {
     return item.roles.includes(profile?.role || '')
   }
 
+  const financeVisible = financeNavItems.filter(canSee).length > 0
+  const workforceVisible = workforceNavItems.filter(canSee).length > 0
+
   return (
-    <Sidebar className="border-r-0">
+    <Sidebar className="border-r-0" data-overlay="true">
       <SidebarHeader className="border-b border-sidebar-border px-4 py-4">
         <Link href="/dashboard" className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
@@ -239,298 +347,134 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent className="px-2">
-        <SidebarGroup>
-          <SidebarGroupLabel className="text-sidebar-foreground/50 text-xs uppercase tracking-wider">
-            Main
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {mainNavItems.filter(canSee).map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={pathname === item.url}
-                    className="data-[active=true]:bg-primary data-[active=true]:text-primary-foreground"
-                  >
-                    <Link href={item.url}>
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {/* ── Main ──────────────────────────────────────────── */}
+        <SidebarCollapsibleGroup
+          label="Main"
+          open={openSections.main}
+          onOpenChange={toggleSection('main')}
+        >
+          <NavGroupMenu items={mainNavItems.filter(canSee)} pathname={pathname} />
+        </SidebarCollapsibleGroup>
 
         <SidebarSeparator className="bg-sidebar-border" />
 
-        <SidebarGroup>
-          <SidebarGroupLabel className="text-sidebar-foreground/50 text-xs uppercase tracking-wider">
-            Inventory
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {inventoryNavItems.filter(canSee).map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={pathname === item.url}
-                    className="data-[active=true]:bg-primary data-[active=true]:text-primary-foreground"
-                  >
-                    <Link href={item.url}>
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {/* ── Inventory ──────────────────────────────────────── */}
+        <SidebarCollapsibleGroup
+          label="Inventory"
+          open={openSections.inventory}
+          onOpenChange={toggleSection('inventory')}
+        >
+          <NavGroupMenu items={inventoryNavItems.filter(canSee)} pathname={pathname} />
+        </SidebarCollapsibleGroup>
 
         <SidebarSeparator className="bg-sidebar-border" />
 
-        <SidebarGroup>
-          <SidebarGroupLabel className="text-sidebar-foreground/50 text-xs uppercase tracking-wider">
-            Sales
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {salesNavItems.filter(canSee).map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={pathname === item.url}
-                    className="data-[active=true]:bg-primary data-[active=true]:text-primary-foreground"
-                  >
-                    <Link href={item.url}>
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {/* ── Sales ──────────────────────────────────────────── */}
+        <SidebarCollapsibleGroup
+          label="Sales"
+          open={openSections.sales}
+          onOpenChange={toggleSection('sales')}
+        >
+          <NavGroupMenu items={salesNavItems.filter(canSee)} pathname={pathname} />
+        </SidebarCollapsibleGroup>
 
         <SidebarSeparator className="bg-sidebar-border" />
 
-        {financeNavItems.filter(canSee).length > 0 && (
+        {/* ── Finance (conditional) ──────────────────────────── */}
+        {financeVisible && (
           <>
-        <SidebarGroup>
-          <SidebarGroupLabel className="text-sidebar-foreground/50 text-xs uppercase tracking-wider">
-            Finance
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {financeNavItems.filter(canSee).map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={pathname === item.url}
-                    className="data-[active=true]:bg-primary data-[active=true]:text-primary-foreground"
-                  >
-                    <Link href={item.url}>
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-        <SidebarSeparator className="bg-sidebar-border" />
+            <SidebarCollapsibleGroup
+              label="Finance"
+              open={openSections.finance}
+              onOpenChange={toggleSection('finance')}
+            >
+              <NavGroupMenu items={financeNavItems.filter(canSee)} pathname={pathname} />
+            </SidebarCollapsibleGroup>
+
+            <SidebarSeparator className="bg-sidebar-border" />
           </>
         )}
 
-        <SidebarGroup>
-          <SidebarGroupLabel className="text-sidebar-foreground/50 text-xs uppercase tracking-wider">
-            Customers & Loyalty
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {customerNavItems.filter(canSee).map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={pathname === item.url}
-                    className="data-[active=true]:bg-primary data-[active=true]:text-primary-foreground"
-                  >
-                    <Link href={item.url}>
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {/* ── Customers & Loyalty ─────────────────────────────── */}
+        <SidebarCollapsibleGroup
+          label="Customers & Loyalty"
+          open={openSections.customers}
+          onOpenChange={toggleSection('customers')}
+        >
+          <NavGroupMenu items={customerNavItems.filter(canSee)} pathname={pathname} />
+        </SidebarCollapsibleGroup>
 
-        {workforceNavItems.filter(canSee).length > 0 && (
-          <>
         <SidebarSeparator className="bg-sidebar-border" />
 
-        <SidebarGroup>
-          <SidebarGroupLabel className="text-sidebar-foreground/50 text-xs uppercase tracking-wider">
-            Workforce
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {workforceNavItems.filter(canSee).map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={pathname === item.url}
-                    className="data-[active=true]:bg-primary data-[active=true]:text-primary-foreground"
-                  >
-                    <Link href={item.url}>
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {/* ── Workforce (conditional) ─────────────────────────── */}
+        {workforceVisible && (
+          <>
+            <SidebarCollapsibleGroup
+              label="Workforce"
+              open={openSections.workforce}
+              onOpenChange={toggleSection('workforce')}
+            >
+              <NavGroupMenu items={workforceNavItems.filter(canSee)} pathname={pathname} />
+            </SidebarCollapsibleGroup>
+
+            <SidebarSeparator className="bg-sidebar-border" />
           </>
         )}
 
-        <SidebarSeparator className="bg-sidebar-border" />
-
-        <SidebarGroup>
-          <SidebarGroupLabel className="text-sidebar-foreground/50 text-xs uppercase tracking-wider">
-            Cash & Registers
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {cashNavItems.filter(canSee).map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={pathname === item.url}
-                    className="data-[active=true]:bg-primary data-[active=true]:text-primary-foreground"
-                  >
-                    <Link href={item.url}>
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {/* ── Cash & Registers ────────────────────────────────── */}
+        <SidebarCollapsibleGroup
+          label="Cash & Registers"
+          open={openSections.cash}
+          onOpenChange={toggleSection('cash')}
+        >
+          <NavGroupMenu items={cashNavItems.filter(canSee)} pathname={pathname} />
+        </SidebarCollapsibleGroup>
 
         <SidebarSeparator className="bg-sidebar-border" />
 
-        <SidebarGroup>
-          <SidebarGroupLabel className="text-sidebar-foreground/50 text-xs uppercase tracking-wider">
-            Operations
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {opsNavItems.filter(canSee).map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={pathname === item.url}
-                    className="data-[active=true]:bg-primary data-[active=true]:text-primary-foreground"
-                  >
-                    <Link href={item.url}>
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {/* ── Operations ──────────────────────────────────────── */}
+        <SidebarCollapsibleGroup
+          label="Operations"
+          open={openSections.operations}
+          onOpenChange={toggleSection('operations')}
+        >
+          <NavGroupMenu items={opsNavItems.filter(canSee)} pathname={pathname} />
+        </SidebarCollapsibleGroup>
 
         <SidebarSeparator className="bg-sidebar-border" />
 
-        <SidebarGroup>
-          <SidebarGroupLabel className="text-sidebar-foreground/50 text-xs uppercase tracking-wider">
-            Analytics & Reports
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {analyticsNavItems.filter(canSee).map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={pathname === item.url}
-                    className="data-[active=true]:bg-primary data-[active=true]:text-primary-foreground"
-                  >
-                    <Link href={item.url}>
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {/* ── Analytics & Reports ─────────────────────────────── */}
+        <SidebarCollapsibleGroup
+          label="Analytics & Reports"
+          open={openSections.analytics}
+          onOpenChange={toggleSection('analytics')}
+        >
+          <NavGroupMenu items={analyticsNavItems.filter(canSee)} pathname={pathname} />
+        </SidebarCollapsibleGroup>
 
         <SidebarSeparator className="bg-sidebar-border" />
 
-        <SidebarGroup>
-          <SidebarGroupLabel className="text-sidebar-foreground/50 text-xs uppercase tracking-wider">
-            Enterprise Operations
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {enterpriseNavItems.filter(canSee).map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={pathname === item.url}
-                    className="data-[active=true]:bg-primary data-[active=true]:text-primary-foreground"
-                  >
-                    <Link href={item.url}>
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {/* ── Enterprise Operations ───────────────────────────── */}
+        <SidebarCollapsibleGroup
+          label="Enterprise Operations"
+          open={openSections.enterprise}
+          onOpenChange={toggleSection('enterprise')}
+        >
+          <NavGroupMenu items={enterpriseNavItems.filter(canSee)} pathname={pathname} />
+        </SidebarCollapsibleGroup>
 
+        <SidebarSeparator className="bg-sidebar-border" />
+
+        {/* ── Administration (conditional) ────────────────────── */}
         {adminNavItems.length > 0 && (
           <>
-            <SidebarSeparator className="bg-sidebar-border" />
-
-            <SidebarGroup>
-              <SidebarGroupLabel className="text-sidebar-foreground/50 text-xs uppercase tracking-wider">
-                Administration
-              </SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {adminNavItems.map((item) => (
-                    <SidebarMenuItem key={item.title}>
-                      <SidebarMenuButton
-                        asChild
-                        isActive={pathname === item.url}
-                        className="data-[active=true]:bg-primary data-[active=true]:text-primary-foreground"
-                      >
-                        <Link href={item.url}>
-                          <item.icon className="h-4 w-4" />
-                          <span>{item.title}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
+            <SidebarCollapsibleGroup
+              label="Administration"
+              open={openSections.admin}
+              onOpenChange={toggleSection('admin')}
+            >
+              <NavGroupMenu items={adminNavItems} pathname={pathname} />
+            </SidebarCollapsibleGroup>
           </>
         )}
       </SidebarContent>

@@ -3,11 +3,29 @@ import { logger } from '@/lib/logger';
 
 import { authenticateServerAction } from '@/lib/auth-helpers'
 import { supabaseAdmin } from '@/lib/supabase-server'
-import type {
-  BusinessSettings,
-  BranchReceiptSettings,
-  MergedReceiptSettings,
-} from '@/lib/db.types'
+// ---------------------------------------------------------------------------
+// Types for business & branch receipt settings (not in generated types yet)
+// ---------------------------------------------------------------------------
+export interface BusinessSettings {
+  id: string; business_name: string; phone_number: string | null
+  email: string | null; address: string | null; tax_pin: string | null
+  business_pin: string | null; receipt_footer_text: string | null
+  return_policy_text: string | null; thank_you_message: string | null
+  created_at: string; updated_at: string
+}
+
+export interface BranchReceiptSettings {
+  id: string; branch_id: string; phone_number: string | null
+  email: string | null; address: string | null
+  receipt_header_text: string | null; created_at: string; updated_at: string
+}
+
+export interface MergedReceiptSettings extends BusinessSettings {
+  branchSettings?: BranchReceiptSettings
+  effectivePhoneNumber: string | null
+  effectiveEmail: string | null
+  effectiveAddress: string | null
+}
 
 /**
  * Singleton business settings ID (hardcoded)
@@ -143,7 +161,8 @@ export async function updateBusinessSettings(
     .single()
 
   if (error) {
-    throw new Error(`Failed to update business settings: ${error.message}`)
+    logger.error('Operation failed', { error: error })
+    throw new Error('Operation failed')
   }
 
   return updated as BusinessSettings
@@ -187,7 +206,8 @@ export async function updateBranchReceiptSettings(
       .single()
 
     if (error) {
-      throw new Error(`Failed to update branch receipt settings: ${error.message}`)
+      logger.error('Operation failed', { error: error })
+      throw new Error('Operation failed')
     }
 
     return updated as BranchReceiptSettings
@@ -205,7 +225,8 @@ export async function updateBranchReceiptSettings(
       .single()
 
     if (error) {
-      throw new Error(`Failed to create branch receipt settings: ${error.message}`)
+      logger.error('Operation failed', { error: error })
+      throw new Error('Operation failed')
     }
 
     return inserted as BranchReceiptSettings

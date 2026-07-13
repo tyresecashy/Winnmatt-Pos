@@ -127,7 +127,7 @@ export async function upsertTemplate(
     return { success: true }
   } catch (error) {
     logger.error('[Notification] Failed to upsert template:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -220,6 +220,16 @@ export async function sendNotification(
                   )
                 }
                 break
+              case 'webhook':
+                await sendWebhookNotification({
+                  event: templateName,
+                  template_id: template.id,
+                  recipient,
+                  subject,
+                  body,
+                  variables,
+                })
+                break
             }
 
             sent++
@@ -278,16 +288,32 @@ async function sendInAppNotification(
 }
 
 /**
- * Send email notification (placeholder - would integrate with email provider)
+ * Send email notification — uses Resend if RESEND_API_KEY is set, otherwise logs only.
  */
-async function sendEmailNotification(
+export async function sendEmailNotification(
   email: string,
   subject: string,
   body: string
 ): Promise<void> {
-  // Placeholder - would integrate with SendGrid, Mailgun, etc.
-  logger.info(`[Notification] Email sent to ${email}: ${subject}`)
-  
+  const resendKey = process.env.RESEND_API_KEY
+  if (resendKey) {
+    try {
+      const { Resend } = await import('resend')
+      const resend = new Resend(resendKey)
+      await resend.emails.send({
+        from: process.env.EMAIL_FROM || 'WinnMatt POS <notifications@winnmatt.com>',
+        to: email,
+        subject,
+        html: body,
+      })
+      logger.info(`[Notification] Email sent via Resend to ${email}`)
+    } catch (error) {
+      logger.error(`[Notification] Resend failed for ${email}, falling back to log:`, error)
+    }
+  } else {
+    logger.info(`[Notification] Email would be sent to ${email}: ${subject} (no RESEND_API_KEY)`)
+  }
+
   await logNotification({
     channel: 'email',
     recipient: email,
@@ -298,15 +324,28 @@ async function sendEmailNotification(
 }
 
 /**
- * Send SMS notification (placeholder - would integrate with SMS provider)
+ * Send SMS notification — uses Africa's Talking if AT_API_KEY is set, otherwise logs only.
  */
-async function sendSMSNotification(
+export async function sendSMSNotification(
   phone: string,
   message: string
 ): Promise<void> {
-  // Placeholder - would integrate with Africa's Talking, Twilio, etc.
-  logger.info(`[Notification] SMS sent to ${phone}: ${message.substring(0, 50)}...`)
-  
+  const apiKey = process.env.AFRICASTALKING_API_KEY
+  const username = process.env.AFRICASTALKING_USERNAME || 'sandbox'
+  if (apiKey) {
+    try {
+      const AfricaTalking = await import('africastalking')
+      const at = AfricaTalking.default({ apiKey, username })
+      const sms = at.SMS
+      await sms.send({ to: [phone], message, from: process.env.SMS_FROM || undefined })
+      logger.info(`[Notification] SMS sent via Africa's Talking to ${phone}`)
+    } catch (error) {
+      logger.error(`[Notification] Africa's Talking failed for ${phone}, falling back to log:`, error)
+    }
+  } else {
+    logger.info(`[Notification] SMS would be sent to ${phone}: ${message.substring(0, 50)}... (no AFRICASTALKING_API_KEY)`)
+  }
+
   await logNotification({
     channel: 'sms',
     recipient: phone,
@@ -316,21 +355,105 @@ async function sendSMSNotification(
 }
 
 /**
- * Send push notification (placeholder - would integrate with FCM)
+ * Send push notification via Firebase Cloud Messaging (legacy HTTP API)
+ * Uses FIREBASE_SERVER_KEY env var; falls back to log-only if not set.
  */
 async function sendPushNotification(
   userId: string,
   title: string,
   body: string
 ): Promise<void> {
-  // Placeholder - would integrate with Firebase Cloud Messaging
-  logger.info(`[Notification] Push sent to ${userId}: ${title}`)
-  
+  const serverKey = process.env.FIREBASE_SERVER_KEY
+  if (serverKey) {
+    try {
+      // First try to get the device token for this user
+      const { data: devices } = await supabaseAdmin
+        .from('user_devices' as never)
+        .select('fcm_token' as never)
+        .eq('user_id', userId)
+        .not('fcm_token' as never, 'is', null)
+        .limit(5)
+
+      if (devices && devices.length > 0) {
+        for (const device of devices as unknown as { fcm_token: string | null }[]) {
+          if (!device.fcm_token) continue
+          const response = await fetch('https://fcm.googleapis.com/fcm/send', {
+            method: 'POST',
+            headers: {
+              'Authorization': `key=${serverKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              to: device.fcm_token,
+              notification: { title, body },
+              data: { title, body },
+              priority: 'high',
+            }),
+          })
+          if (!response.ok) {
+            logger.warn(`[Notification] FCM push failed for device: ${response.status} ${response.statusText}`)
+          }
+        }
+      } else {
+        logger.info(`[Notification] No FCM devices registered for user ${userId}`)
+      }
+    } catch (error) {
+      logger.error(`[Notification] FCM push failed for ${userId}:`, error)
+    }
+  } else {
+    logger.info(`[Notification] Push would be sent to ${userId}: ${title} (no FIREBASE_SERVER_KEY)`)
+  }
+
   await logNotification({
     channel: 'push',
     recipient: userId,
     subject: title,
     body,
+    status: 'sent',
+  })
+}
+
+/**
+ * Send webhook notification — POSTs JSON payload to the configured webhook URL.
+ * Uses WEBHOOK_NOTIFICATION_URL env var; logs only if not set.
+ */
+async function sendWebhookNotification(
+  payload: Record<string, unknown>
+): Promise<void> {
+  const webhookUrl = process.env.WEBHOOK_NOTIFICATION_URL
+  if (webhookUrl) {
+    try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      }
+      const secret = process.env.WEBHOOK_NOTIFICATION_SECRET
+      if (secret) {
+        headers['X-Webhook-Secret'] = secret
+      }
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          event: payload.event || 'notification',
+          timestamp: new Date().toISOString(),
+          data: payload,
+        }),
+      })
+      if (!response.ok) {
+        logger.warn(`[Notification] Webhook POST returned ${response.status} ${response.statusText}`)
+      } else {
+        logger.info(`[Notification] Webhook sent to ${webhookUrl}`)
+      }
+    } catch (error) {
+      logger.error(`[Notification] Webhook failed for ${webhookUrl}:`, error)
+    }
+  } else {
+    logger.info(`[Notification] Webhook would be sent (no WEBHOOK_NOTIFICATION_URL)`)
+  }
+
+  await logNotification({
+    channel: 'webhook',
+    body: JSON.stringify(payload),
     status: 'sent',
   })
 }
@@ -363,7 +486,7 @@ async function logNotification(data: {
         error_message: data.error || null,
         metadata: data.metadata || null,
         sent_at: data.status === 'sent' ? new Date().toISOString() : null,
-      })
+      } as never)
   } catch (error) {
     logger.error('[Notification] Failed to log notification:', error)
   }
@@ -393,7 +516,7 @@ export async function getUserPreferences(userId: string): Promise<NotificationPr
 
     for (const pref of data || []) {
       if (pref.channel in preferences) {
-        preferences[pref.channel as keyof NotificationPreferences][pref.category] = pref.enabled
+        preferences[pref.channel as keyof NotificationPreferences][pref.category] = pref.enabled ?? false
       }
     }
 
@@ -427,7 +550,7 @@ export async function updatePreference(
     return { success: true }
   } catch (error) {
     logger.error('[Notification] Failed to update preference:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -494,7 +617,7 @@ export async function getNotifications(
       .eq('is_read', false)
 
     return {
-      notifications: (data || []) as InAppNotification[],
+      notifications: (data || []) as unknown as InAppNotification[],
       unreadCount: unreadCount || 0,
     }
   } catch (error) {
@@ -521,7 +644,7 @@ export async function markAsRead(
     return { success: true }
   } catch (error) {
     logger.error('[Notification] Failed to mark as read:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -542,7 +665,7 @@ export async function markAllAsRead(
     return { success: true }
   } catch (error) {
     logger.error('[Notification] Failed to mark all as read:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -564,6 +687,6 @@ export async function deleteNotification(
     return { success: true }
   } catch (error) {
     logger.error('[Notification] Failed to delete notification:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }

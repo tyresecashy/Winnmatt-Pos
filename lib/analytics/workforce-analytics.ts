@@ -54,44 +54,39 @@ export interface TaskDurationAnalysis {
 
 export class WorkforceAnalyticsService {
   async getWorkforceMetrics(startDate: string, endDate: string): Promise<WorkforceMetrics> {
-    const { count: totalWorkers } = await supabaseAdmin
-      .from('employee_profiles')
-      .select('*', { count: 'exact', head: true });
+    // All 4 queries are independent — run in parallel
+    const [
+      { count: totalWorkers },
+      { data: activeShifts },
+      { data: tasks },
+      { data: timeLogs },
+    ] = await Promise.all([
+      supabaseAdmin.from('employee_profiles').select('*', { count: 'exact', head: true }),
+      supabaseAdmin.from('worker_shifts').select('employee_id').gte('start_time', startDate).lte('start_time', endDate),
+      supabaseAdmin.from('tasks').select('id, status, assigned_to, estimated_minutes, actual_minutes').gte('created_at', startDate).lte('created_at', endDate),
+      supabaseAdmin.from('task_time_logs').select('duration_minutes').gte('timestamp', startDate).lte('timestamp', endDate),
+    ]);
 
-    const { data: activeShifts } = await supabaseAdmin
-      .from('worker_shifts')
-      .select('worker_id')
-      .gte('start_time', startDate)
-      .lte('start_time', endDate);
+    const activeShiftsRows = (activeShifts || []) as unknown as Array<Record<string, unknown>>;
+    const tasksRows = (tasks || []) as unknown as Array<Record<string, unknown>>;
+    const timeLogsRows = (timeLogs || []) as unknown as Array<Record<string, unknown>>;
 
-    const uniqueActiveWorkers = new Set(activeShifts?.map(s => s.worker_id)).size;
+    const uniqueActiveWorkers = new Set(activeShiftsRows.map(s => s.employee_id)).size;
 
-    const { data: tasks } = await supabaseAdmin
-      .from('tasks')
-      .select('id, status, assigned_to, estimated_minutes, actual_minutes')
-      .gte('created_at', startDate)
-      .lte('created_at', endDate);
-
-    const completedTasks = tasks?.filter(t => t.status === 'completed') || [];
-    const averageTaskCompletionRate = tasks?.length 
-      ? (completedTasks.length / tasks.length) * 100 
+    const completedTasks = tasksRows.filter(t => t.status === 'completed');
+    const averageTaskCompletionRate = tasksRows.length
+      ? (completedTasks.length / tasksRows.length) * 100
       : 0;
 
     const efficiencyScores = completedTasks
       .filter(t => t.estimated_minutes && t.actual_minutes)
-      .map(t => Math.min(100, (t.estimated_minutes! / t.actual_minutes!) * 100));
+      .map(t => Math.min(100, ((t.estimated_minutes as number) / (t.actual_minutes as number)) * 100));
     
     const averageEfficiencyScore = efficiencyScores.length
       ? efficiencyScores.reduce((a, b) => a + b, 0) / efficiencyScores.length
       : 0;
 
-    const { data: timeLogs } = await supabaseAdmin
-      .from('worker_time_logs')
-      .select('duration_minutes')
-      .gte('start_time', startDate)
-      .lte('start_time', endDate);
-
-    const totalHoursWorked = (timeLogs?.reduce((sum, log) => sum + (log.duration_minutes || 0), 0) || 0) / 60;
+    const totalHoursWorked = (timeLogsRows.reduce((sum, log) => sum + ((log.duration_minutes as number) || 0), 0) || 0) / 60;
 
     const averageHourlyRate = 200;
     const laborCost = totalHoursWorked * averageHourlyRate;
@@ -113,12 +108,14 @@ export class WorkforceAnalyticsService {
 
     if (!workers) return [];
 
+    const workersRows = workers as unknown as Array<Record<string, unknown>>;
+
     const efficiencyData = await Promise.all(
-      workers.map(async (worker: any) => {
+      workersRows.map(async (worker) => {
         const { data: tasks } = await supabaseAdmin
           .from('tasks')
           .select('id, status, estimated_minutes, actual_minutes')
-          .eq('assigned_to', worker.id)
+          .eq('assigned_to', worker.id as string)
           .gte('created_at', startDate)
           .lte('created_at', endDate);
 
@@ -126,27 +123,29 @@ export class WorkforceAnalyticsService {
           return null;
         }
 
-        const completedTasks = tasks.filter(t => t.status === 'completed');
-        const completionRate = (completedTasks.length / tasks.length) * 100;
+        const tasksRows = tasks as unknown as Array<Record<string, unknown>>;
+        const completedTasks = tasksRows.filter(t => t.status === 'completed');
+        const completionRate = (completedTasks.length / tasksRows.length) * 100;
 
         const tasksWithTime = completedTasks.filter(t => t.actual_minutes);
         const averageTimeMinutes = tasksWithTime.length
-          ? tasksWithTime.reduce((sum, t) => sum + (t.actual_minutes || 0), 0) / tasksWithTime.length
+          ? tasksWithTime.reduce((sum, t) => sum + ((t.actual_minutes as number) || 0), 0) / tasksWithTime.length
           : 0;
 
         const efficiencyScores = completedTasks
           .filter(t => t.estimated_minutes && t.actual_minutes)
-          .map(t => Math.min(100, (t.estimated_minutes! / t.actual_minutes!) * 100));
+          .map(t => Math.min(100, ((t.estimated_minutes as number) / (t.actual_minutes as number)) * 100));
 
         const efficiencyScore = efficiencyScores.length
           ? efficiencyScores.reduce((a, b) => a + b, 0) / efficiencyScores.length
           : 0;
 
+        const user = worker.user as Record<string, unknown> | null;
         return {
-          workerId: worker.id,
-          workerName: worker.user?.full_name || worker.staff_number || 'Unknown',
-          role: worker.position || 'Unknown',
-          tasksAssigned: tasks.length,
+          workerId: worker.id as string,
+          workerName: (user?.full_name as string) || (worker.staff_number as string) || 'Unknown',
+          role: (worker.position as string) || 'Unknown',
+          tasksAssigned: tasksRows.length,
           tasksCompleted: completedTasks.length,
           completionRate,
           averageTimeMinutes,
@@ -167,26 +166,35 @@ export class WorkforceAnalyticsService {
 
     if (!workers) return [];
 
+    const workersRows = workers as unknown as Array<Record<string, unknown>>;
+
     const attendanceData = await Promise.all(
-      workers.map(async (worker: any) => {
+      workersRows.map(async (worker) => {
         const { data: shifts } = await supabaseAdmin
           .from('worker_shifts')
           .select('id, start_time, end_time, status')
-          .eq('worker_id', worker.id)
-          .gte('start_time', startDate)
-          .lte('start_time', endDate);
+          .eq('employee_id', worker.id as string)
+          .gte('shift_date', startDate)
+          .lte('shift_date', endDate);
 
         if (!shifts || shifts.length === 0) {
           return null;
         }
 
-        const attendedShifts = shifts.filter(s => s.status === 'completed');
-        const attendanceRate = (attendedShifts.length / shifts.length) * 100;
+        const shiftsRows = shifts as unknown as Array<Record<string, unknown>>;
+        const attendedShifts = shiftsRows.filter(s => s.status === 'completed');
+        const attendanceRate = (attendedShifts.length / shiftsRows.length) * 100;
 
-        const clockInTimes = attendedShifts.map(s => new Date(s.start_time).getHours() * 60 + new Date(s.start_time).getMinutes());
+        const clockInTimes = attendedShifts.map(s => {
+          const d = new Date(s.start_time as string);
+          return d.getHours() * 60 + d.getMinutes();
+        });
         const clockOutTimes = attendedShifts
           .filter(s => s.end_time)
-          .map(s => new Date(s.end_time!).getHours() * 60 + new Date(s.end_time!).getMinutes());
+          .map(s => {
+            const d = new Date(s.end_time as string);
+            return d.getHours() * 60 + d.getMinutes();
+          });
 
         const averageClockInMinutes = clockInTimes.length
           ? clockInTimes.reduce((a, b) => a + b, 0) / clockInTimes.length
@@ -203,17 +211,18 @@ export class WorkforceAnalyticsService {
 
         const totalMinutes = attendedShifts.reduce((sum, shift) => {
           if (shift.end_time) {
-            const duration = (new Date(shift.end_time).getTime() - new Date(shift.start_time).getTime()) / (1000 * 60);
+            const duration = (new Date(shift.end_time as string).getTime() - new Date(shift.start_time as string).getTime()) / (1000 * 60);
             return sum + duration;
           }
           return sum;
         }, 0);
 
+        const user = worker.user as Record<string, unknown> | null;
         return {
-          workerId: worker.id,
-          workerName: worker.user?.full_name || worker.staff_number || 'Unknown',
-          role: worker.position || 'Unknown',
-          totalShifts: shifts.length,
+          workerId: worker.id as string,
+          workerName: (user?.full_name as string) || (worker.staff_number as string) || 'Unknown',
+          role: (worker.position as string) || 'Unknown',
+          totalShifts: shiftsRows.length,
           attendedShifts: attendedShifts.length,
           attendanceRate,
           averageClockInTime: formatTime(averageClockInMinutes),
@@ -230,22 +239,23 @@ export class WorkforceAnalyticsService {
 
   async getLaborCostAnalysis(startDate: string, endDate: string): Promise<LaborCostAnalysis[]> {
     const { data: timeLogs } = await supabaseAdmin
-      .from('worker_time_logs')
-      .select('duration_minutes, start_time')
-      .gte('start_time', startDate)
-      .lte('start_time', endDate);
+      .from('task_time_logs')
+      .select('duration_minutes, timestamp')
+      .gte('timestamp', startDate)
+      .lte('timestamp', endDate);
 
     if (!timeLogs) return [];
 
+    const timeLogsRows = timeLogs as unknown as Array<Record<string, unknown>>;
     const weeklyData = new Map<string, { totalMinutes: number; regularMinutes: number; overtimeMinutes: number }>();
 
-    timeLogs.forEach((log) => {
-      const weekStart = new Date(log.start_time);
+    timeLogsRows.forEach((log) => {
+      const weekStart = new Date(log.timestamp as string);
       weekStart.setDate(weekStart.getDate() - weekStart.getDay());
       const weekKey = weekStart.toISOString().split('T')[0];
 
       const existing = weeklyData.get(weekKey) || { totalMinutes: 0, regularMinutes: 0, overtimeMinutes: 0 };
-      const duration = log.duration_minutes || 0;
+      const duration = (log.duration_minutes as number) || 0;
       
       existing.totalMinutes += duration;
       
@@ -289,12 +299,14 @@ export class WorkforceAnalyticsService {
 
     if (!tasks) return [];
 
+    const tasksRows = tasks as unknown as Array<Record<string, unknown>>;
     const categoryMap = new Map<string, number[]>();
 
-    tasks.forEach((task) => {
-      const category = (task.task_categories as any)?.name || 'Unknown';
+    tasksRows.forEach((task) => {
+      const taskCat = task.task_categories as Record<string, unknown> | null;
+      const category = (taskCat?.name as string) || 'Unknown';
       const existing = categoryMap.get(category) || [];
-      existing.push(task.actual_minutes || 0);
+      existing.push((task.actual_minutes as number) || 0);
       categoryMap.set(category, existing);
     });
 
@@ -319,7 +331,7 @@ export class WorkforceAnalyticsService {
     }).sort((a, b) => b.count - a.count);
   }
 
-  async getWorkerPerformanceRanking(startDate: string, endDate: string): Promise<any[]> {
+  async getWorkerPerformanceRanking(startDate: string, endDate: string): Promise<Record<string, unknown>[]> {
     const efficiency = await this.getTaskEfficiency(startDate, endDate);
     
     return efficiency.map((worker, index) => ({

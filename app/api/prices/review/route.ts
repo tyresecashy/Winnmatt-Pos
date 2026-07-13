@@ -57,8 +57,8 @@ export async function GET(request: Request) {
     .order('created_at', { ascending: false })
 
   if (error) {
-    logger.error('Error fetching anomalies:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    logger.error('[Prices Review] Database query failed', { error })
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 
   return NextResponse.json({

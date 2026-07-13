@@ -322,7 +322,7 @@ export async function POST(req: NextRequest) {
 
       return NextResponse.json(
         {
-          error: stkResponse.ResponseDescription,
+          error: 'STK Push request was rejected by the payment provider',
           message: 'Failed to send STK Push prompt',
         },
         { status: 400 }
@@ -366,7 +366,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         error: 'Internal server error',
-        message: error instanceof Error ? error.message : 'Unknown error',
+        message: 'An unexpected error occurred',
       },
       { status: 500 }
     )

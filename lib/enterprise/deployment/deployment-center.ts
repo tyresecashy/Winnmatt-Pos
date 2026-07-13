@@ -236,7 +236,7 @@ export class DeploymentCenterService {
     };
   }
 
-  async getDeploymentMetrics(): Promise<any> {
+  async getDeploymentMetrics(): Promise<Record<string, unknown>> {
     const pipelines = Array.from(this.pipelines.values());
     
     return {

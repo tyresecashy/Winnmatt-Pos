@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { logger } from '@/lib/logger';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -56,7 +57,7 @@ export interface DigitalReceipt {
   order_id: string;
   store_name: string;
   store_address: string;
-  items: any[];
+  items: Record<string, unknown>[];
   subtotal: number;
   tax: number;
   total: number;
@@ -89,7 +90,7 @@ export class CustomerAppService {
       .single();
 
     if (error) {
-      console.error('Error fetching profile:', error);
+      logger.error('Error fetching profile:', error);
       return null;
     }
 
@@ -140,7 +141,7 @@ export class CustomerAppService {
       .limit(limit);
 
     if (error) {
-      console.error('Error fetching orders:', error);
+      logger.error('Error fetching orders:', error);
       return [];
     }
 
@@ -149,14 +150,14 @@ export class CustomerAppService {
       order_number: order.order_number,
       status: order.status,
       type: order.type || 'pickup',
-      items: (order.items || []).map((item: any) => ({
-        product_id: item.product_id,
-        product_name: item.products?.name || 'Unknown',
-        quantity: item.quantity,
-        unit_price: item.unit_price_cents || 0,
-        total_price: item.total_cents || 0,
+      items: ((order.items || []) as Record<string, unknown>[]).map((item) => ({
+        product_id: item.product_id as string,
+        product_name: ((item.products as Record<string, unknown>)?.name as string) || 'Unknown',
+        quantity: item.quantity as number,
+        unit_price: (item.unit_price_cents as number) || 0,
+        total_price: (item.total_cents as number) || 0,
       })),
-      subtotal: order.subtotal_cents || 0,
+      subtotal: (order.subtotal_cents as number) || 0,
       tax: order.tax_cents || 0,
       delivery_fee: order.delivery_fee_cents || 0,
       total: order.total_cents || 0,
@@ -183,7 +184,7 @@ export class CustomerAppService {
       .single();
 
     if (error) {
-      console.error('Error fetching order:', error);
+      logger.error('Error fetching order:', error);
       return null;
     }
 
@@ -192,12 +193,12 @@ export class CustomerAppService {
       order_number: data.order_number,
       status: data.status,
       type: data.type || 'pickup',
-      items: (data.items || []).map((item: any) => ({
-        product_id: item.product_id,
-        product_name: item.products?.name || 'Unknown',
-        quantity: item.quantity,
-        unit_price: item.unit_price_cents || 0,
-        total_price: item.total_cents || 0,
+      items: ((data.items || []) as Record<string, unknown>[]).map((item) => ({
+        product_id: item.product_id as string,
+        product_name: ((item.products as Record<string, unknown>)?.name as string) || 'Unknown',
+        quantity: item.quantity as number,
+        unit_price: (item.unit_price_cents as number) || 0,
+        total_price: (item.total_cents as number) || 0,
       })),
       subtotal: data.subtotal_cents || 0,
       tax: data.tax_cents || 0,
@@ -220,7 +221,7 @@ export class CustomerAppService {
       .single();
 
     if (error) {
-      console.error('Error creating order:', error);
+      logger.error('Error creating order:', error);
       return null;
     }
 
@@ -256,7 +257,7 @@ export class CustomerAppService {
       .order('points_required');
 
     if (error) {
-      console.error('Error fetching rewards:', error);
+      logger.error('Error fetching rewards:', error);
       return [];
     }
 
@@ -336,7 +337,7 @@ export class CustomerAppService {
       .limit(limit);
 
     if (error) {
-      console.error('Error fetching receipts:', error);
+      logger.error('Error fetching receipts:', error);
       return [];
     }
 
@@ -365,7 +366,7 @@ export class CustomerAppService {
       .single();
 
     if (error) {
-      console.error('Error fetching receipt:', error);
+      logger.error('Error fetching receipt:', error);
       return null;
     }
 
@@ -394,7 +395,7 @@ export class CustomerAppService {
       .eq('is_active', true);
 
     if (error) {
-      console.error('Error fetching store locations:', error);
+      logger.error('Error fetching store locations:', error);
       return [];
     }
 
@@ -448,7 +449,7 @@ export class CustomerAppService {
   }
 
   // Products
-  async searchProducts(query: string, limit: number = 20): Promise<any[]> {
+  async searchProducts(query: string, limit: number = 20): Promise<Record<string, unknown>[]> {
     const { data, error } = await supabase
       .from('products')
       .select('id, name, category_id, selling_price')
@@ -456,7 +457,7 @@ export class CustomerAppService {
       .limit(limit);
 
     if (error) {
-      console.error('Error searching products:', error);
+      logger.error('Error searching products:', error);
       return [];
     }
 
@@ -476,7 +477,7 @@ export class CustomerAppService {
       .single();
 
     if (error) {
-      console.error('Error fetching product:', error);
+      logger.error('Error fetching product:', error);
       return null;
     }
 

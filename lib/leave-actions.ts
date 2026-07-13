@@ -1,5 +1,7 @@
 'use server'
 
+import { logger } from '@/lib/logger'
+
 import { authenticateServerAction } from '@/lib/auth-helpers'
 import { supabaseAdmin } from '@/lib/supabase-server'
 import { revalidatePath } from 'next/cache'
@@ -57,13 +59,15 @@ export async function applyForLeave(formData: FormData) {
       status: 'pending',
     })
 
-    if (error) return { error: error.message }
+    logger.error('Operation failed', { error: error })
+    if (error) return { error: 'Operation failed. Please try again.' }
 
     revalidatePath('/leaves')
     revalidatePath('/employees')
     return { success: true }
-  } catch (err: any) {
-    return { error: err.message || 'Failed to apply for leave' }
+  } catch (err: unknown) {
+    logger.error('Operation failed', { error: err })
+    return { error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -73,6 +77,9 @@ export async function updateLeaveStatus(leaveId: string, status: 'approved' | 'r
   try {
     const auth = await authenticateServerAction()
     if (!auth.success || !auth.profile) return { error: 'Not authenticated' }
+    if (!['super_admin', 'admin'].includes(auth.profile.role)) {
+      return { error: 'Only admins can approve or reject leave requests' }
+    }
 
     const { error } = await supabaseAdmin
       .from('leave_requests')
@@ -83,13 +90,15 @@ export async function updateLeaveStatus(leaveId: string, status: 'approved' | 'r
       })
       .eq('id', leaveId)
 
-    if (error) return { error: error.message }
+    logger.error('Operation failed', { error: error })
+    if (error) return { error: 'Operation failed. Please try again.' }
 
     revalidatePath('/leaves')
     revalidatePath('/employees')
     return { success: true }
-  } catch (err: any) {
-    return { error: err.message || 'Failed to update leave status' }
+  } catch (err: unknown) {
+    logger.error('Operation failed', { error: err })
+    return { error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -106,12 +115,14 @@ export async function cancelLeave(leaveId: string) {
       .eq('id', leaveId)
       .eq('status', 'pending') // only pending leaves can be cancelled
 
-    if (error) return { error: error.message }
+    logger.error('Operation failed', { error: error })
+    if (error) return { error: 'Operation failed. Please try again.' }
 
     revalidatePath('/leaves')
     return { success: true }
-  } catch (err: any) {
-    return { error: err.message || 'Failed to cancel leave' }
+  } catch (err: unknown) {
+    logger.error('Operation failed', { error: err })
+    return { error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -144,23 +155,29 @@ export async function getLeaves(options?: {
 
   const { data, error } = await query.limit(options?.limit || 100)
 
-  if (error) throw new Error(error.message)
+  if (error) {
+    if (error) logger.error('Operation failed', { error: error })
+    throw new Error('Operation failed')
+  }
 
   // Enrich with employee name from users table
   const enriched = await Promise.all(
-    (data || []).map(async (lr: any) => {
+    ((data || []) as unknown as Array<Record<string, unknown>>).map(async (lr) => {
       let employeeName = 'Unknown'
       let employeePhoto: string | null = null
 
-      if (lr.employee_profile?.user_id) {
+      const empProfile = lr.employee_profile as Record<string, unknown> | null
+      if (empProfile?.user_id) {
         const { data: u } = await supabaseAdmin
           .from('users')
           .select('full_name')
-          .eq('id', lr.employee_profile.user_id)
+          .eq('id', empProfile.user_id as string)
           .single()
         if (u) employeeName = u.full_name
-        employeePhoto = lr.employee_profile.photo_url
+        employeePhoto = empProfile.photo_url as string | null
       }
+
+      const approvedByUser = lr.approved_by_user as Record<string, unknown> | null
 
       return {
         id: lr.id,
@@ -173,7 +190,7 @@ export async function getLeaves(options?: {
         reason: lr.reason,
         status: lr.status,
         approved_by: lr.approved_by,
-        approved_by_name: lr.approved_by_user?.full_name || null,
+        approved_by_name: approvedByUser?.full_name || null,
         approved_at: lr.approved_at,
         created_at: lr.created_at,
       } as LeaveRequest
@@ -190,16 +207,21 @@ export async function getLeaveStats() {
     .from('leave_requests')
     .select('status, leave_type')
 
-  if (error) throw new Error(error.message)
+  if (error) {
+    if (error) logger.error('Operation failed', { error: error })
+    throw new Error('Operation failed')
+  }
 
   const statusBreakdown: Record<string, number> = {}
   const typeBreakdown: Record<string, number> = {}
   let pendingCount = 0
 
   for (const lr of data || []) {
-    statusBreakdown[lr.status] = (statusBreakdown[lr.status] || 0) + 1
-    typeBreakdown[lr.leave_type] = (typeBreakdown[lr.leave_type] || 0) + 1
-    if (lr.status === 'pending') pendingCount++
+    const status = lr.status as string
+    const leaveType = lr.leave_type as string
+    statusBreakdown[status] = (statusBreakdown[status] || 0) + 1
+    typeBreakdown[leaveType] = (typeBreakdown[leaveType] || 0) + 1
+    if (status === 'pending') pendingCount++
   }
 
   return {

@@ -5,8 +5,7 @@ import {
   authenticateServerAction,
   authorizeInventoryControlProfile,
 } from '@/lib/auth-helpers'
-import { supabaseAdmin } from '@/lib/supabase-server'
-import type { Database } from '@/lib/db.types'
+import { supabaseAdmin, type Database } from '@/lib/supabase-server'
 
 type WarehouseRow = Database['public']['Tables']['warehouses']['Row']
 type StockMovementRow = Database['public']['Tables']['stock_movements']['Row']
@@ -151,7 +150,139 @@ export async function deleteWarehouse(id: string): Promise<{ success: boolean; e
     return { success: true }
   } catch (error) {
     logger.error('Error deactivating warehouse:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to deactivate warehouse' }
+    return { success: false, error: 'Operation failed. Please try again.' }
+  }
+}
+
+type WarehouseLocationRow = Database['public']['Tables']['warehouse_locations']['Row']
+
+export async function getLocations(warehouseId: string): Promise<WarehouseLocationRow[]> {
+  try {
+    const authResult = await authenticateServerAction()
+    if (!authResult.success || !authResult.profile) return []
+
+    const { data, error } = await supabaseAdmin
+      .from('warehouse_locations')
+      .select('*')
+      .eq('warehouse_id', warehouseId)
+      .order('zone')
+      .order('aisle')
+      .order('row')
+
+    if (error) throw error
+    return data || []
+  } catch (error) {
+    logger.error('Error fetching warehouse locations:', error)
+    return []
+  }
+}
+
+export async function getLocationById(id: string): Promise<WarehouseLocationRow | null> {
+  try {
+    const authResult = await authenticateServerAction()
+    if (!authResult.success || !authResult.profile) return null
+
+    const { data, error } = await supabaseAdmin
+      .from('warehouse_locations')
+      .select('*')
+      .eq('id', id)
+      .single()
+
+    if (error) throw error
+    return data
+  } catch (error) {
+    logger.error('Error fetching warehouse location:', error)
+    return null
+  }
+}
+
+export async function createLocation(data: {
+  warehouse_id: string
+  zone: string
+  aisle?: string | null
+  row?: string | null
+  shelf?: string | null
+  bin?: string | null
+  barcode?: string | null
+  capacity?: number
+  is_pickable?: boolean
+}): Promise<WarehouseLocationRow | null> {
+  try {
+    const authResult = await authenticateServerAction()
+    if (!authResult.success || !authResult.profile) return null
+
+    const inventoryAccess = authorizeInventoryControlProfile(authResult.profile)
+    if (!inventoryAccess.authorized) return null
+
+    const { data: location, error } = await supabaseAdmin
+      .from('warehouse_locations')
+      .insert({
+        warehouse_id: data.warehouse_id,
+        zone: data.zone,
+        aisle: data.aisle ?? null,
+        row: data.row ?? null,
+        shelf: data.shelf ?? null,
+        bin: data.bin ?? null,
+        barcode: data.barcode ?? null,
+        capacity: data.capacity ?? 0,
+        is_pickable: data.is_pickable ?? true,
+      })
+      .select()
+      .single()
+
+    if (error) throw error
+    return location
+  } catch (error) {
+    logger.error('Error creating warehouse location:', error)
+    return null
+  }
+}
+
+export async function updateLocation(id: string, data: Partial<WarehouseLocationRow>): Promise<WarehouseLocationRow | null> {
+  try {
+    const authResult = await authenticateServerAction()
+    if (!authResult.success || !authResult.profile) return null
+
+    const inventoryAccess = authorizeInventoryControlProfile(authResult.profile)
+    if (!inventoryAccess.authorized) return null
+
+    const { data: location, error } = await supabaseAdmin
+      .from('warehouse_locations')
+      .update({ ...data, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) throw error
+    return location
+  } catch (error) {
+    logger.error('Error updating warehouse location:', error)
+    return null
+  }
+}
+
+export async function deleteLocation(id: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const authResult = await authenticateServerAction()
+    if (!authResult.success || !authResult.profile) {
+      return { success: false, error: authResult.error || 'Unauthorized' }
+    }
+
+    const inventoryAccess = authorizeInventoryControlProfile(authResult.profile)
+    if (!inventoryAccess.authorized) {
+      return { success: false, error: inventoryAccess.error || 'Access denied' }
+    }
+
+    const { error } = await supabaseAdmin
+      .from('warehouse_locations')
+      .delete()
+      .eq('id', id)
+
+    if (error) throw error
+    return { success: true }
+  } catch (error) {
+    logger.error('Error deleting warehouse location:', error)
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -211,6 +342,7 @@ export async function recordStockMovement(data: {
       .from('stock_movements')
       .insert({
         product_id: data.product_id,
+        branch_id: authResult.profile.branch_id ?? '',
         from_warehouse_id: data.from_warehouse_id ?? null,
         to_warehouse_id: data.to_warehouse_id ?? null,
         quantity: data.quantity,

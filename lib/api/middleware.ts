@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { logger } from '@/lib/logger'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -24,28 +25,8 @@ export interface APIError {
 
 // ─── Rate Limiting ──────────────────────────────────────────────────────────
 
-const rateLimitMap = new Map<string, { count: number; resetTime: number }>()
-
-function getRateLimitKey(request: NextRequest, userId: string): string {
-  return `${userId}:${request.nextUrl.pathname}`
-}
-
-function checkRateLimit(key: string, limit = 100, windowMs = 60000): boolean {
-  const now = Date.now()
-  const entry = rateLimitMap.get(key)
-
-  if (!entry || now > entry.resetTime) {
-    rateLimitMap.set(key, { count: 1, resetTime: now + windowMs })
-    return true
-  }
-
-  if (entry.count >= limit) {
-    return false
-  }
-
-  entry.count++
-  return true
-}
+import { rateLimiter, getRateLimitKey, checkRateLimitSimple } from './rate-limiter'
+export { rateLimiter, getRateLimitKey, checkRateLimitSimple }
 
 // ─── Authentication ─────────────────────────────────────────────────────────
 
@@ -85,7 +66,7 @@ async function authenticate(request: NextRequest): Promise<APIContext | null> {
     userId: user.id,
     branchId: profile.branch_id,
     role: profile.role,
-    supabase,
+    supabase: supabase as any,
   }
 }
 
@@ -107,8 +88,9 @@ export async function withAuth(
   }
 
   // 2. Rate limit
-  const rateLimitKey = getRateLimitKey(request, ctx.userId)
-  if (!checkRateLimit(rateLimitKey)) {
+  const rateLimitKey = getRateLimitKey(ctx.userId, request.nextUrl.pathname)
+  const allowed = await Promise.resolve(checkRateLimitSimple(rateLimitKey))
+  if (!allowed) {
     return NextResponse.json(
       { error: { code: 'RATE_LIMITED', message: 'Too many requests' } },
       { status: 429 }
@@ -125,7 +107,7 @@ export async function withAuth(
 
     return response
   } catch (error) {
-    console.error(`[API] Error in ${request.method} ${request.nextUrl.pathname}:`, error)
+    logger.error(`[API] Error in ${request.method} ${request.nextUrl.pathname}:`, error)
     return NextResponse.json(
       { error: { code: 'INTERNAL_ERROR', message: 'An unexpected error occurred' } },
       { status: 500 }
@@ -135,8 +117,24 @@ export async function withAuth(
 
 // ─── CORS ───────────────────────────────────────────────────────────────────
 
+// Explicit allow-list — never use wildcard with credentials
+const ALLOWED_ORIGINS = new Set([
+  // Production
+  'https://winnmatt.com',
+  'https://www.winnmatt.com',
+  'https://pos.winnmatt.com',
+  // Vercel preview deployments
+  ...(process.env.VERCEL_URL ? [`https://${process.env.VERCEL_URL}`] : []),
+  // Local development
+  ...(process.env.NODE_ENV === 'development'
+    ? ['http://localhost:3000', 'http://127.0.0.1:3000']
+    : []),
+])
+
 export function withCORS(response: NextResponse, origin?: string): NextResponse {
-  response.headers.set('Access-Control-Allow-Origin', origin || '*')
+  // Only allow origins in the allow-list
+  const allowedOrigin = origin && ALLOWED_ORIGINS.has(origin) ? origin : ''
+  response.headers.set('Access-Control-Allow-Origin', allowedOrigin)
   response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS')
   response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Request-Id')
   response.headers.set('Access-Control-Max-Age', '86400')

@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAuth, type APIContext } from '@/lib/api/middleware'
 import { apiPaginated, apiCreated, apiInternal, apiBadRequest, parseSearchParams, getPaginationParams } from '@/lib/api/response'
+import { logger } from '@/lib/logger'
 
 export async function GET(request: NextRequest) {
   return withAuth(request, async (ctx: APIContext) => {
@@ -34,12 +35,13 @@ export async function GET(request: NextRequest) {
       const { data, count, error } = await query
 
       if (error) {
-        return apiInternal(`Database error: ${error.message}`)
+        logger.error('[Customers API] Database query failed', { message: error.message, code: error.code })
+        return apiInternal()
       }
 
       return apiPaginated(data || [], count || 0, page, limit)
     } catch (error) {
-      console.error('[Customers API] Error:', error)
+      logger.error('[Customers API] Error:', error)
       return apiInternal()
     }
   })
@@ -66,17 +68,18 @@ export async function POST(request: NextRequest) {
           credit_balance: body.credit_balance || 0,
           notes: body.notes || null,
           tags: body.tags || null,
-        })
+        } as any)
         .select()
         .single()
 
       if (error) {
-        return apiInternal(`Create failed: ${error.message}`)
+        logger.error('[Customers API] Create failed', { message: error.message, code: error.code })
+        return apiInternal()
       }
 
       return apiCreated(data)
     } catch (error) {
-      console.error('[Customers API] Error:', error)
+      logger.error('[Customers API] Error:', error)
       return apiInternal()
     }
   })

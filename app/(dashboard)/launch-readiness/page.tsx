@@ -1,13 +1,14 @@
 "use client"
 import { logger } from '@/lib/logger'
 
-import { useCallback, useEffect, useState } from "react"
+import { startTransition, useCallback, useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/contexts/auth-context"
-import { getLaunchReadiness, updateLaunchChecklistItem } from "@/lib/system-health-actions"
+import { getLaunchReadiness, updateLaunchChecklistItem } from "@/lib/modules/system"
 import { CheckCircle2, XCircle, Loader2 } from "lucide-react"
+import { EmptyState } from "@/components/ui/empty-state"
 
 type ChecklistItem = { key: string; label: string }
 
@@ -47,7 +48,7 @@ function getStatusColor(status: string) {
     case "passed": return "bg-green-500"
     case "in_progress": return "bg-amber-500"
     case "failed": return "bg-red-500"
-    default: return "bg-gray-300"
+    default: return "bg-muted"
   }
 }
 
@@ -69,7 +70,7 @@ export default function LaunchReadinessPage() {
     }
     setLoading(true)
     try {
-      const data = await getLaunchReadiness(branchId)
+      const data = await getLaunchReadiness(branchId) as any
       if (data) {
         setChecklist(data.items)
         setStatus(data.status)
@@ -83,7 +84,7 @@ export default function LaunchReadinessPage() {
   }, [branchId])
 
   useEffect(() => {
-    void loadChecklist()
+    startTransition(() => { void loadChecklist() })
   }, [loadChecklist])
 
   const handleToggle = async (key: string, currentValue: boolean) => {
@@ -109,7 +110,7 @@ export default function LaunchReadinessPage() {
     if (!branchId || runningCheck) return
     setRunningCheck(true)
     try {
-      const data = await getLaunchReadiness(branchId)
+      const data = await getLaunchReadiness(branchId) as any
       if (data) {
         setChecklist(data.items)
         setStatus(data.status)
@@ -168,12 +169,7 @@ export default function LaunchReadinessPage() {
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
           ) : !checklist ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <p className="text-lg font-medium">No checklist data</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                Select a branch to view its launch readiness.
-              </p>
-            </div>
+            <EmptyState title="No checklist data" description="Select a branch to view its launch readiness." />
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {CHECKLIST_ITEMS.map((item) => {

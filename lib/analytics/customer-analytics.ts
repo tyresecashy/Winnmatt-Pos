@@ -6,6 +6,7 @@ export interface CustomerMetrics {
   activeCustomers: number;
   averageOrderValue: number;
   customerRetentionRate: number;
+  churnRisk?: number;
 }
 
 export interface RFMSegment {
@@ -49,51 +50,32 @@ export interface ChurnRisk {
 
 export class CustomerAnalyticsService {
   async getCustomerMetrics(startDate: string, endDate: string): Promise<CustomerMetrics> {
-    const { count: totalCustomers } = await supabaseAdmin
-      .from('customers')
-      .select('*', { count: 'exact', head: true });
-
-    const { count: newCustomers } = await supabaseAdmin
-      .from('customers')
-      .select('*', { count: 'exact', head: true })
-      .gte('created_at', startDate)
-      .lte('created_at', endDate);
-
-    const { data: activeSales } = await supabaseAdmin
-      .from('sales')
-      .select('customer_id')
-      .gte('created_at', startDate)
-      .lte('created_at', endDate)
-      .eq('payment_status', 'completed')
-      .not('customer_id', 'is', null);
-
-    const uniqueActiveCustomers = new Set(activeSales?.map(s => s.customer_id)).size;
-
-    const { data: sales } = await supabaseAdmin
-      .from('sales')
-      .select('total_amount')
-      .gte('created_at', startDate)
-      .lte('created_at', endDate)
-      .eq('payment_status', 'completed');
-
-    const totalRevenue = sales?.reduce((sum, s) => sum + (s.total_amount || 0), 0) || 0;
-    const averageOrderValue = sales?.length ? totalRevenue / sales.length : 0;
-
     const prevStartDate = new Date(startDate);
     prevStartDate.setMonth(prevStartDate.getMonth() - 1);
     const prevEndDate = new Date(startDate);
 
-    const { data: prevSales } = await supabaseAdmin
-      .from('sales')
-      .select('customer_id')
-      .gte('created_at', prevStartDate.toISOString())
-      .lte('created_at', prevEndDate.toISOString())
-      .eq('payment_status', 'completed')
-      .not('customer_id', 'is', null);
+    // All 5 queries are independent — run in parallel
+    const [
+      { count: totalCustomers },
+      { count: newCustomers },
+      { data: activeSales },
+      { data: sales },
+      { data: prevSales },
+    ] = await Promise.all([
+      supabaseAdmin.from('customers').select('*', { count: 'exact', head: true }),
+      supabaseAdmin.from('customers').select('*', { count: 'exact', head: true }).gte('created_at', startDate).lte('created_at', endDate),
+      supabaseAdmin.from('sales').select('customer_id').gte('created_at', startDate).lte('created_at', endDate).eq('payment_status', 'completed').not('customer_id', 'is', null),
+      supabaseAdmin.from('sales').select('total_amount').gte('created_at', startDate).lte('created_at', endDate).eq('payment_status', 'completed'),
+      supabaseAdmin.from('sales').select('customer_id').gte('created_at', prevStartDate.toISOString()).lte('created_at', prevEndDate.toISOString()).eq('payment_status', 'completed').not('customer_id', 'is', null),
+    ]);
+
+    const uniqueActiveCustomers = new Set(activeSales?.map(s => s.customer_id)).size;
+    const totalRevenue = sales?.reduce((sum, s) => sum + (s.total_amount || 0), 0) || 0;
+    const averageOrderValue = sales?.length ? totalRevenue / sales.length : 0;
 
     const prevCustomers = new Set(prevSales?.map(s => s.customer_id));
     const currentCustomers = new Set(activeSales?.map(s => s.customer_id));
-    const retainedCustomers = [...prevCustomers].filter(id => currentCustomers.has(id));
+    const retainedCustomers = Array.from(prevCustomers).filter(id => currentCustomers.has(id));
     const retentionRate = prevCustomers.size ? (retainedCustomers.length / prevCustomers.size) * 100 : 0;
 
     return {
@@ -131,11 +113,11 @@ export class CustomerAnalyticsService {
         }
 
         const lastOrder = orders.reduce((latest, order) => 
-          new Date(order.created_at) > new Date(latest.created_at) ? order : latest
+          new Date(order.created_at ?? '') > new Date(latest.created_at ?? '') ? order : latest
         );
 
         const daysSinceLastOrder = Math.floor(
-          (now.getTime() - new Date(lastOrder.created_at).getTime()) / (1000 * 60 * 60 * 24)
+          (now.getTime() - new Date(lastOrder.created_at ?? '').getTime()) / (1000 * 60 * 60 * 24)
         );
 
         const totalSpent = orders.reduce((sum, order) => sum + (order.total_amount || 0), 0);
@@ -150,7 +132,7 @@ export class CustomerAnalyticsService {
     );
 
     const getScore = (value: number, values: number[], lowerIsBetter: boolean = false) => {
-      const sorted = [...new Set(values)].sort((a, b) => lowerIsBetter ? b - a : a - b);
+      const sorted = Array.from(new Set(values)).sort((a, b) => lowerIsBetter ? b - a : a - b);
       const percentile = sorted.indexOf(value) / sorted.length;
       if (percentile <= 0.2) return 5;
       if (percentile <= 0.4) return 4;
@@ -243,12 +225,12 @@ export class CustomerAnalyticsService {
         const firstOrder = orders[0];
         const lastOrder = orders[orders.length - 1];
 
-        const orderDates = orders.map(o => new Date(o.created_at).getTime());
+        const orderDates = orders.map(o => new Date(o.created_at ?? '').getTime());
         const avgDaysBetweenOrders = orders.length > 1
           ? (orderDates[orderDates.length - 1] - orderDates[0]) / (orders.length - 1) / (1000 * 60 * 60 * 24)
           : 30;
 
-        const monthsActive = (new Date(lastOrder.created_at).getTime() - new Date(firstOrder.created_at).getTime()) / (1000 * 60 * 60 * 24 * 30);
+        const monthsActive = (new Date(lastOrder.created_at ?? '').getTime() - new Date(firstOrder.created_at ?? '').getTime()) / (1000 * 60 * 60 * 24 * 30);
         const monthlyValue = monthsActive > 0 ? totalSpent / monthsActive : totalSpent;
         const predictedNextOrderDays = Math.max(1, avgDaysBetweenOrders);
 
@@ -284,12 +266,13 @@ export class CustomerAnalyticsService {
 
     const patterns = new Map<string, { count: number; totalValue: number }>();
 
-    const customerPurchases = new Map<string, { orders: any[]; totalValue: number }>();
+    const customerPurchases = new Map<string, { orders: Record<string, unknown>[]; totalValue: number }>();
     sales.forEach((sale) => {
-      const existing = customerPurchases.get(sale.customer_id) || { orders: [], totalValue: 0 };
+      const cid = sale.customer_id ?? '';
+      const existing = customerPurchases.get(cid) || { orders: [], totalValue: 0 };
       existing.orders.push(sale);
       existing.totalValue += sale.total_amount || 0;
-      customerPurchases.set(sale.customer_id, existing);
+      customerPurchases.set(cid, existing);
     });
 
     customerPurchases.forEach((data) => {
@@ -349,11 +332,11 @@ export class CustomerAnalyticsService {
         }
 
         const lastOrder = orders.reduce((latest, order) => 
-          new Date(order.created_at) > new Date(latest.created_at) ? order : latest
+          new Date(order.created_at ?? '') > new Date(latest.created_at ?? '') ? order : latest
         );
 
         const daysSinceLastOrder = Math.floor(
-          (Date.now() - new Date(lastOrder.created_at).getTime()) / (1000 * 60 * 60 * 24)
+          (Date.now() - new Date(lastOrder.created_at ?? '').getTime()) / (1000 * 60 * 60 * 24)
         );
 
         const totalSpent = orders.reduce((sum, order) => sum + (order.total_amount || 0), 0);

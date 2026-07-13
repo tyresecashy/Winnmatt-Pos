@@ -115,7 +115,7 @@ export function formatKES(amount: number): string {
 }
 
 /**
- * Convert between currencies (future).
+ * Convert between currencies via the exchange rate service.
  */
 export async function convertCurrency(
   amount: number,
@@ -123,6 +123,10 @@ export async function convertCurrency(
   to: string
 ): Promise<number> {
   if (from === to) return amount
-  // TODO: Implement exchange rate lookup
-  throw new Error('Currency conversion not yet implemented')
+  const { convertCurrency: doConvert } = await import('@/lib/currency-service')
+  const result = await doConvert(amount, from, to)
+  if (result === null) {
+    throw new Error(`Currency conversion from ${from} to ${to} not available`)
+  }
+  return result
 }

@@ -17,7 +17,7 @@ export default async function InvoicesPage() {
     supabase.from('branches').select('id, name').eq('status', 'active'),
     supabase
       .from('sales')
-      .select('id, sale_number, customer_id, total_amount, created_at')
+      .select('id, receipt_number, customer_id, total_amount, created_at')
       .eq('payment_method', 'credit')
       .eq('sale_status', 'completed')
       .order('created_at', { ascending: false })

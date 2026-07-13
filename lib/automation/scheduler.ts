@@ -62,14 +62,15 @@ export async function createScheduledTask(task: {
         next_run: nextRun,
         is_active: true,
         payload: task.payload || {},
-      })
+      } as any)
       .select('id')
       .single()
 
     if (error) throw error
     return { success: true, id: data.id }
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to create task' }
+    logger.error('Operation failed', { error: error })
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -101,7 +102,8 @@ export async function updateScheduledTask(
     if (error) throw error
     return { success: true }
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to update task' }
+    logger.error('Operation failed', { error: error })
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -118,7 +120,8 @@ export async function deleteScheduledTask(taskId: string): Promise<{ success: bo
     if (error) throw error
     return { success: true }
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to delete task' }
+    logger.error('Operation failed', { error: error })
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -199,6 +202,9 @@ async function executeScheduledTask(task: Record<string, unknown>): Promise<void
     case 'Weekly Loyalty Expiry':
       await runLoyaltyExpiry()
       break
+    case 'Daily Batch Expiry Check':
+      await runBatchExpiryCheck()
+      break
     default:
       // Custom task — emit a scheduler event
       const { emitEvent } = await import('./events')
@@ -253,7 +259,7 @@ async function runRecurringExpenses(): Promise<void> {
         expense_date: today,
         payment_method: exp.payment_method || 'bank_transfer',
         notes: `Auto-generated from recurring expense: ${exp.description}`,
-      })
+      } as any)
 
       // Update next_date
       const nextDate = calculateNextDate(today, exp.frequency)
@@ -318,12 +324,12 @@ async function runLoyaltyExpiry(): Promise<void> {
   const { data: settings } = await supabaseAdmin
     .from('loyalty_settings')
     .select('points_expiry_months')
-    .single()
+    .single() as unknown as { data: { points_expiry_months?: number } | null; error: null }
 
   if (!settings?.points_expiry_months) return
 
   const expiryDate = new Date()
-  expiryDate.setMonth(expiryDate.getMonth() - settings.points_expiry_months)
+  expiryDate.setMonth(expiryDate.getMonth() - (settings.points_expiry_months as number))
   const expiryStr = expiryDate.toISOString()
 
   // Find customers with points earned before expiry date
@@ -335,6 +341,62 @@ async function runLoyaltyExpiry(): Promise<void> {
   // This is a simplified check — in production you'd check loyalty_transactions
   if (expiredCustomers && expiredCustomers.length > 0) {
     logger.info('[Scheduler] Loyalty expiry check completed', { customersChecked: expiredCustomers.length })
+  }
+}
+
+async function runBatchExpiryCheck(): Promise<void> {
+  // Mark batches as expired if past their expiry date
+  const today = new Date().toISOString().split('T')[0]
+
+  const { data: expiredBatches, error } = await supabaseAdmin
+    .from('batch_tracking')
+    .select('id, batch_number, product_id, expiry_date, quantity')
+    .lte('expiry_date', today)
+    .neq('status', 'expired')
+    .neq('status', 'depleted')
+    .neq('status', 'disposed')
+
+  if (error) {
+    logger.error('[Scheduler] Failed to fetch expired batches:', error)
+    return
+  }
+
+  if (!expiredBatches || expiredBatches.length === 0) return
+
+  // Mark batches as expired
+  const expiredIds = expiredBatches.map(b => b.id)
+  const { error: updateError } = await supabaseAdmin
+    .from('batch_tracking')
+    .update({
+      status: 'expired',
+      notes: 'Auto-marked expired by daily expiry check',
+      updated_at: new Date().toISOString(),
+    })
+    .in('id', expiredIds)
+
+  if (updateError) {
+    logger.error('[Scheduler] Failed to update expired batches:', updateError)
+    return
+  }
+
+  logger.info(`[Scheduler] Marked ${expiredBatches.length} batches as expired`)
+
+  // Emit events for expired batches (for notification/webhook)
+  const { emitEvent } = await import('./events')
+  for (const batch of expiredBatches) {
+    await emitEvent({
+      eventType: 'scheduler.batch_expiry',
+      source: 'scheduler',
+      entityType: 'batch_tracking',
+      entityId: batch.id,
+      payload: {
+        batch_number: batch.batch_number,
+        product_id: batch.product_id,
+        expiry_date: batch.expiry_date,
+        quantity: batch.quantity,
+        description: `Batch ${batch.batch_number} expired on ${batch.expiry_date}`,
+      },
+    }).catch(() => {})
   }
 }
 

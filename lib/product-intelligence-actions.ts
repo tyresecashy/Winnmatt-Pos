@@ -92,17 +92,21 @@ export async function searchProducts(query: string) {
       .order('name')
 
     if (error) throw error
-    return (data || []).map(p => ({
-      id: p.id,
-      sku: p.sku,
-      name: p.name,
-      brand: p.brand,
-      barcode: p.barcode,
-      selling_price: p.selling_price,
-      purchase_price: p.purchase_price,
-      status: p.status,
-      category: Array.isArray(p.category) ? p.category[0]?.name : (p.category as { name?: string } | null)?.name || null,
-    }))
+    const rawItems = (data as unknown as Array<Record<string, unknown>>) || []
+    return rawItems.map(p => {
+      const row = p as unknown as { id: string; sku: string; name: string; brand: string | null; barcode: string | null; selling_price: number; purchase_price: number; status: string; category: unknown }
+      return {
+        id: row.id,
+        sku: row.sku,
+        name: row.name,
+        brand: row.brand,
+        barcode: row.barcode,
+        selling_price: row.selling_price,
+        purchase_price: row.purchase_price,
+        status: row.status,
+        category: Array.isArray(row.category) ? (row.category as { name?: string }[])[0]?.name : (row.category as { name?: string } | null)?.name || null,
+      }
+    })
   } catch (error) {
     logger.error('Error searching products:', error)
     return []
@@ -157,12 +161,12 @@ export async function getProductIntelligence(productId: string): Promise<Product
       name: product.name,
       description: product.description,
       brand: product.brand,
-      barcode: product.barcode,
+      barcode: (product as Record<string, unknown>).barcode as string | null,
       internal_code: product.internal_code,
-      unit: product.unit,
-      image_url: product.image_url,
+      unit: (product as Record<string, unknown>).unit as string | null,
+      image_url: (product as Record<string, unknown>).image_url as string | null,
       status: product.status || 'active',
-      category_id: product.category_id,
+      category_id: product.category_id ?? '',
       category_name: Array.isArray(product.category) ? product.category[0]?.name : (product.category as { name?: string } | null)?.name || null,
       tags: product.tags,
       search_aliases: product.search_aliases,
@@ -188,8 +192,8 @@ export async function getProductIntelligence(productId: string): Promise<Product
       avg_weekly_sales: product.avg_weekly_sales || 0,
       last_purchase_date: product.last_purchase_date,
       last_price_update: product.last_price_update,
-      created_at: product.created_at,
-      updated_at: product.updated_at,
+      created_at: product.created_at ?? '',
+      updated_at: product.updated_at ?? '',
     }
   } catch (error) {
     logger.error('Error fetching product intelligence:', error)
@@ -215,17 +219,20 @@ export async function getProductActivity(productId: string): Promise<ProductActi
       throw error
     }
 
-    return (data || []).map(a => ({
-      id: a.id,
-      activity_type: a.activity_type,
-      description: a.description,
-      changes_json: a.changes_json,
-      performed_by: a.performed_by,
-      performer_name: Array.isArray(a.performer) ? a.performer[0]?.full_name : (a.performer as { full_name?: string } | null)?.full_name || null,
-      reference_type: a.reference_type,
-      reference_id: a.reference_id,
-      created_at: a.created_at,
-    }))
+    return (data || []).map(a => {
+      const row = a as unknown as { id: string; activity_type: string; description: string; changes_json: unknown; performed_by: string | null; performer: unknown; reference_type: string | null; reference_id: string | null; created_at: string | null }
+      return {
+        id: row.id,
+        activity_type: row.activity_type,
+        description: row.description,
+        changes_json: (typeof row.changes_json === 'object' ? row.changes_json : null) as Record<string, unknown> | null,
+        performed_by: row.performed_by,
+        performer_name: Array.isArray(row.performer) ? (row.performer as { full_name?: string }[])[0]?.full_name || null : (row.performer as { full_name?: string } | null)?.full_name || null,
+        reference_type: row.reference_type,
+        reference_id: row.reference_id,
+        created_at: row.created_at ?? '',
+      }
+    })
   } catch (error) {
     logger.error('Error fetching product activity:', error)
     return []
@@ -250,7 +257,7 @@ export async function getProductPriceHistory(productId: string): Promise<Product
       id: p.id,
       price_type: p.price_type,
       price: p.price,
-      effective_date: p.effective_date,
+      effective_date: p.effective_date ?? '',
       is_active: p.is_active ?? true,
       changed_by: p.changed_by,
       change_reason: p.change_reason,
@@ -304,7 +311,7 @@ export async function logProductActivity(
         product_id: productId,
         activity_type: activityType,
         description,
-        changes_json: changesJson || null,
+        changes_json: (changesJson || null) as any,
         performed_by: performedBy || null,
         reference_type: referenceType || null,
         reference_id: referenceId || null,
@@ -336,7 +343,10 @@ export async function updateProductPricing(
       .update({ ...updates, last_price_update: new Date().toISOString() })
       .eq('id', productId)
 
-    if (error) throw new Error(error.message)
+    if (error) {
+      if (error) logger.error('Operation failed', { error: error })
+      throw new Error('Operation failed')
+    }
 
     // Log price changes
     const priceFields = ['selling_price', 'purchase_price', 'wholesale_price', 'promotion_price', 'staff_price', 'vip_price']
@@ -354,6 +364,7 @@ export async function updateProductPricing(
 
     return { success: true }
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to update pricing' }
+    logger.error('Operation failed', { error: error })
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }

@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAuth, type APIContext } from '@/lib/api/middleware'
 import { apiSuccess, apiNotFound, apiBadRequest, apiInternal } from '@/lib/api/response'
+import { logger } from '@/lib/logger'
 
 export async function GET(
   request: NextRequest,
@@ -25,7 +26,7 @@ export async function GET(
 
       return apiSuccess(data)
     } catch (error) {
-      console.error('[Products API] Error:', error)
+      logger.error('[Products API] Error:', error)
       return apiInternal()
     }
   })
@@ -64,7 +65,7 @@ export async function PUT(
         }
       }
 
-      const { data, error } = await ctx.supabase
+      const { data, error } = await (ctx.supabase as any)
         .from('products')
         .update(updateData)
         .eq('id', id)
@@ -72,12 +73,13 @@ export async function PUT(
         .single()
 
       if (error) {
-        return apiInternal(`Update failed: ${error.message}`)
+        logger.error('[Products API] Update failed', { id, message: error.message, code: error.code })
+        return apiInternal()
       }
 
       return apiSuccess(data)
     } catch (error) {
-      console.error('[Products API] Error:', error)
+      logger.error('[Products API] Error:', error)
       return apiInternal()
     }
   })
@@ -96,18 +98,19 @@ export async function DELETE(
       }
 
       // Soft delete — set status to inactive
-      const { error } = await ctx.supabase
+      const { error } = await (ctx.supabase as any)
         .from('products')
         .update({ status: 'inactive', updated_at: new Date().toISOString() })
         .eq('id', id)
 
       if (error) {
-        return apiInternal(`Delete failed: ${error.message}`)
+        logger.error('[Products API] Delete failed', { id, message: error.message, code: error.code })
+        return apiInternal()
       }
 
       return apiSuccess({ message: 'Product deactivated' })
     } catch (error) {
-      console.error('[Products API] Error:', error)
+      logger.error('[Products API] Error:', error)
       return apiInternal()
     }
   })

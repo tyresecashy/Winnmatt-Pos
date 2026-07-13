@@ -41,68 +41,9 @@
 import { logger } from '@/lib/logger'
 import { supabaseAdmin } from '@/lib/supabase-server'
 import { authenticateServerAction } from '@/lib/auth-helpers'
-
-// ─── Tax Calculations ──────────────────────────────────────────────────────
-
-export async function calculatePAYE(grossSalary: number): Promise<number> {
-  // Monthly taxable income
-  const taxable = grossSalary
-
-  let paye = 0
-  if (taxable <= 24000) {
-    paye = taxable * 0.10
-  } else if (taxable <= 32333) {
-    paye = (24000 * 0.10) + ((taxable - 24000) * 0.25)
-  } else if (taxable <= 500000) {
-    paye = (24000 * 0.10) + (8333 * 0.25) + ((taxable - 32333) * 0.30)
-  } else if (taxable <= 800000) {
-    paye = (24000 * 0.10) + (8333 * 0.25) + (467667 * 0.30) + ((taxable - 500000) * 0.32)
-  } else {
-    paye = (24000 * 0.10) + (8333 * 0.25) + (467667 * 0.30) + (300000 * 0.32) + ((taxable - 800000) * 0.35)
-  }
-
-  // Apply personal relief
-  paye = Math.max(0, paye - 2400)
-
-  return Math.round(paye)
-}
-
-export async function calculateNHIF(grossSalary: number): Promise<number> {
-  const salary = Math.round(grossSalary)
-
-  if (salary <= 0) return 0
-  if (salary <= 5999) return 150
-  if (salary <= 7999) return 300
-  if (salary <= 11999) return 400
-  if (salary <= 14999) return 500
-  if (salary <= 19999) return 600
-  if (salary <= 24999) return 750
-  if (salary <= 29999) return 850
-  if (salary <= 34999) return 900
-  if (salary <= 39999) return 950
-  if (salary <= 44999) return 1000
-  if (salary <= 49999) return 1100
-  if (salary <= 59999) return 1200
-  if (salary <= 69999) return 1300
-  if (salary <= 79999) return 1400
-  if (salary <= 89999) return 1500
-  if (salary <= 99999) return 1600
-  return 1700
-}
-
-export async function calculateNSSF(grossSalary: number): Promise<number> {
-  // Tier I: 6% of first KSh 7,000
-  const tierI = Math.min(grossSalary, 7000) * 0.06
-
-  // Tier II: 6% of KSh 7,001 - 36,000
-  const tierII = Math.max(0, Math.min(grossSalary, 36000) - 7000) * 0.06
-
-  return Math.round(tierI + tierII)
-}
-
-export async function calculateHousingLevy(grossSalary: number): Promise<number> {
-  return Math.round(grossSalary * 0.015)
-}
+import {
+  calculatePAYE, calculateNHIF, calculateNSSF, calculateHousingLevy,
+} from '@/lib/payroll-calculations'
 
 // ─── Payroll Operations ────────────────────────────────────────────────────
 
@@ -127,7 +68,10 @@ export async function getPayrollRuns(): Promise<PayrollRun[]> {
     .select('*')
     .order('created_at', { ascending: false })
 
-  if (error) throw new Error(error.message)
+  if (error) {
+    if (error) logger.error('Operation failed', { error: error })
+    throw new Error('Operation failed')
+  }
   return (data || []) as PayrollRun[]
 }
 
@@ -155,7 +99,8 @@ export async function createPayrollRun(data: {
     if (error) throw error
     return { success: true, id: run.id }
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to create payroll run' }
+    logger.error('Operation failed', { error: error })
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -256,7 +201,8 @@ export async function processPayroll(runId: string): Promise<{
       totalNet,
     }
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to process payroll' }
+    logger.error('Operation failed', { error: error })
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -269,7 +215,10 @@ export async function getPayslips(runId: string) {
     .eq('payroll_run_id', runId)
     .order('created_at')
 
-  if (error) throw new Error(error.message)
+  if (error) {
+    if (error) logger.error('Operation failed', { error: error })
+    throw new Error('Operation failed')
+  }
   return data || []
 }
 
@@ -279,7 +228,10 @@ export async function approvePayslip(payslipId: string) {
     .update({ status: 'approved' })
     .eq('id', payslipId)
 
-  if (error) throw new Error(error.message)
+  if (error) {
+    if (error) logger.error('Operation failed', { error: error })
+    throw new Error('Operation failed')
+  }
   return { success: true }
 }
 
@@ -289,28 +241,9 @@ export async function markPayslipPaid(payslipId: string) {
     .update({ status: 'paid', paid_at: new Date().toISOString() })
     .eq('id', payslipId)
 
-  if (error) throw new Error(error.message)
-  return { success: true }
-}
-
-/**
- * Preview tax calculation for a given salary.
- */
-export async function previewTaxCalculation(grossSalary: number) {
-  const paye = calculatePAYE(grossSalary)
-  const nhif = calculateNHIF(grossSalary)
-  const nssf = calculateNSSF(grossSalary)
-  const housingLevy = calculateHousingLevy(grossSalary)
-  const totalDeductions = paye + nhif + nssf + housingLevy
-  const netSalary = grossSalary - totalDeductions
-
-  return {
-    grossSalary,
-    paye,
-    nhif,
-    nssf,
-    housingLevy,
-    totalDeductions,
-    netSalary,
+  if (error) {
+    if (error) logger.error('Operation failed', { error: error })
+    throw new Error('Operation failed')
   }
+  return { success: true }
 }

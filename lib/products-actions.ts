@@ -33,8 +33,8 @@ interface InventoryRow {
   min_stock?: number
   max_stock?: number
   reorder_point?: number
-  created_at?: string
-  updated_at?: string
+  created_at?: string | null
+  updated_at?: string | null
   product?: ProductRow | null
 }
 
@@ -114,7 +114,7 @@ export async function getProductsForPOS(branchId: string) {
         : (product.category ?? null)
       return {
         ...product,
-        quantity: Array.isArray(product.inventory) ? (product.inventory[0]?.quantity || 0) : ((product.inventory as any)?.quantity || 0),
+        quantity: Array.isArray(product.inventory) ? (product.inventory[0]?.quantity || 0) : ((product.inventory as { quantity?: number })?.quantity || 0),
         category,
       }
     })
@@ -366,6 +366,30 @@ export async function getAllProducts() {
   }
 }
 
+export async function searchProducts(query: string) {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('products')
+      .select(`
+        id,
+        sku,
+        name,
+        selling_price,
+        purchase_price,
+        category:categories(id, name)
+      `)
+      .or(`name.ilike.%${query}%,sku.ilike.%${query}%`)
+      .order('name')
+      .limit(20)
+
+    if (error) throw error
+    return data || []
+  } catch (error) {
+    logger.error('Error searching products:', error)
+    return []
+  }
+}
+
 /**
  * Create a new product with inventory row for the specified branch
  * This ensures the product appears in POS for that branch immediately
@@ -374,7 +398,7 @@ export async function createProduct(
   sku: string,
   name: string,
   description: string,
-  categoryId: string,
+  categoryId: string | null,
   purchasePrice: number,
   sellingPrice: number,
   reorderLevel: number,
@@ -411,7 +435,8 @@ export async function createProduct(
 
     if (productError) {
       logger.error('[Phase1] Error creating product in DB:', { sku, name, categoryId, error: productError })
-      throw new Error(`Database error creating product: ${productError.message} (sku=${sku})`)
+      logger.error('Operation failed', { error: productError })
+      throw new Error('Operation failed')
     }
 
     // Step 2: Validate branchId is not empty
@@ -435,17 +460,23 @@ export async function createProduct(
     }
 
     // Emit product.created event
-    await emitEvent('product.created', {
-      product_id: productData.id,
-      name: productData.name,
-      sku: productData.sku,
-      branch_id: branchId,
-    }, { source: 'inventory', entity_type: 'product', entity_id: productData.id })
+    await emitEvent({
+      eventType: 'product.created',
+      payload: {
+        product_id: productData.id,
+        name: productData.name,
+        sku: productData.sku,
+        branch_id: branchId,
+      },
+      source: 'inventory',
+      entityType: 'product',
+      entityId: productData.id,
+    })
 
     return { success: true, data: productData }
   } catch (error) {
     logger.error('Error creating product:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to create product' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -495,7 +526,7 @@ export async function updateProduct(
     return { success: true, data }
   } catch (error) {
     logger.error('Error updating product:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to update product' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -536,7 +567,7 @@ export async function deleteProduct(productId: string) {
     return { success: true }
   } catch (error) {
     logger.error('Error deleting product:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to delete product' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -628,7 +659,7 @@ export async function adjustStockQuantity(
     logger.error('Error adjusting stock:', error)
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to adjust stock',
+      error: 'Operation failed. Please try again.',
     }
   }
 }

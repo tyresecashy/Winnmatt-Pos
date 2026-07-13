@@ -382,7 +382,7 @@ export class TestDataGeneratorService {
     await supabase.from('branches').delete().neq('id', '');
   }
 
-  async getGenerationStats(): Promise<any> {
+  async getGenerationStats(): Promise<Record<string, unknown>> {
     const [products, customers, employees, sales, suppliers, branches] = await Promise.all([
       supabase.from('products').select('id', { count: 'exact', head: true }),
       supabase.from('customers').select('id', { count: 'exact', head: true }),

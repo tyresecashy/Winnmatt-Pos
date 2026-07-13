@@ -63,7 +63,7 @@ export async function createTaxRate(
     return { success: true, data: data as TaxRate }
   } catch (error) {
     logger.error('[TAX] Failed to create tax rate:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -95,7 +95,7 @@ export async function updateTaxRate(
     return { success: true }
   } catch (error) {
     logger.error('[TAX] Failed to update tax rate:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -125,7 +125,7 @@ export async function deleteTaxRate(id: string): Promise<{ success: boolean; err
     return { success: true }
   } catch (error) {
     logger.error('[TAX] Failed to delete tax rate:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -138,7 +138,7 @@ export async function getTaxGroups(): Promise<TaxGroupCombined[]> {
       .select('*')
 
     if (error) throw error
-    return (data || []) as TaxGroupCombined[]
+    return (data || []) as unknown as TaxGroupCombined[]
   } catch (error) {
     logger.error('[TAX] Failed to fetch tax groups:', error)
     return []
@@ -181,7 +181,7 @@ export async function createTaxGroup(
     return { success: true, data: group as TaxGroup }
   } catch (error) {
     logger.error('[TAX] Failed to create tax group:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -196,7 +196,7 @@ export async function updateTaxGroup(
     }
 
     // Update group metadata
-    const updates: any = { updated_at: new Date().toISOString() }
+    const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
     if (input.name !== undefined) updates.name = input.name
     if (input.description !== undefined) updates.description = input.description
     if (input.is_active !== undefined) updates.is_active = input.is_active
@@ -235,7 +235,7 @@ export async function updateTaxGroup(
     return { success: true }
   } catch (error) {
     logger.error('[TAX] Failed to update tax group:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -268,7 +268,7 @@ export async function deleteTaxGroup(id: string): Promise<{ success: boolean; er
     return { success: true }
   } catch (error) {
     logger.error('[TAX] Failed to delete tax group:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -335,7 +335,7 @@ export async function assignTaxToCategory(
     return { success: true }
   } catch (error) {
     logger.error('[TAX] Failed to assign tax to category:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -359,7 +359,7 @@ export async function removeCategoryTaxAssignment(
     return { success: true }
   } catch (error) {
     logger.error('[TAX] Failed to remove category tax assignment:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -408,15 +408,16 @@ export async function getTaxForCategory(categoryId: string): Promise<{
       }
     }
 
-    const viewData = data as any
+    const viewData = data as Record<string, unknown>
+    const taxRates = (viewData.tax_rates || []) as unknown as TaxGroupRate[]
     return {
-      group_id: viewData.group_id,
-      group_name: viewData.group_name,
-      is_tax_inclusive: viewData.is_tax_inclusive,
-      combined_percentage: Array.isArray(viewData.tax_rates)
-        ? viewData.tax_rates.reduce((sum: number, r: TaxGroupRate) => sum + r.percentage, 0)
+      group_id: viewData.group_id as string,
+      group_name: viewData.group_name as string,
+      is_tax_inclusive: (viewData.is_tax_inclusive as boolean) ?? true,
+      combined_percentage: Array.isArray(taxRates)
+        ? taxRates.reduce((sum: number, r: TaxGroupRate) => sum + r.percentage, 0)
         : 0,
-      rates: viewData.tax_rates || [],
+      rates: taxRates,
     }
   } catch (error) {
     logger.error('[TAX] Failed to get tax for category:', error)

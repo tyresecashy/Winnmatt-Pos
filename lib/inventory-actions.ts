@@ -77,7 +77,7 @@ export async function adjustInventoryStock(
     logger.error('Error adjusting inventory:', error)
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to adjust inventory',
+      error: 'Operation failed. Please try again.',
     }
   }
 }

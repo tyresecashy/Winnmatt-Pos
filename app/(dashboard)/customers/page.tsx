@@ -1,7 +1,7 @@
 "use client"
 import { logger } from '@/lib/logger';
 
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react"
+import { startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
@@ -24,9 +24,11 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Plus, Search, SearchX, Phone, Loader2, Users, X } from "lucide-react"
-import { getCustomersWithStats } from "@/lib/customers-actions"
-import { getSegments, getCustomerSegments } from "@/lib/segment-actions"
-import type { Segment } from "@/lib/segment-actions"
+import { EmptyState } from "@/components/ui/empty-state"
+import { getCustomersWithStatsLegacy as getCustomersWithStats } from "@/lib/modules/customers"
+import { getSegments, getCustomerSegments } from "@/lib/modules/crm"
+import type { Segment } from "@/lib/modules/crm"
+import type { CustomerWithStats } from "@/lib/modules/customers"
 import { CustomerFormDialog } from "@/components/customers/customer-form-dialog"
 import { CustomerDetailsDialog } from "@/components/customers/customer-details-dialog"
 
@@ -53,14 +55,14 @@ const tierColors: Record<string, string> = {
 }
 
 export default function CustomersPage() {
-  const [customers, setCustomers] = useState<any[]>([])
+  const [customers, setCustomers] = useState<CustomerWithStats[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [typeFilter, setTypeFilter] = useState<string>("all")
   const [formDialogOpen, setFormDialogOpen] = useState(false)
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false)
-  const [selectedCustomer, setSelectedCustomer] = useState<any>(null)
-  const [customerEdit, setCustomerEdit] = useState<any>(null)
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerWithStats | null>(null)
+  const [customerEdit, setCustomerEdit] = useState<CustomerWithStats | null>(null)
   const deferredSearchTerm = useDeferredValue(searchTerm)
   const hasCustomersRef = useRef(false)
 
@@ -97,7 +99,7 @@ export default function CustomersPage() {
     })()
   }, [])
 
-  const loadCustomerSegments = useCallback(async (customersList: any[]) => {
+  const loadCustomerSegments = useCallback(async (customersList: CustomerWithStats[]) => {
     if (customersList.length === 0) return
     const results = await Promise.allSettled(
       customersList.map((c) => getCustomerSegments(c.id))
@@ -118,9 +120,11 @@ export default function CustomersPage() {
   }, [loadCustomers])
 
   useEffect(() => {
-    if (customers.length > 0) {
-      void loadCustomerSegments(customers)
-    }
+    startTransition(() => {
+      if (customers.length > 0) {
+        void loadCustomerSegments(customers)
+      }
+    })
   }, [customers, loadCustomerSegments])
 
   const filteredCustomers = useMemo(() => {
@@ -163,12 +167,12 @@ export default function CustomersPage() {
     setFormDialogOpen(true)
   }
 
-  const handleEditCustomer = (customer: any) => {
+  const handleEditCustomer = (customer: CustomerWithStats) => {
     setCustomerEdit(customer)
     setFormDialogOpen(true)
   }
 
-  const handleViewCustomer = (customer: any) => {
+  const handleViewCustomer = (customer: CustomerWithStats) => {
     setSelectedCustomer(customer)
     setDetailsDialogOpen(true)
   }
@@ -279,22 +283,12 @@ export default function CustomersPage() {
               ))}
             </div>
           ) : filteredCustomers.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
-                {customers.length === 0
-                  ? <Users className="h-6 w-6 text-muted-foreground" />
-                  : <SearchX className="h-6 w-6 text-muted-foreground" />
-                }
-              </div>
-              <p className="text-lg font-medium">
-                {customers.length === 0 ? 'No customers yet' : 'No customers match your search'}
-              </p>
-              <p className="text-sm text-muted-foreground mt-1">
-                {customers.length === 0
-                  ? 'Add your first customer to start tracking purchases.'
-                  : 'Try different search terms or clear your filters.'}
-              </p>
-            </div>
+            <EmptyState
+              icon={customers.length === 0 ? Users : SearchX}
+              title={customers.length === 0 ? 'No customers yet' : 'No customers match your search'}
+              description={customers.length === 0 ? 'Add your first customer to start tracking purchases.' : 'Try different search terms or clear your filters.'}
+              compact
+            />
           ) : (
             <Table>
               <TableHeader>
@@ -416,7 +410,7 @@ export default function CustomersPage() {
       <CustomerFormDialog
         isOpen={formDialogOpen}
         onOpenChange={setFormDialogOpen}
-        customer={customerEdit}
+        customer={customerEdit as unknown as undefined}
         onSaveSuccess={handleFormSave}
       />
 

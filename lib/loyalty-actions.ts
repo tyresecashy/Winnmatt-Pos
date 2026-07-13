@@ -3,7 +3,30 @@ import { logger } from '@/lib/logger';
 
 import { createCashSaveTimingTracker, isCashSaveTimingEnabled } from '@/lib/cash-save-timing'
 import { supabaseAdmin } from '@/lib/supabase-server'
-import type { LoyaltySettings, LoyaltyTransaction } from '@/lib/db.types'
+// ---------------------------------------------------------------------------
+// Types for loyalty configuration (not yet in generated DB types)
+// ---------------------------------------------------------------------------
+export interface LoyaltyTransaction {
+  id: string; customer_id: string; type: string; sale_id: string | null
+  points_delta: number; balance_before: number; balance_after: number
+  reason: string | null; branch_id: string; created_by: string | null; created_at: string
+}
+
+export interface LoyaltySettings {
+  id: string; earn_enabled: boolean; earn_threshold_cents: number
+  earn_rate_cents_per_point: number; earn_minimum_basket_cents: number
+  earn_on_discounted: boolean; redeem_enabled: boolean
+  redeem_value_cents: number; point_value_cents: number
+  redeem_minimum_points: number; redeem_minimum_basket_cents: number
+  redeem_max_percent_per_sale: number; expiry_enabled: boolean
+  expiry_days: number; enable_tiers: boolean; enable_birthday_bonus: boolean
+  enable_holiday_bonus: boolean; enable_weekend_bonus: boolean
+  tier_bronze_multiplier: number; tier_silver_multiplier: number
+  tier_gold_multiplier: number; tier_platinum_multiplier: number
+  holiday_multiplier: number; birthday_multiplier: number
+  weekend_multiplier: number; campaign_multiplier: number
+  updated_by: string | null; updated_at: string; created_at: string
+}
 
 const LOYALTY_SETTINGS_ID = 'f47ac10b-58cc-4372-a567-0e02b2c3d479'
 
@@ -63,7 +86,8 @@ export async function updateLoyaltySettings(
       .single()
 
     if (error) {
-      throw new Error(`Failed to update loyalty settings: ${error.message}`)
+      logger.error('Operation failed', { error: error })
+      throw new Error('Operation failed')
     }
 
     // Log the change to audit logs
@@ -135,7 +159,8 @@ export async function awardLoyaltyPoints(
     )
 
     if (fetchError) {
-      throw new Error(`Failed to fetch customer: ${fetchError.message}`)
+      logger.error('Operation failed', { error: fetchError })
+      throw new Error('Operation failed')
     }
 
     const currentBalance = customer?.loyalty_points || 0
@@ -201,7 +226,8 @@ export async function awardLoyaltyPoints(
     )
 
     if (updateError) {
-      throw new Error(`Failed to update customer balance: ${updateError.message}`)
+      logger.error('Operation failed', { error: updateError })
+      throw new Error('Operation failed')
     }
 
     // If zero rows updated, another transaction modified the balance — retry once
@@ -224,7 +250,10 @@ export async function awardLoyaltyPoints(
         .eq('loyalty_points', retryBalance)
         .select('id')
 
-      if (retryErr) throw new Error(`Failed to update customer balance on retry: ${retryErr.message}`)
+      if (retryErr) {
+        logger.error('Operation failed', { error: retryErr })
+        throw new Error('Operation failed')
+      }
       if (!retryRows || retryRows.length === 0) {
         throw new Error('Concurrent modification detected on retry — please try again')
       }
@@ -346,7 +375,8 @@ export async function reverseLoyaltyPoints(
       .single()
 
     if (fetchError) {
-      throw new Error(`Failed to fetch customer: ${fetchError.message}`)
+      logger.error('Operation failed', { error: fetchError })
+      throw new Error('Operation failed')
     }
 
     const currentBalance = customer?.loyalty_points || 0
@@ -362,7 +392,8 @@ export async function reverseLoyaltyPoints(
       .eq('id', customerId)
 
     if (updateError) {
-      throw new Error(`Failed to update customer balance: ${updateError.message}`)
+      logger.error('Operation failed', { error: updateError })
+      throw new Error('Operation failed')
     }
 
     // Record reversal transaction
@@ -443,7 +474,8 @@ export async function getLoyaltySummary(customerId: string): Promise<{
       .single()
 
     if (customerError) {
-      throw new Error(`Failed to fetch customer: ${customerError.message}`)
+      logger.error('Operation failed', { error: customerError })
+      throw new Error('Operation failed')
     }
 
     // Get recent transactions
@@ -459,14 +491,15 @@ export async function getLoyaltySummary(customerId: string): Promise<{
     }
 
     // Calculate total earned (sum of all earn_sale transactions)
-    const totalEarned = (transactions || [])
-      .filter((tx: LoyaltyTransaction) => tx.type === 'earn_sale')
-      .reduce((sum: number, tx: LoyaltyTransaction) => sum + tx.points_delta, 0)
+    const txList = (transactions || []) as unknown as LoyaltyTransaction[]
+    const totalEarned = txList
+      .filter((tx) => tx.type === 'earn_sale')
+      .reduce((sum, tx) => sum + tx.points_delta, 0)
 
     return {
       balance: customer?.loyalty_points || 0,
       totalEarned,
-      recentTransactions: (transactions as LoyaltyTransaction[]) || [],
+      recentTransactions: txList,
     }
   } catch (error) {
     logger.error('[LOYALTY] Error fetching summary:', error)
@@ -683,7 +716,8 @@ export async function redeemLoyaltyPoints(
       )
 
       if (fetchError) {
-        throw new Error(`Failed to fetch customer: ${fetchError.message}`)
+        logger.error('Operation failed', { error: fetchError })
+        throw new Error('Operation failed')
       }
 
       currentBalance = customer?.loyalty_points || 0
@@ -714,7 +748,8 @@ export async function redeemLoyaltyPoints(
     )
 
     if (updateError) {
-      throw new Error(`Failed to update customer balance: ${updateError.message}`)
+      logger.error('Operation failed', { error: updateError })
+      throw new Error('Operation failed')
     }
 
     if (!updatedCustomer) {
@@ -809,7 +844,8 @@ export async function restoreRedeemedPoints(
       .single()
 
     if (fetchError) {
-      throw new Error(`Failed to fetch customer: ${fetchError.message}`)
+      logger.error('Operation failed', { error: fetchError })
+      throw new Error('Operation failed')
     }
 
     const currentBalance = customer?.loyalty_points || 0
@@ -824,7 +860,8 @@ export async function restoreRedeemedPoints(
       .eq('id', customerId)
 
     if (updateError) {
-      throw new Error(`Failed to update customer balance: ${updateError.message}`)
+      logger.error('Operation failed', { error: updateError })
+      throw new Error('Operation failed')
     }
 
     // Record restoration transaction

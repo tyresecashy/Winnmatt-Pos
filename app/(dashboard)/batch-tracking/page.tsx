@@ -1,5 +1,6 @@
 'use client'
 
+import { logger } from '@/lib/logger'
 import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -8,26 +9,34 @@ import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
-  FlaskConical, Search, Package, Truck, AlertTriangle,
-  CheckCircle2, XCircle, Clock, CalendarDays, Building2,
-  RefreshCw,
+  FlaskConical, Search, AlertTriangle,
+  Clock, Building2,
 } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 import { toast } from '@/components/ui/use-toast'
+import { supabase } from '@/lib/supabase'
 
-// Simulated batch data until the migration SQL runs
-const MOCK_BATCHES = [
-  { id: '1', batch_number: 'B-2026-001', lot_number: 'LOT-A123', product_name: 'Coca-Cola 500ml', supplier_name: 'Coca-Cola Kenya', quantity: 240, reserved: 10, manufacture_date: '2026-01-15', expiry_date: '2026-07-15', status: 'active', location: 'Main Warehouse', days_until_expiry: 12 },
-  { id: '2', batch_number: 'B-2026-002', lot_number: 'LOT-B456', product_name: 'Mama Nguil 2kg', supplier_name: 'Mama Nguil Mills', quantity: 500, reserved: 30, manufacture_date: '2026-03-01', expiry_date: '2026-09-01', status: 'active', location: 'Main Warehouse', days_until_expiry: 60 },
-  { id: '3', batch_number: 'B-2026-003', lot_number: 'LOT-C789', product_name: 'Fresh Milk 1L', supplier_name: 'Brookside Dairy', quantity: 80, reserved: 0, manufacture_date: '2026-06-20', expiry_date: '2026-07-05', status: 'active', location: 'Branch A - Cooler', days_until_expiry: 2 },
-  { id: '4', batch_number: 'B-2026-004', lot_number: 'LOT-D012', product_name: 'Cooking Oil 3L', supplier_name: 'Pwani Oil', quantity: 0, reserved: 0, manufacture_date: '2025-12-01', expiry_date: '2026-06-01', status: 'expired', location: 'Damaged Goods', days_until_expiry: -32 },
-  { id: '5', batch_number: 'B-2026-005', lot_number: 'LOT-E345', product_name: 'Bread Sliced White', supplier_name: 'Bakeries Ltd', quantity: 50, reserved: 5, manufacture_date: '2026-07-01', expiry_date: '2026-07-04', status: 'active', location: 'Branch B', days_until_expiry: 1 },
-  { id: '6', batch_number: 'B-2026-006', lot_number: null, product_name: 'Wheat Flour 1kg', supplier_name: 'Unga Limited', quantity: 1000, reserved: 200, manufacture_date: '2026-05-01', expiry_date: '2026-11-01', status: 'quarantined', location: 'Quarantine Zone', days_until_expiry: 121 },
-  { id: '7', batch_number: 'B-2026-007', lot_number: 'LOT-F678', product_name: 'Sugar 2kg', supplier_name: 'Sony Sugar', quantity: 0, reserved: 0, manufacture_date: '2026-02-01', expiry_date: '2026-08-01', status: 'depleted', location: 'Main Warehouse', days_until_expiry: 29 },
-]
+interface Batch {
+  id: string
+  batch_number: string
+  lot_number: string | null
+  product_id: string | null
+  product?: { name: string } | null
+  supplier_id: string | null
+  supplier?: { name: string } | null
+  warehouse_id: string | null
+  warehouse?: { name: string } | null
+  quantity: number
+  reserved_quantity: number
+  manufacture_date: string | null
+  expiry_date: string | null
+  status: string
+  notes: string | null
+}
 
-const statusColors: Record<string, 'default' | 'destructive' | 'secondary' | 'outline' | 'warning'> = {
+const statusColors: Record<string, 'default' | 'destructive' | 'secondary' | 'outline' | 'ghost'> = {
   active: 'default',
-  quarantined: 'warning',
+  quarantined: 'ghost',
   recalled: 'destructive',
   expired: 'destructive',
   disposed: 'secondary',
@@ -35,29 +44,72 @@ const statusColors: Record<string, 'default' | 'destructive' | 'secondary' | 'ou
 }
 
 export default function BatchTrackingPage() {
-  const [batches, setBatches] = useState(MOCK_BATCHES)
-  const [loading, setLoading] = useState(false)
+  const [batches, setBatches] = useState<Batch[]>([])
+  const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [activeTab, setActiveTab] = useState('all')
 
-  useEffect(() => { setLoading(true); setTimeout(() => setLoading(false), 500) }, [])
+  useEffect(() => {
+    const fetchBatches = async () => {
+      setLoading(true)
+      try {
+        const { data, error } = await supabase
+          .from('batch_tracking')
+          .select(`
+            *,
+            product:products(name),
+            supplier:suppliers(name),
+            warehouse:warehouses(name)
+          `)
+          .order('expiry_date', { ascending: true, nullsFirst: false })
+
+        if (error) throw error
+        setBatches((data as Batch[]) || [])
+      } catch (err) {
+        logger.error('Failed to load batch data:', err)
+        toast({
+          title: 'Error',
+          description: 'Failed to load batch tracking data',
+          variant: 'destructive',
+        })
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchBatches()
+  }, [])
+
+  const daysUntilExpiry = (expiryDate: string | null): number => {
+    if (!expiryDate) return Infinity
+    const now = new Date()
+    const expiry = new Date(expiryDate)
+    return Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+  }
 
   const filteredBatches = batches.filter(b => {
     if (searchQuery) {
       const q = searchQuery.toLowerCase()
+      const productName = b.product?.name?.toLowerCase() || ''
       if (!b.batch_number.toLowerCase().includes(q) &&
-          !b.product_name.toLowerCase().includes(q) &&
+          !productName.includes(q) &&
           !(b.lot_number || '').toLowerCase().includes(q)) return false
     }
     if (activeTab === 'active') return b.status === 'active'
-    if (activeTab === 'expiring') return b.days_until_expiry >= 0 && b.days_until_expiry <= 30 && b.status === 'active'
+    if (activeTab === 'expiring') {
+      const d = daysUntilExpiry(b.expiry_date)
+      return d >= 0 && d <= 30 && b.status === 'active'
+    }
     if (activeTab === 'issues') return ['quarantined', 'recalled', 'expired'].includes(b.status)
     return true
   })
 
   const activeCount = batches.filter(b => b.status === 'active').length
-  const expiringCount = batches.filter(b => b.days_until_expiry >= 0 && b.days_until_expiry <= 30 && b.status === 'active').length
+  const expiringCount = batches.filter(b => {
+    const d = daysUntilExpiry(b.expiry_date)
+    return d >= 0 && d <= 30 && b.status === 'active'
+  }).length
   const issueCount = batches.filter(b => ['quarantined', 'recalled', 'expired'].includes(b.status)).length
+  const totalUnits = batches.reduce((s, b) => s + b.quantity, 0)
 
   const formatDate = (d: string) => new Date(d).toLocaleDateString('en-KE', { year: 'numeric', month: 'short', day: 'numeric' })
 
@@ -108,7 +160,7 @@ export default function BatchTrackingPage() {
               <CardTitle className="text-sm font-medium text-muted-foreground">Total Units Tracked</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold">{batches.reduce((s, b) => s + b.quantity, 0).toLocaleString()}</p>
+              <p className="text-2xl font-bold">{totalUnits.toLocaleString()}</p>
             </CardContent>
           </Card>
         </div>
@@ -146,15 +198,19 @@ export default function BatchTrackingPage() {
         </div>
       ) : filteredBatches.length === 0 ? (
         <Card><CardContent className="py-8 text-center text-muted-foreground">
-          <Search className="h-12 w-12 mx-auto mb-3 opacity-50" />
-          <p>No batches found matching your search</p>
+          <EmptyState icon={Search} title="No batches found matching your search" compact />
         </CardContent></Card>
       ) : (
         <div className="space-y-3">
-          {filteredBatches.map((batch) => (
+          {filteredBatches.map((batch) => {
+            const d = daysUntilExpiry(batch.expiry_date)
+            const isUrgent = d >= 0 && d <= 3 && batch.status === 'active'
+            const productName = batch.product?.name || `Product ${batch.product_id?.slice(0, 8) || 'Unknown'}`
+            const supplierName = batch.supplier?.name || 'Unknown'
+            const warehouseName = batch.warehouse?.name || 'Unassigned'
+            return (
             <Card key={batch.id} className={`overflow-hidden ${
-              batch.days_until_expiry >= 0 && batch.days_until_expiry <= 3 && batch.status === 'active'
-                ? 'border-red-300' : ''
+              isUrgent ? 'border-destructive/30' : ''
             }`}>
               <CardContent className="pt-4">
                 <div className="flex items-start justify-between">
@@ -162,13 +218,13 @@ export default function BatchTrackingPage() {
                     <FlaskConical className="h-8 w-8 text-muted-foreground mt-1" />
                     <div className="flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-medium">{batch.product_name}</p>
+                        <p className="font-medium">{productName}</p>
                         <Badge variant={statusColors[batch.status] || 'default'} className="uppercase text-xs">
                           {batch.status}
                         </Badge>
-                        {batch.days_until_expiry >= 0 && batch.days_until_expiry <= 30 && batch.status === 'active' && (
+                        {d >= 0 && d <= 30 && batch.status === 'active' && (
                           <Badge variant="destructive" className="text-xs animate-pulse">
-                            {batch.days_until_expiry}d until expiry
+                            {d}d until expiry
                           </Badge>
                         )}
                       </div>
@@ -186,33 +242,34 @@ export default function BatchTrackingPage() {
                         <div>
                           <p className="text-muted-foreground text-xs">Quantity</p>
                           <p className="font-bold">{batch.quantity.toLocaleString()}</p>
-                          {batch.reserved > 0 && <p className="text-xs text-muted-foreground">{batch.reserved} reserved</p>}
+                          {batch.reserved_quantity > 0 && <p className="text-xs text-muted-foreground">{batch.reserved_quantity} reserved</p>}
                         </div>
                         <div>
                           <p className="text-muted-foreground text-xs">Manufactured</p>
-                          <p>{formatDate(batch.manufacture_date)}</p>
+                          <p>{batch.manufacture_date ? formatDate(batch.manufacture_date) : '-'}</p>
                         </div>
                         <div>
                           <p className="text-muted-foreground text-xs">Expiry</p>
-                          <p className={batch.days_until_expiry <= 30 && batch.status === 'active' ? 'text-red-600 font-bold' : ''}>
-                            {formatDate(batch.expiry_date)}
+                          <p className={d <= 30 && batch.status === 'active' ? 'text-red-600 font-bold' : ''}>
+                            {batch.expiry_date ? formatDate(batch.expiry_date) : '-'}
                           </p>
                         </div>
                         <div>
                           <p className="text-muted-foreground text-xs">Supplier</p>
-                          <p>{batch.supplier_name}</p>
+                          <p>{supplierName}</p>
                         </div>
                       </div>
                       <p className="text-xs text-muted-foreground mt-2">
                         <Building2 className="h-3 w-3 inline mr-1" />
-                        {batch.location}
+                        {warehouseName}
                       </p>
                     </div>
                   </div>
                 </div>
               </CardContent>
             </Card>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>

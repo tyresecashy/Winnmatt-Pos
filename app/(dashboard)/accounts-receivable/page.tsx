@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, startTransition } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -22,7 +22,7 @@ import {
   getCreditSummaries, getCreditAging,
   recordCreditPayment,
   type CustomerCreditSummary, type CreditAgingBucket,
-} from '@/lib/credit-actions'
+} from '@/lib/modules/crm'
 import {
   Users, Plus, Search, Loader2, DollarSign, Clock, TrendingUp,
   AlertCircle, CheckCircle, RefreshCw, ArrowRight, Phone, Mail,
@@ -65,14 +65,14 @@ export default function AccountsReceivablePage() {
       ])
       setCustomers(customersData)
       setAgingBuckets(agingData)
-    } catch (err: any) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' })
+    } catch (err: unknown) {
+      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Unknown error', variant: 'destructive' })
     } finally {
       setLoading(false)
     }
   }, [toast])
 
-  useEffect(() => { loadData() }, [loadData])
+  useEffect(() => { startTransition(() => { loadData() }) }, [loadData])
 
   // ── Filtered Customers ──
   const filteredCustomers = useMemo(() => {
@@ -125,7 +125,7 @@ export default function AccountsReceivablePage() {
       if (paymentForm.reference_number) formData.set('reference_number', paymentForm.reference_number)
       if (paymentForm.notes) formData.set('notes', paymentForm.notes)
 
-      const result = await recordCreditPayment(formData)
+      const result = await recordCreditPayment(formData as any)
       if (result.error) {
         toast({ title: 'Error', description: result.error, variant: 'destructive' })
       } else {
@@ -135,8 +135,8 @@ export default function AccountsReceivablePage() {
         setPaymentForm({ amount: '', payment_date: new Date().toISOString().split('T')[0], payment_method: 'cash', reference_number: '', notes: '' })
         loadData()
       }
-    } catch (err: any) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' })
+    } catch (err: unknown) {
+      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Unknown error', variant: 'destructive' })
     } finally {
       setSaving(false)
     }

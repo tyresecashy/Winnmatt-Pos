@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useState, startTransition } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -34,6 +34,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { toast } from "@/components/ui/use-toast"
 import { Plus, Percent, Coins, Tags, Loader2, Trash2, BadgePercent } from "lucide-react"
+import { EmptyState } from "@/components/ui/empty-state"
 import {
   getPromotions,
   createPromotion,
@@ -42,8 +43,8 @@ import {
   getCouponsForPromotion,
   createCoupon,
   deleteCoupon,
-} from "@/lib/promotion-actions"
-import type { Promotion, PromotionCoupon, PromotionType, PromotionScope } from "@/lib/promotion-actions"
+} from "@/lib/modules/promotions"
+import type { Promotion, PromotionCoupon, PromotionType, PromotionScope } from "@/lib/modules/promotions"
 import { formatKSh } from "@/lib/currency"
 
 const typeLabels: Record<PromotionType, string> = {
@@ -125,7 +126,7 @@ export default function PromotionsPage() {
     setIsLoading(false)
   }, [])
 
-  useEffect(() => { void load() }, [load])
+  useEffect(() => { startTransition(() => { void load() }) }, [load])
 
   // ─── Open dialogs ───────────────────────────────────────────────────────
 
@@ -182,9 +183,9 @@ export default function PromotionsPage() {
       let result: Promotion | null
 
       if (editing) {
-        result = await updatePromotion(editing.id, payload)
+        result = await updatePromotion(editing.id, payload) as any
       } else {
-        result = await createPromotion(payload)
+        result = await createPromotion(payload) as any
       }
 
       if (!result) throw new Error('Failed to save promotion')
@@ -226,7 +227,7 @@ export default function PromotionsPage() {
     const limit = parseInt(newCouponLimit) || 0
     const result = await createCoupon(couponPromotion.id, newCouponCode.trim(), limit)
     if (result) {
-      setCoupons((prev) => [...prev, result])
+      setCoupons((prev) => [...prev, result as any])
       setNewCouponCode('')
       setNewCouponLimit('0')
       toast({ title: 'Coupon added' })
@@ -283,11 +284,7 @@ export default function PromotionsPage() {
           {isLoading ? (
             <div className="space-y-3 py-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}</div>
           ) : promotions.length === 0 ? (
-            <div className="flex flex-col items-center py-12 text-center">
-              <BadgePercent className="h-12 w-12 text-muted-foreground mb-4" />
-              <p className="text-lg font-medium">No promotions yet</p>
-              <p className="text-sm text-muted-foreground mt-1">Create your first promotion to start offering discounts.</p>
-            </div>
+            <EmptyState icon={BadgePercent} title="No promotions yet" description="Create your first promotion to start offering discounts." />
           ) : (
             <Table>
               <TableHeader>
@@ -509,14 +506,14 @@ export default function PromotionsPage() {
           <div className="space-y-4">
             {/* Existing coupons */}
             {coupons.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">No coupon codes yet.</p>
+              <EmptyState title="No coupon codes yet." compact />
             ) : (
               <div className="space-y-2 max-h-[200px] overflow-y-auto">
                 {coupons.map((c) => (
                   <div key={c.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
                     <div>
                       <code className="text-sm font-mono font-bold">{c.code}</code>
-                      {c.usage_limit > 0 && (
+                      {(c.usage_limit ?? 0) > 0 && (
                         <span className="text-xs text-muted-foreground ml-2">{c.current_usage}/{c.usage_limit}</span>
                       )}
                     </div>

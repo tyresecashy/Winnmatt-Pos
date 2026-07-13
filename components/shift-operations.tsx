@@ -27,9 +27,54 @@ interface ShiftOperationsProps {
   cashierName: string
 }
 
+interface ShiftRow {
+  id: string
+  shift_number: string
+  branch_id: string
+  cashier_id: string
+  status: string
+  opening_float: number
+  opened_at: string
+  closed_at: string | null
+  closing_notes: string | null
+  register_id: string | null
+  drawer_id: string | null
+  created_at: string | null
+  updated_at: string | null
+  reopened_at: string | null
+  reopened_by: string | null
+}
+
+interface ShiftSummaryRow {
+  id: string | null
+  status?: string
+  payment_breakdown?: {
+    cash_sales: number
+    card_sales: number
+    mpesa_sales: number
+    difference: number
+  } | null
+  transaction_count?: number
+  opened_at?: string | null
+  opened_by?: string | null
+  cashier?: string | null
+  shift_number?: string
+  opening_float?: number | null
+  branch_id?: string | null
+  cash_sales?: number | null
+  card_sales?: number | null
+  mpesa_sales?: number | null
+  closed_at?: string | null
+  closed_by?: string | null
+}
+
+// Shift summary has dynamic fields from shift_summaries view — use loose type
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ShiftSummary = any
+
 export function ShiftOperations({ branchId, cashierId, cashierName }: ShiftOperationsProps) {
   // State
-  const [activeShift, setActiveShift] = useState<any>(null)
+  const [activeShift, setActiveShift] = useState<ShiftRow | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [shiftLoading, setShiftLoading] = useState(true)
 
@@ -43,7 +88,7 @@ export function ShiftOperations({ branchId, cashierId, cashierName }: ShiftOpera
   const [showCloseDialog, setShowCloseDialog] = useState(false)
 
   // Summary view
-  const [shiftSummary, setShiftSummary] = useState<any>(null)
+  const [shiftSummary, setShiftSummary] = useState<ShiftSummary | null>(null)
   const [showSummary, setShowSummary] = useState(false)
 
   const { toast } = useToast()
@@ -97,7 +142,7 @@ export function ShiftOperations({ branchId, cashierId, cashierName }: ShiftOpera
         description: result.message,
       })
 
-      setActiveShift(result.shift)
+      setActiveShift(result.shift ?? null)
       setOpeningFloat('')
       setShowOpenDialog(false)
     } catch (error) {
@@ -125,7 +170,7 @@ export function ShiftOperations({ branchId, cashierId, cashierName }: ShiftOpera
     try {
       setIsLoading(true)
       const amountInCents = Math.round(Number(countedCash))
-      const result = await closeShift(activeShift.id, amountInCents, closingNotes, cashierId)
+      const result = await closeShift(activeShift!.id, amountInCents, closingNotes, cashierId)
 
       if (!result.success) {
         toast({
@@ -159,7 +204,7 @@ export function ShiftOperations({ branchId, cashierId, cashierName }: ShiftOpera
   // VIEW SUMMARY
   async function handleViewSummary() {
     try {
-      const summary = await getShiftSummary(activeShift.id)
+      const summary = await getShiftSummary(activeShift!.id)
       setShiftSummary(summary)
       setShowSummary(true)
     } catch (error) {

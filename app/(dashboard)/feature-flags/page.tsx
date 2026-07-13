@@ -1,5 +1,6 @@
 'use client'
 
+import { logger } from '@/lib/logger'
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -8,6 +9,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
+import { EmptyState } from '@/components/ui/empty-state'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Slider } from '@/components/ui/slider'
 import {
   Dialog,
@@ -78,7 +81,7 @@ export default function FeatureFlagsPage() {
       const data = await getAllFeatureFlags()
       setFlags(data)
     } catch (error) {
-      console.error('Failed to load feature flags:', error)
+      logger.error('Failed to load feature flags:', error)
     } finally {
       setLoading(false)
     }
@@ -261,7 +264,7 @@ export default function FeatureFlagsPage() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-2">
-              <div className="h-4 w-4 rounded-full bg-green-500" />
+              <div className="h-4 w-4 rounded-full bg-success" />
               <div>
                 <p className="text-2xl font-bold">{enabledCount}</p>
                 <p className="text-xs text-muted-foreground">Enabled</p>
@@ -272,7 +275,7 @@ export default function FeatureFlagsPage() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-2">
-              <div className="h-4 w-4 rounded-full bg-gray-300" />
+              <div className="h-4 w-4 rounded-full bg-muted" />
               <div>
                 <p className="text-2xl font-bold">{flags.length - enabledCount}</p>
                 <p className="text-xs text-muted-foreground">Disabled</p>
@@ -309,7 +312,15 @@ export default function FeatureFlagsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredFlags.map((flag) => (
+              {loading ? Array.from({ length: 3 }).map((_, i) => (
+                <TableRow key={i}>
+                  {Array.from({ length: 7 }).map((_, j) => (
+                    <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>
+                  ))}
+                </TableRow>
+              )) : filteredFlags.length === 0 ? (
+                <TableRow><TableCell colSpan={7} className="text-center py-8"><EmptyState title="No feature flags found" compact /></TableCell></TableRow>
+              ) : (filteredFlags.map((flag) => (
                 <TableRow key={flag.id}>
                   <TableCell className="font-mono text-sm">{flag.key}</TableCell>
                   <TableCell className="font-medium">{flag.name}</TableCell>
@@ -346,13 +357,13 @@ export default function FeatureFlagsPage() {
                       variant="ghost"
                       size="sm"
                       onClick={() => handleDelete(flag.id)}
-                      className="text-red-600 hover:text-red-700"
+                      className="text-destructive hover:text-destructive/80"
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </TableCell>
                 </TableRow>
-              ))}
+              )))}
             </TableBody>
           </Table>
         </CardContent>

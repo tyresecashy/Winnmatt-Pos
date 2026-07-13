@@ -71,7 +71,8 @@ export async function recordCreditPayment(formData: FormData) {
       recorded_by: auth.profile.id,
     })
 
-    if (insertErr) return { error: insertErr.message }
+    logger.error('Operation failed', { error: insertErr })
+    if (insertErr) return { error: 'Operation failed. Please try again.' }
 
     // 2. RPC backup (trigger handles this automatically, but RPC with SECURITY DEFINER is a safety net)
     const { error: rpcErr } = await supabaseAdmin.rpc('update_customer_credit_balance', {
@@ -98,8 +99,9 @@ export async function recordCreditPayment(formData: FormData) {
     revalidatePath('/customer-credit')
     revalidatePath('/customers')
     return { success: true }
-  } catch (err: any) {
-    return { error: err.message || 'Failed to record payment' }
+  } catch (err: unknown) {
+    logger.error('Operation failed', { error: err })
+    return { error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -116,10 +118,13 @@ export async function getCustomerPayments(customerId: string) {
     .order('payment_date', { ascending: false })
     .order('created_at', { ascending: false })
 
-  if (error) throw new Error(error.message)
-  return (data || []).map(p => ({
+  if (error) {
+    if (error) logger.error('Operation failed', { error: error })
+    throw new Error('Operation failed')
+  }
+  return (data || []).map((p: { recorded_by_user?: { full_name: string } }) => ({
     ...p,
-    recorded_by_name: (p as any).recorded_by_user?.full_name || 'Unknown',
+    recorded_by_name: p.recorded_by_user?.full_name || 'Unknown',
   }))
 }
 
@@ -136,11 +141,14 @@ export async function getAllCreditPayments(limit = 50) {
     .order('created_at', { ascending: false })
     .limit(limit)
 
-  if (error) throw new Error(error.message)
-  return (data || []).map(p => ({
+  if (error) {
+    if (error) logger.error('Operation failed', { error: error })
+    throw new Error('Operation failed')
+  }
+  return (data || []).map((p: { customer?: { name: string }; recorded_by_user?: { full_name: string } }) => ({
     ...p,
-    customer_name: (p as any).customer?.name || 'Deleted Customer',
-    recorded_by_name: (p as any).recorded_by_user?.full_name || 'Unknown',
+    customer_name: p.customer?.name || 'Deleted Customer',
+    recorded_by_name: p.recorded_by_user?.full_name || 'Unknown',
   }))
 }
 
@@ -152,7 +160,10 @@ export async function getCreditSummaries() {
     .select('*')
     .order('credit_balance', { ascending: false })
 
-  if (error) throw new Error(error.message)
+  if (error) {
+    if (error) logger.error('Operation failed', { error: error })
+    throw new Error('Operation failed')
+  }
   return (data || []) as CustomerCreditSummary[]
 }
 
@@ -165,7 +176,10 @@ export async function getCustomerCreditSummary(customerId: string) {
     .eq('customer_id', customerId)
     .single()
 
-  if (error) throw new Error(error.message)
+  if (error) {
+    if (error) logger.error('Operation failed', { error: error })
+    throw new Error('Operation failed')
+  }
   return data as CustomerCreditSummary
 }
 
@@ -224,13 +238,15 @@ export async function updateCreditLimit(customerId: string, newLimitCents: numbe
       .update({ credit_limit: newLimitCents })
       .eq('id', customerId)
 
-    if (error) return { error: error.message }
+    logger.error('Operation failed', { error: error })
+    if (error) return { error: 'Operation failed. Please try again.' }
 
     revalidatePath('/customer-credit')
     revalidatePath('/customers')
     return { success: true }
-  } catch (err: any) {
-    return { error: err.message || 'Failed to update credit limit' }
+  } catch (err: unknown) {
+    logger.error('Operation failed', { error: err })
+    return { error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -244,6 +260,9 @@ export async function getTopCreditCustomers(limit = 5) {
     .order('credit_balance', { ascending: false })
     .limit(limit)
 
-  if (error) throw new Error(error.message)
+  if (error) {
+    if (error) logger.error('Operation failed', { error: error })
+    throw new Error('Operation failed')
+  }
   return (data || []) as CustomerCreditSummary[]
 }

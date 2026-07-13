@@ -46,10 +46,10 @@ import {
   Cell,
 } from 'recharts'
 import { AlertCircle, TrendingUp, Users, DollarSign, Clock } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 import { formatKSh } from '@/lib/currency'
-import { getShiftHistory } from '@/lib/shift-actions'
+import { getShiftHistory, reopenShift } from '@/lib/shift-actions'
 import { Textarea } from '@/components/ui/textarea'
-import { reopenShift } from '@/lib/shift-actions'
 import { useToast } from '@/hooks/use-toast'
 
 interface ShiftDashboardProps {
@@ -58,11 +58,39 @@ interface ShiftDashboardProps {
   userRole: string
 }
 
+interface ShiftRow {
+  id: string | null
+  shift_number: string | null
+  branch_id: string | null
+  branch_name: string | null
+  cashier_id: string | null
+  cashier_name: string | null
+  status: string | null
+  opening_float: number | null
+  opened_at: string | null
+  closed_at: string | null
+  created_at?: string | null
+  cash_sales: number | null
+  card_sales: number | null
+  mpesa_sales: number | null
+  closing_expected_cash: number | null
+  closing_counted_cash: number | null
+  closing_difference: number | null
+  voided_count: number | null
+  payment_breakdown?: {
+    cash_sales: number
+    card_sales: number
+    mpesa_sales: number
+    difference: number
+  } | null
+  cashier?: { full_name: string; id?: string } | null
+}
+
 export function ShiftDashboard({ branchId, userId, userRole }: ShiftDashboardProps) {
-  const [shifts, setShifts] = useState<any[]>([])
-  const [filteredShifts, setFilteredShifts] = useState<any[]>([])
+  const [shifts, setShifts] = useState<ShiftRow[]>([])
+  const [filteredShifts, setFilteredShifts] = useState<ShiftRow[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [selectedShift, setSelectedShift] = useState<any>(null)
+  const [selectedShift, setSelectedShift] = useState<ShiftRow | null>(null)
   const [dateRange, setDateRange] = useState('7days')
   const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'closed' | 'reopened'>('all')
   const [showReopenDialog, setShowReopenDialog] = useState(false)
@@ -107,14 +135,14 @@ export function ShiftDashboard({ branchId, userId, userRole }: ShiftDashboardPro
     const now = Date.now()
     if (dateRange === '7days') {
       const cutoff = new Date(now - 7 * 24 * 60 * 60 * 1000)
-      filtered = filtered.filter((s) => new Date(s.created_at || s.opened_at) >= cutoff)
+      filtered = filtered.filter((s) => new Date(s.created_at ?? s.opened_at ?? '') >= cutoff)
     } else if (dateRange === '30days') {
       const cutoff = new Date(now - 30 * 24 * 60 * 60 * 1000)
-      filtered = filtered.filter((s) => new Date(s.created_at || s.opened_at) >= cutoff)
+      filtered = filtered.filter((s) => new Date(s.created_at ?? s.opened_at ?? '') >= cutoff)
     } else if (dateRange === 'today') {
       const startOfDay = new Date(now)
       startOfDay.setHours(0, 0, 0, 0)
-      filtered = filtered.filter((s) => new Date(s.created_at || s.opened_at) >= startOfDay)
+      filtered = filtered.filter((s) => new Date(s.created_at ?? s.opened_at ?? '') >= startOfDay)
     }
     // 'all' = no date filter
 
@@ -196,12 +224,12 @@ export function ShiftDashboard({ branchId, userId, userRole }: ShiftDashboardPro
   )
 
   // Prepare chart data
-  const dailyTotals = shifts.reduce((acc: any, shift) => {
-    const date = new Date(shift.opened_at).toLocaleDateString('en-US', {
+  const dailyTotals = shifts.reduce((acc: Array<{ date: string; cash: number; card: number; mpesa: number }>, shift: ShiftRow) => {
+    const date = new Date(shift.opened_at as string).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
     })
-    const existing = acc.find((d: any) => d.date === date)
+    const existing = acc.find((d: { date: string }) => d.date === date)
 
     if (existing) {
       existing.cash += shift.payment_breakdown?.cash_sales || 0
@@ -357,7 +385,7 @@ export function ShiftDashboard({ branchId, userId, userRole }: ShiftDashboardPro
           <div className="flex items-center justify-between">
             <CardTitle className="text-slate-100">Shifts</CardTitle>
             <div className="flex gap-2">
-              <Select value={statusFilter} onValueChange={(value: any) => setStatusFilter(value)}>
+              <Select value={statusFilter} onValueChange={(value: string) => setStatusFilter(value as 'all' | 'open' | 'closed' | 'reopened')}>
                 <SelectTrigger className="w-24 bg-slate-800 border-slate-700 text-slate-100">
                   <SelectValue />
                 </SelectTrigger>
@@ -395,7 +423,7 @@ export function ShiftDashboard({ branchId, userId, userRole }: ShiftDashboardPro
                       {shift.cashier?.full_name || 'Unknown'}
                     </TableCell>
                     <TableCell className="text-slate-300">
-                      {new Date(shift.opened_at).toLocaleString()}
+                      {new Date(shift.opened_at ?? '').toLocaleString()}
                     </TableCell>
                     <TableCell className="text-emerald-400">
                       {formatKSh(shift.payment_breakdown?.cash_sales || 0)}
@@ -411,13 +439,13 @@ export function ShiftDashboard({ branchId, userId, userRole }: ShiftDashboardPro
                         <Badge variant="outline" className="bg-emerald-950 text-emerald-400 border-emerald-700">
                           Perfect
                         </Badge>
-                      ) : shift.payment_breakdown?.difference > 0 ? (
+                      ) : (shift.payment_breakdown?.difference ?? 0) > 0 ? (
                         <Badge variant="outline" className="bg-amber-950 text-amber-400 border-amber-700">
-                          +{formatKSh(shift.payment_breakdown?.difference)}
+                          +{formatKSh(shift.payment_breakdown?.difference ?? 0)}
                         </Badge>
                       ) : (
                         <Badge variant="outline" className="bg-red-950 text-red-400 border-red-700">
-                          -{formatKSh(Math.abs(shift.payment_breakdown?.difference))}
+                          -{formatKSh(Math.abs(shift.payment_breakdown?.difference ?? 0))}
                         </Badge>
                       )}
                     </TableCell>
@@ -499,7 +527,7 @@ export function ShiftDashboard({ branchId, userId, userRole }: ShiftDashboardPro
                                 </div>
 
                                 <Button
-                                  onClick={() => handleReopen(shift.id)}
+                                  onClick={() => shift.id && handleReopen(shift.id)}
                                   className="w-full bg-amber-600 hover:bg-amber-700"
                                 >
                                   Reopen Shift
@@ -517,7 +545,7 @@ export function ShiftDashboard({ branchId, userId, userRole }: ShiftDashboardPro
 
             {filteredShifts.length === 0 && (
               <div className="text-center py-8 text-slate-400">
-                No shifts found for the selected criteria.
+              <EmptyState title="No shifts found for the selected criteria." compact />
               </div>
             )}
           </div>
@@ -531,7 +559,7 @@ export function ShiftDashboard({ branchId, userId, userRole }: ShiftDashboardPro
             <DialogHeader>
               <DialogTitle className="text-slate-100">{selectedShift.shift_number}</DialogTitle>
               <DialogDescription className="text-slate-400">
-                {selectedShift.cashier?.full_name} • {new Date(selectedShift.opened_at).toLocaleString()}
+                {selectedShift.cashier?.full_name} • {new Date(selectedShift.opened_at ?? '').toLocaleString()}
               </DialogDescription>
             </DialogHeader>
 
@@ -547,7 +575,7 @@ export function ShiftDashboard({ branchId, userId, userRole }: ShiftDashboardPro
                   <div className="bg-slate-800 p-4 rounded border border-slate-700">
                     <p className="text-xs text-slate-400">Opening Float</p>
                     <p className="text-xl font-bold text-emerald-400 mt-1">
-                      {formatKSh(selectedShift.opening_float)}
+                      {formatKSh(selectedShift.opening_float ?? 0)}
                     </p>
                   </div>
                   <div className="bg-slate-800 p-4 rounded border border-slate-700">
@@ -562,7 +590,7 @@ export function ShiftDashboard({ branchId, userId, userRole }: ShiftDashboardPro
               <TabsContent value="breakdown" className="space-y-4">
                 {selectedShift.payment_breakdown && (
                   <div className="space-y-2">
-                    {Object.entries(selectedShift.payment_breakdown).map(([key, value]: [string, any]) => (
+                    {Object.entries(selectedShift.payment_breakdown).map(([key, value]) => (
                       <div key={key} className="flex justify-between py-2 border-b border-slate-700">
                         <span className="text-slate-400 capitalize">{key.replace(/_/g, ' ')}</span>
                         <span className="text-slate-100">{formatKSh(value)}</span>

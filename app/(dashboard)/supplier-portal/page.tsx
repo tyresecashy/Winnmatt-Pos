@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { logger } from '@/lib/logger';
+import { useState, useEffect, startTransition } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
@@ -28,16 +29,13 @@ import { supplierPortalService, SupplierOrder, SupplierInvoice } from '@/lib/sup
 
 export default function SupplierDashboard() {
   const [loading, setLoading] = useState(true);
-  const [dashboardData, setDashboardData] = useState<any>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [dashboardData, setDashboardData] = useState<any | null>(null);
   const [orders, setOrders] = useState<SupplierOrder[]>([]);
   const [invoices, setInvoices] = useState<SupplierInvoice[]>([]);
 
   // Mock supplier ID - in production, this would come from authentication
   const supplierId = 'supplier-001';
-
-  useEffect(() => {
-    loadDashboardData();
-  }, []);
 
   const loadDashboardData = async () => {
     setLoading(true);
@@ -52,11 +50,15 @@ export default function SupplierDashboard() {
       setOrders(ordersList);
       setInvoices(invoicesList);
     } catch (error) {
-      console.error('Error loading dashboard:', error);
+      logger.error('Error loading dashboard:', error);
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    startTransition(() => { loadDashboardData() });
+  }, []);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-KE', {
@@ -82,7 +84,7 @@ export default function SupplierDashboard() {
       case 'overdue':
         return 'bg-red-100 text-red-800';
       default:
-        return 'bg-gray-100 text-gray-800';
+        return 'bg-muted text-muted-foreground';
     }
   };
 

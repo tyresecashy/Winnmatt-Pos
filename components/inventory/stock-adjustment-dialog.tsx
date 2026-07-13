@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Loader2, Plus, Minus } from "lucide-react"
-import { adjustInventoryStock } from "@/lib/inventory-actions"
+import { adjustInventoryStock } from "@/lib/modules/inventory"
 
 interface StockAdjustmentDialogProps {
   isOpen: boolean

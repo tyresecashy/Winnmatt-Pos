@@ -1,6 +1,17 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "provider": {
-  },
-  "disabled_providers": []
+
+  // ── MCP Servers ──────────────────────────────────────────────
+  "mcp": {
+    // Composio — 100+ tool integrations for AI agents.
+    // Set COMPOSIO_API_KEY in your environment for the header value.
+    "composio": {
+      "type": "remote",
+      "url": "https://connect.composio.dev/mcp",
+      "headers": {
+        "x-consumer-api-key": "{env:COMPOSIO_API_KEY}"
+      },
+      "enabled": true
+    }
+  }
 }

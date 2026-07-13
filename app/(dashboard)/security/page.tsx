@@ -1,7 +1,7 @@
 'use client'
 import { logger } from '@/lib/logger'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useCallback, startTransition } from 'react'
 import { useAuth } from '@/contexts/auth-context'
 import { useToast } from '@/components/ui/use-toast'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -9,7 +9,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -17,31 +16,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { Shield, Smartphone, Clock, History, Key, Eye, EyeOff, CheckCircle, XCircle, AlertTriangle, Loader2, Search, Globe, Monitor, LogOut } from 'lucide-react'
+import { changePassword, getLoginHistory, savePasswordPolicy } from '@/lib/modules/security'
 
-const MOCK_SESSIONS = [
-  { id: 'sess_001', device: 'Chrome 120 / Windows 10', ip: '192.168.1.100', lastActive: 'Now', isCurrent: true },
-  { id: 'sess_002', device: 'Safari / iOS 17.2 (iPhone)', ip: '192.168.1.101', lastActive: '2 hours ago', isCurrent: false },
-]
-
-const MOCK_LOGIN_HISTORY = [
-  { id: 'log_001', dateTime: '2026-07-03 08:30 AM', ip: '192.168.1.100', device: 'Chrome 120 / Windows 10', location: 'Nairobi, KE', status: 'success' as const },
-  { id: 'log_002', dateTime: '2026-07-03 07:15 AM', ip: '192.168.1.100', device: 'Chrome 120 / Windows 10', location: 'Nairobi, KE', status: 'success' as const },
-  { id: 'log_003', dateTime: '2026-07-02 06:45 PM', ip: '203.0.113.45', device: 'Firefox 125 / Ubuntu 24.04', location: 'Mombasa, KE', status: 'failed' as const },
-  { id: 'log_004', dateTime: '2026-07-02 12:30 PM', ip: '192.168.1.100', device: 'Chrome 120 / Windows 10', location: 'Nairobi, KE', status: 'success' as const },
-  { id: 'log_005', dateTime: '2026-07-01 09:00 AM', ip: '198.51.100.22', device: 'Safari / macOS 15', location: 'Kisumu, KE', status: 'failed' as const },
-  { id: 'log_006', dateTime: '2026-06-30 05:15 PM', ip: '192.168.1.100', device: 'Chrome 120 / Windows 10', location: 'Nairobi, KE', status: 'success' as const },
-]
-
-const RECOVERY_CODES = [
-  '7F8A-2B3C-4D5E-6G7H',
-  '8I9J-0K1L-2M3N-4O5P',
-  '6Q7R-8S9T-0U1V-2W3X',
-  '4Y5Z-6A7B-8C9D-0E1F',
-  '2G3H-4I5J-6K7L-8M9N',
-  '0O1P-2Q3R-4S5T-6U7V',
-  '8W9X-0Y1Z-2A3B-4C5D',
-  '6E7F-8G9H-0I1J-2K3L',
-]
+interface LoginHistoryEntry {
+  id: string
+  created_at: string
+  ip_address: string | null
+  user_agent: string | null
+  device_info: string | null
+  location: string | null
+  status: 'success' | 'failed'
+  failure_reason: string | null
+}
 
 function getPasswordStrength(password: string): { label: string; percent: number; color: string } {
   if (!password) return { label: '', percent: 0, color: '' }
@@ -64,6 +50,7 @@ export default function SecurityPage() {
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [passwordSaving, setPasswordSaving] = useState(false)
   const [requirePasswordChange, setRequirePasswordChange] = useState(false)
   const [minPasswordLength, setMinPasswordLength] = useState(8)
   const [passwordExpiry, setPasswordExpiry] = useState('never')
@@ -81,18 +68,44 @@ export default function SecurityPage() {
   const [revokeDialogSessionId, setRevokeDialogSessionId] = useState<string | null>(null)
   const [showRevokeAllDialog, setShowRevokeAllDialog] = useState(false)
 
-  const sessions = MOCK_SESSIONS
-  const loginHistory = MOCK_LOGIN_HISTORY
+  // Real login history from DB
+  const [loginHistory, setLoginHistory] = useState<LoginHistoryEntry[]>([])
+  const [loginHistoryCount, setLoginHistoryCount] = useState(0)
+  const [loginHistoryLoading, setLoginHistoryLoading] = useState(false)
+  const [policySaving, setPolicySaving] = useState(false)
+
+  const loadLoginHistory = useCallback(async (search?: string) => {
+    setLoginHistoryLoading(true)
+    try {
+      const result = await getLoginHistory({ search, limit: 50 })
+      setLoginHistory(result.data as unknown as LoginHistoryEntry[])
+      setLoginHistoryCount(result.count)
+    } catch (err: unknown) {
+      logger.error('Failed to load login history', err instanceof Error ? err : String(err))
+    } finally {
+      setLoginHistoryLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    startTransition(() => { if (activeTab === 'sessions') {
+      loadLoginHistory(historySearch)
+    } })
+  }, [activeTab, loadLoginHistory, historySearch])
+
+  const sessions = profile ? [
+    { id: 'current', device: typeof navigator !== 'undefined' ? `${navigator.platform}` : 'Current device', ip: '', lastActive: 'Now', isCurrent: true },
+  ] : []
 
   const strength = useMemo(() => getPasswordStrength(newPassword), [newPassword])
 
   const filteredHistory = useMemo(() => {
     if (!historySearch.trim()) return loginHistory
     const q = historySearch.toLowerCase()
-    return loginHistory.filter((e) => e.ip.toLowerCase().includes(q))
+    return loginHistory.filter((e) => e.ip_address?.toLowerCase().includes(q))
   }, [historySearch, loginHistory])
 
-  const handleSavePassword = () => {
+  const handleSavePassword = async () => {
     if (newPassword && newPassword !== confirmPassword) {
       toast({ title: 'Error', description: 'New passwords do not match', variant: 'destructive' })
       return
@@ -101,11 +114,43 @@ export default function SecurityPage() {
       toast({ title: 'Error', description: `Password must be at least ${minPasswordLength} characters`, variant: 'destructive' })
       return
     }
-    logger.info('Password settings saved', { requirePasswordChange, minPasswordLength, passwordExpiry })
-    toast({ title: 'Success', description: 'Password settings have been updated' })
-    setCurrentPassword('')
-    setNewPassword('')
-    setConfirmPassword('')
+    if (!currentPassword || !newPassword) {
+      toast({ title: 'Error', description: 'Enter current and new password', variant: 'destructive' })
+      return
+    }
+
+    setPasswordSaving(true)
+    try {
+      const result = await changePassword(currentPassword, newPassword)
+      if (result.success) {
+        toast({ title: 'Success', description: 'Password has been updated' })
+        setCurrentPassword('')
+        setNewPassword('')
+        setConfirmPassword('')
+      } else {
+        toast({ title: 'Error', description: result.error || 'Failed to update password', variant: 'destructive' })
+      }
+    } catch (err: unknown) {
+      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Failed to update password', variant: 'destructive' })
+    } finally {
+      setPasswordSaving(false)
+    }
+  }
+
+  const handleSavePasswordPolicy = async () => {
+    setPolicySaving(true)
+    try {
+      await savePasswordPolicy({
+        requirePasswordChange,
+        minPasswordLength,
+        passwordExpiry,
+      })
+      toast({ title: 'Success', description: 'Password policy settings have been saved' })
+    } catch (err: unknown) {
+      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Failed to save policy', variant: 'destructive' })
+    } finally {
+      setPolicySaving(false)
+    }
   }
 
   const handleEnable2FA = () => {
@@ -117,7 +162,7 @@ export default function SecurityPage() {
     setTimeout(() => {
       setTwoFactorEnabled(true)
       setEnabling2FA(false)
-      logger.info('2FA enabled', { method: twoFactorMethod })
+      logger.info('2FA enabled (UI preference)', { method: twoFactorMethod })
       toast({ title: 'Success', description: 'Two-factor authentication has been enabled' })
     }, 1000)
   }
@@ -130,7 +175,7 @@ export default function SecurityPage() {
     setTwoFactorEnabled(false)
     setShowRecoveryCodes(false)
     setShowDisable2FADialog(false)
-    logger.info('2FA disabled')
+    logger.info('2FA disabled (UI preference)')
     toast({ title: 'Success', description: 'Two-factor authentication has been disabled' })
   }
 
@@ -143,7 +188,7 @@ export default function SecurityPage() {
     setRevokeDialogSessionId(null)
     if (session) {
       logger.info('Session revoked', { sessionId: session.id })
-      toast({ title: 'Session Revoked', description: `Session from ${session.device} has been revoked` })
+      toast({ title: 'Session Revoked', description: `Session has been revoked` })
     }
   }
 
@@ -221,7 +266,10 @@ export default function SecurityPage() {
                   onChange={(e) => setConfirmPassword(e.target.value)}
                 />
               </div>
-              <Button onClick={handleSavePassword}>Save Password</Button>
+              <Button onClick={handleSavePassword} disabled={passwordSaving}>
+                {passwordSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Save Password
+              </Button>
             </CardContent>
           </Card>
 
@@ -265,7 +313,10 @@ export default function SecurityPage() {
                   </Select>
                 </div>
               </div>
-              <Button onClick={handleSavePassword}>Save Policy Settings</Button>
+              <Button onClick={handleSavePasswordPolicy} disabled={policySaving}>
+                {policySaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Save Policy Settings
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>
@@ -298,37 +349,6 @@ export default function SecurityPage() {
                       <Badge className="bg-green-600 hover:bg-green-600">Enabled</Badge>
                     </AlertDescription>
                   </Alert>
-                  <div className="rounded-lg border p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium">Recovery Codes</p>
-                        <p className="text-sm text-muted-foreground">
-                          Use these one-time codes if you lose access to your 2FA device
-                        </p>
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="gap-2"
-                        onClick={() => setShowRecoveryCodes(!showRecoveryCodes)}
-                      >
-                        {showRecoveryCodes ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        {showRecoveryCodes ? 'Hide' : 'Show'}
-                      </Button>
-                    </div>
-                    {showRecoveryCodes && (
-                      <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                        {RECOVERY_CODES.map((code) => (
-                          <div
-                            key={code}
-                            className="rounded-md bg-muted px-3 py-2 font-mono text-xs tracking-wider"
-                          >
-                            {code}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
                   <Button variant="destructive" onClick={handleDisable2FA}>
                     Disable 2FA
                   </Button>
@@ -386,15 +406,13 @@ export default function SecurityPage() {
                   <CardTitle className="text-lg">Active Sessions</CardTitle>
                   <CardDescription>Manage devices where your account is logged in</CardDescription>
                 </div>
-                {sessions.filter((s) => !s.isCurrent).length > 0 && (
-                  <Button variant="outline" size="sm" className="gap-2 text-destructive" onClick={handleRevokeAllOther}>
-                    <LogOut className="h-4 w-4" />
-                    Revoke All Other Sessions
-                  </Button>
-                )}
               </div>
             </CardHeader>
             <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                Full session management requires Supabase Auth RLS policies or a custom sessions table. 
+                Your current device session is shown below.
+              </p>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -416,17 +434,10 @@ export default function SecurityPage() {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="font-mono text-xs">{session.ip}</TableCell>
+                      <TableCell className="font-mono text-xs">{session.ip || '—'}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">{session.lastActive}</TableCell>
                       <TableCell className="text-right">
-                        {session.isCurrent ? (
-                          <span className="text-xs text-muted-foreground">Current session</span>
-                        ) : (
-                          <Button variant="ghost" size="sm" className="text-destructive gap-1" onClick={() => handleRevokeSession(session.id)}>
-                            <LogOut className="h-3 w-3" />
-                            Revoke
-                          </Button>
-                        )}
+                        <span className="text-xs text-muted-foreground">Current session</span>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -465,10 +476,16 @@ export default function SecurityPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredHistory.length === 0 ? (
+                  {loginHistoryLoading ? (
                     <TableRow>
                       <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
-                        No login history entries match your search
+                        <Loader2 className="mx-auto h-5 w-5 animate-spin" />
+                      </TableCell>
+                    </TableRow>
+                  ) : filteredHistory.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
+                        {historySearch ? 'No login history entries match your search' : 'No login history recorded yet'}
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -477,15 +494,15 @@ export default function SecurityPage() {
                         <TableCell>
                           <div className="flex items-center gap-2">
                             <History className="h-4 w-4 text-muted-foreground shrink-0" />
-                            <span className="text-sm">{entry.dateTime}</span>
+                            <span className="text-sm">{new Date(entry.created_at).toLocaleString()}</span>
                           </div>
                         </TableCell>
-                        <TableCell className="font-mono text-xs">{entry.ip}</TableCell>
-                        <TableCell className="text-sm">{entry.device}</TableCell>
+                        <TableCell className="font-mono text-xs">{entry.ip_address || '—'}</TableCell>
+                        <TableCell className="text-sm">{entry.user_agent || entry.device_info || '—'}</TableCell>
                         <TableCell className="text-sm">
                           <div className="flex items-center gap-1">
                             <Globe className="h-3 w-3 text-muted-foreground" />
-                            {entry.location}
+                            {entry.location || '—'}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -504,6 +521,11 @@ export default function SecurityPage() {
                   )}
                 </TableBody>
               </Table>
+              {loginHistoryCount > 50 && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Showing the 50 most recent of {loginHistoryCount} entries.
+                </p>
+              )}
             </CardContent>
           </Card>
 
@@ -544,42 +566,6 @@ export default function SecurityPage() {
           </Card>
         </TabsContent>
       </Tabs>
-
-      {/* Revoke Single Session Dialog */}
-      <AlertDialog open={revokeDialogSessionId !== null} onOpenChange={(open) => { if (!open) setRevokeDialogSessionId(null) }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Revoke Session</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to revoke this session? The device will be signed out immediately.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmRevokeSession} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Revoke
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Revoke All Other Sessions Dialog */}
-      <AlertDialog open={showRevokeAllDialog} onOpenChange={setShowRevokeAllDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Revoke All Other Sessions</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will sign out all devices except your current session. You may need to log in again on those devices.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmRevokeAllOther} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Revoke All
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {/* Disable 2FA Dialog */}
       <AlertDialog open={showDisable2FADialog} onOpenChange={setShowDisable2FADialog}>

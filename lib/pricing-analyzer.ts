@@ -32,7 +32,7 @@ const uuidv4 = () => crypto.randomUUID()
 /**
  * Analyze price for anomalies
  */
-export function analyzePriceAnomalies(
+function analyzePriceAnomalies(
   price: number | undefined,
   product: PriceAnalysisProduct
 ): Array<{
@@ -107,7 +107,7 @@ export function analyzePriceAnomalies(
  * Get pricing statistics from product sources
  * (built-in prices and sources - used for comparison)
  */
-export async function getPricingStatistics(
+async function getPricingStatistics(
   normalizedName: string,
   brand?: string
 ): Promise<{
@@ -190,7 +190,7 @@ export async function getPricingStatistics(
  * Calculate suggested retail/selling price
  * Based on listed price and market data
  */
-export function calculateSuggestedPrice(
+function calculateSuggestedPrice(
   listedPrice: number | undefined,
   stats: {
     minPrice: number | null
@@ -229,7 +229,7 @@ export function calculateSuggestedPrice(
 /**
  * Record a price anomaly for a staging product
  */
-export async function recordAnomalies(
+async function recordAnomalies(
   batchId: string,
   stagingProductId: string,
   anomalies: Array<{
@@ -255,7 +255,8 @@ export async function recordAnomalies(
   const { error } = await supabase.from('price_anomalies').insert(records)
 
   if (error) {
-    throw new Error(`Failed to record anomalies: ${error.message}`)
+    logger.error('Operation failed', { error: error })
+    throw new Error('Operation failed')
   }
 
   // Update staging product to mark as having anomalies
@@ -285,7 +286,8 @@ export async function analyzeAndPriceBatch(batchId: string): Promise<{
     .eq('batch_id', batchId)
 
   if (fetchError) {
-    throw new Error(`Failed to fetch staging products: ${fetchError.message}`)
+    logger.error('Operation failed', { error: fetchError })
+    throw new Error('Operation failed')
   }
 
   if (!stagingProducts || stagingProducts.length === 0) {
@@ -330,43 +332,4 @@ export async function analyzeAndPriceBatch(batchId: string): Promise<{
     anomalies: anomalyCount,
     withSuggestedPrice: withPriceCount,
   }
-}
-
-/**
- * Get anomalies for a staging product
- */
-export async function getStagingAnomalies(stagingProductId: string) {
-  const supabase = await createClient()
-
-  const { data, error } = await supabase
-    .from('price_anomalies')
-    .select('*')
-    .eq('staging_product_id', stagingProductId)
-    .order('severity', { ascending: false })
-
-  if (error) {
-    throw new Error(`Failed to get anomalies: ${error.message}`)
-  }
-
-  return data || []
-}
-
-/**
- * Get all critical anomalies in a batch
- */
-export async function getBatchCriticalAnomalies(batchId: string) {
-  const supabase = await createClient()
-
-  const { data, error } = await supabase
-    .from('price_anomalies')
-    .select('*')
-    .eq('batch_id', batchId)
-    .eq('severity', 'critical')
-    .order('created_at', { ascending: false })
-
-  if (error) {
-    throw new Error(`Failed to get critical anomalies: ${error.message}`)
-  }
-
-  return data || []
 }

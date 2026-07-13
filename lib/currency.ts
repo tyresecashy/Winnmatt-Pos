@@ -11,7 +11,9 @@
  * @returns Formatted string (e.g., "KSh 120")
  */
 export const formatKSh = (amount: number): string => {
-  return `KSh ${Math.round(amount).toLocaleString('en-KE')}`
+  const value = Number(amount)
+  if (!isFinite(value)) return 'KSh 0'
+  return `KSh ${Math.round(value).toLocaleString('en-KE')}`
 }
 
 /**
@@ -20,7 +22,9 @@ export const formatKSh = (amount: number): string => {
  * @returns Formatted string (e.g., "KSh 120.00")
  */
 export const formatKShDecimal = (amount: number): string => {
-  return `KSh ${amount.toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  const value = Number(amount)
+  if (!isFinite(value)) return 'KSh 0.00'
+  return `KSh ${value.toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
 /**

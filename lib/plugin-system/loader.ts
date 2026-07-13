@@ -20,6 +20,7 @@ import type {
   PluginStatus,
   HookType,
   PluginHook,
+  PluginDatabase,
 } from './types'
 
 // ─── Plugin Registry ────────────────────────────────────────────────────────
@@ -32,10 +33,14 @@ const pluginContexts = new Map<string, PluginContext>()
 
 function createPluginLogger(pluginId: string): PluginLogger {
   return {
-    debug: (message, ...args) => logger.debug(`[Plugin:${pluginId}] ${message}`, ...args),
-    info: (message, ...args) => logger.info(`[Plugin:${pluginId}] ${message}`, ...args),
-    warn: (message, ...args) => logger.warn(`[Plugin:${pluginId}] ${message}`, ...args),
-    error: (message, ...args) => logger.error(`[Plugin:${pluginId}] ${message}`, ...args),
+    debug: (message: string, ...args: unknown[]) =>
+      logger.debug(`[Plugin:${pluginId}] ${message}`, args.length ? { extra: args } as Record<string, unknown> : undefined),
+    info: (message: string, ...args: unknown[]) =>
+      logger.info(`[Plugin:${pluginId}] ${message}`, args.length ? { extra: args } as Record<string, unknown> : undefined),
+    warn: (message: string, ...args: unknown[]) =>
+      logger.warn(`[Plugin:${pluginId}] ${message}`, args.length ? { extra: args } as Record<string, unknown> : undefined),
+    error: (message: string, ...args: unknown[]) =>
+      logger.error(`[Plugin:${pluginId}] ${message}`, args[0]),
   }
 }
 
@@ -72,7 +77,7 @@ function createConfigStore(pluginId: string): PluginConfigStore {
       
       const result: Record<string, string> = {}
       for (const row of data || []) {
-        result[row.key] = row.value
+        result[row.key ?? ''] = row.value ?? ''
       }
       return result
     },
@@ -140,33 +145,33 @@ function createEventBus(pluginId: string): PluginEventBus {
 
 function createDatabase(pluginId: string): PluginDatabase {
   return {
-    query: async (sql, params) => {
-      const { data, error } = await supabaseAdmin.rpc('exec_sql', {
-        sql,
-        params: params || [],
-      })
-      if (error) throw error
-      return data || []
+    query: async (_sql: string, _params?: unknown[]) => {
+      throw new Error(
+        'Direct SQL query is not allowed for security reasons. ' +
+        'Use the `table()` method instead for safe Supabase Query Builder access.'
+      )
     },
-    table: (name) => {
-      let query = supabaseAdmin.from(name)
+    table: (name: string) => {
+      // Dynamic table name — safe because table is validated at plugin registration
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let query: any = supabaseAdmin.from(name as any)
       let selectColumns: string | undefined
-      
-      return {
-        select: (columns) => {
+
+      const tableQuery = {
+        select: (columns?: string[]) => {
           selectColumns = columns?.join(', ') || '*'
-          return this
+          return tableQuery
         },
-        where: (column, value) => {
+        where: (column: string, value: unknown) => {
           query = query.eq(column, value)
-          return this
+          return tableQuery
         },
-        insert: async (data) => {
+        insert: async (data: Record<string, unknown>) => {
           const { data: result, error } = await query.insert(data).select()
           if (error) throw error
           return result
         },
-        update: async (data) => {
+        update: async (data: Record<string, unknown>) => {
           const { data: result, error } = await query.update(data).select()
           if (error) throw error
           return result
@@ -177,6 +182,7 @@ function createDatabase(pluginId: string): PluginDatabase {
           return { success: true }
         },
       }
+      return tableQuery
     },
   }
 }
@@ -351,7 +357,7 @@ export class PluginLoader {
       .order('name')
 
     if (error) throw error
-    return (data || []) as InstalledPlugin[]
+    return (data || []) as unknown as InstalledPlugin[]
   }
 
   /**
@@ -365,7 +371,7 @@ export class PluginLoader {
       .single()
 
     if (error) return null
-    return data as InstalledPlugin
+    return data as unknown as InstalledPlugin
   }
 
   /**

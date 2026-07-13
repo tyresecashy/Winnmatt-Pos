@@ -47,6 +47,9 @@ import {
   MoreHorizontal,
   Eye,
   CheckCircle,
+} from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
+import {
   Truck,
   Clock,
   AlertCircle,
@@ -64,14 +67,14 @@ import {
   getPurchaseReceipts,
   getPurchaseReceiptById,
 } from '@/lib/procurement-actions'
-import { getSuppliers } from '@/lib/suppliers-actions'
-import { getProductsForPOS } from '@/lib/products-actions'
+import { getSuppliers } from '@/lib/modules/suppliers'
+import { getProductsForPOS } from '@/lib/modules/inventory'
 import { formatKSh } from '@/lib/currency'
 import { formatDate } from '@/lib/date-time'
 import { useToast } from '@/components/ui/use-toast'
 
 const statusColors: Record<string, { bg: string; icon: React.ElementType }> = {
-  draft: { bg: 'bg-gray-100 text-gray-700', icon: AlertCircle },
+  draft: { bg: 'bg-muted text-muted-foreground', icon: AlertCircle },
   pending: { bg: 'bg-yellow-100 text-yellow-700', icon: Clock },
   approved: { bg: 'bg-green-100 text-green-700', icon: CheckCircle },
   received: { bg: 'bg-blue-100 text-blue-700', icon: Package },
@@ -96,7 +99,17 @@ interface PurchaseOrder {
     contact_person: string
     phone: string
   }
-  items?: any[]
+  items?: PurchaseOrderItemRecord[]
+}
+
+interface PurchaseOrderItemRecord {
+  id: string
+  product_id: string
+  quantity: number
+  unit_price: number
+  line_total: number
+  received_quantity: number
+  product?: { id: string; sku: string; name: string } | null
 }
 
 interface Supplier {
@@ -157,8 +170,8 @@ export default function PurchasesPage() {
   const [showReceiptHistory, setShowReceiptHistory] = useState(false)
   const [receipts, setReceipts] = useState<any[]>([])
   const [receiptsLoading, setReceiptsLoading] = useState(false)
-  const [selectedReceipt, setSelectedReceipt] = useState<any>(null)
-  const [receiptDetail, setReceiptDetail] = useState<any>(null)
+  const [selectedReceipt, setSelectedReceipt] = useState<any | null>(null)
+  const [receiptDetail, setReceiptDetail] = useState<any | null>(null)
   const [receiptDetailLoading, setReceiptDetailLoading] = useState(false)
 
   // Form state for creating PO
@@ -207,9 +220,9 @@ export default function PurchasesPage() {
         getPurchaseStats(profile.branch_id),
       ])
 
-      setPurchaseOrders(pos)
-      setSuppliers(sups)
-      setProducts(prods)
+      setPurchaseOrders(pos as unknown as PurchaseOrder[])
+      setSuppliers(sups as unknown as Supplier[])
+      setProducts(prods as unknown as Product[])
       setStats(poStats)
     } catch (error) {
       logger.error('Failed to load data:', error)
@@ -359,7 +372,7 @@ export default function PurchasesPage() {
     const targetPO = order || selectedPO
     if (!targetPO) return
 
-    const items = (targetPO.items || []).map((item: any) => ({
+    const items = (targetPO.items || []).map((item) => ({
       product_id: item.product_id,
       product_name: item.product?.name || 'Unknown',
       quantity_ordered: item.quantity,
@@ -609,22 +622,12 @@ export default function PurchasesPage() {
         </CardHeader>
         <CardContent>
           {filteredOrders.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
-                {purchaseOrders.length === 0
-                  ? <ClipboardList className="h-6 w-6 text-muted-foreground" />
-                  : <SearchX className="h-6 w-6 text-muted-foreground" />
-                }
-              </div>
-              <p className="text-lg font-medium">
-                {purchaseOrders.length === 0 ? 'No purchase orders yet' : 'No orders match your filters'}
-              </p>
-              <p className="text-sm text-muted-foreground mt-1">
-                {purchaseOrders.length === 0
-                  ? 'Create your first purchase order to start tracking inventory.'
-                  : 'Try different search terms or clear your filters.'}
-              </p>
-            </div>
+            <EmptyState
+              icon={purchaseOrders.length === 0 ? ClipboardList : SearchX}
+              title={purchaseOrders.length === 0 ? 'No purchase orders yet' : 'No orders match your filters'}
+              description={purchaseOrders.length === 0 ? 'Create your first purchase order to start tracking inventory.' : 'Try different search terms or clear your filters.'}
+              compact
+            />
           ) : (
             <Table>
               <TableHeader>

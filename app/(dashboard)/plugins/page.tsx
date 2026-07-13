@@ -1,5 +1,6 @@
 'use client'
 
+import { logger } from '@/lib/logger'
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -44,7 +45,8 @@ import {
   Activity,
   FileText,
 } from 'lucide-react'
-import { PluginLoader, type InstalledPlugin } from '@/lib/plugin-system/loader'
+import { PluginLoader } from '@/lib/plugin-system/loader'
+import type { InstalledPlugin } from '@/lib/plugin-system/types'
 
 export default function PluginsPage() {
   const [plugins, setPlugins] = useState<InstalledPlugin[]>([])
@@ -71,7 +73,7 @@ export default function PluginsPage() {
       const data = await PluginLoader.getInstalledPlugins()
       setPlugins(data)
     } catch (error) {
-      console.error('Failed to load plugins:', error)
+      logger.error('Failed to load plugins:', error)
     } finally {
       setLoading(false)
     }
@@ -92,7 +94,7 @@ export default function PluginsPage() {
       resetForm()
       await loadPlugins()
     } catch (error) {
-      console.error('Failed to install plugin:', error)
+      logger.error('Failed to install plugin:', error)
     }
   }
 
@@ -105,7 +107,7 @@ export default function PluginsPage() {
       }
       await loadPlugins()
     } catch (error) {
-      console.error('Failed to toggle plugin:', error)
+      logger.error('Failed to toggle plugin:', error)
     }
   }
 
@@ -116,7 +118,7 @@ export default function PluginsPage() {
       await PluginLoader.uninstallPlugin(pluginId)
       await loadPlugins()
     } catch (error) {
-      console.error('Failed to uninstall plugin:', error)
+      logger.error('Failed to uninstall plugin:', error)
     }
   }
 
@@ -135,7 +137,7 @@ export default function PluginsPage() {
 
   const filteredPlugins = plugins.filter(plugin =>
     plugin.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    plugin.plugin_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    plugin.pluginId.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (plugin.description && plugin.description.toLowerCase().includes(searchQuery.toLowerCase()))
   )
 
@@ -268,7 +270,7 @@ export default function PluginsPage() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-2">
-              <PowerOff className="h-4 w-4 text-gray-400" />
+              <PowerOff className="h-4 w-4 text-muted-foreground" />
               <div>
                 <p className="text-2xl font-bold">{inactiveCount}</p>
                 <p className="text-xs text-muted-foreground">Inactive</p>
@@ -321,7 +323,7 @@ export default function PluginsPage() {
                     <div>
                       <div className="font-medium">{plugin.name}</div>
                       <div className="text-sm text-muted-foreground font-mono">
-                        {plugin.plugin_id}
+                        {plugin.pluginId}
                       </div>
                       {plugin.description && (
                         <div className="text-xs text-muted-foreground mt-1 max-w-[300px] truncate">
@@ -340,14 +342,14 @@ export default function PluginsPage() {
                     {getStatusBadge(plugin.status)}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {new Date(plugin.installed_at).toLocaleDateString()}
+                    {new Date(plugin.installedAt).toLocaleDateString()}
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleToggle(plugin.plugin_id, plugin.status)}
+                        onClick={() => handleToggle(plugin.pluginId, plugin.status)}
                         disabled={plugin.status === 'error'}
                       >
                         {plugin.status === 'active' ? (
@@ -366,7 +368,7 @@ export default function PluginsPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleUninstall(plugin.plugin_id)}
+                        onClick={() => handleUninstall(plugin.pluginId)}
                         className="text-red-600 hover:text-red-700"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -396,42 +398,42 @@ export default function PluginsPage() {
                 name: 'M-Pesa Integration',
                 description: 'Accept M-Pesa payments directly from your POS',
                 version: '2.1.0',
-                installed: plugins.some(p => p.plugin_id === '@winnmatt/plugin-mpesa'),
+                installed: plugins.some(p => p.pluginId === '@winnmatt/plugin-mpesa'),
               },
               {
                 id: '@winnmatt/plugin-sms',
                 name: 'SMS Notifications',
                 description: 'Send SMS alerts for sales, stock, and more',
                 version: '1.0.0',
-                installed: plugins.some(p => p.plugin_id === '@winnmatt/plugin-sms'),
+                installed: plugins.some(p => p.pluginId === '@winnmatt/plugin-sms'),
               },
               {
                 id: '@winnmatt/plugin-email',
                 name: 'Email Integration',
                 description: 'Send email receipts and notifications',
                 version: '1.0.0',
-                installed: plugins.some(p => p.plugin_id === '@winnmatt/plugin-email'),
+                installed: plugins.some(p => p.pluginId === '@winnmatt/plugin-email'),
               },
               {
                 id: '@winnmatt/plugin-quickbooks',
                 name: 'QuickBooks Sync',
                 description: 'Sync transactions with QuickBooks accounting',
                 version: '1.2.0',
-                installed: plugins.some(p => p.plugin_id === '@winnmatt/plugin-quickbooks'),
+                installed: plugins.some(p => p.pluginId === '@winnmatt/plugin-quickbooks'),
               },
               {
                 id: '@winnmatt/plugin-kra',
                 name: 'KRA eTIMS',
                 description: 'KRA eTIMS compliance integration',
                 version: '1.0.0',
-                installed: plugins.some(p => p.plugin_id === '@winnmatt/plugin-kra'),
+                installed: plugins.some(p => p.pluginId === '@winnmatt/plugin-kra'),
               },
               {
                 id: '@winnmatt/plugin-receipt',
                 name: 'Receipt Designer',
                 description: 'Customize receipt templates and designs',
                 version: '1.1.0',
-                installed: plugins.some(p => p.plugin_id === '@winnmatt/plugin-receipt'),
+                installed: plugins.some(p => p.pluginId === '@winnmatt/plugin-receipt'),
               },
             ].map((marketplacePlugin) => (
               <Card key={marketplacePlugin.id} className="relative">
@@ -477,7 +479,7 @@ export default function PluginsPage() {
                 Plugin configuration will be available once the plugin is fully implemented.
               </p>
               <div className="p-4 bg-muted rounded-lg">
-                <p className="text-sm font-mono">{selectedPlugin.plugin_id}</p>
+                <p className="text-sm font-mono">{selectedPlugin.pluginId}</p>
                 <p className="text-xs text-muted-foreground mt-1">
                   Version {selectedPlugin.version}
                 </p>

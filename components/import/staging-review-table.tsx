@@ -46,7 +46,7 @@ import {
   approveStagingProduct,
   rejectStagingProduct,
   updateStagingPrice,
-} from '@/lib/staging-actions'
+} from '@/lib/modules/system'
 import type { PriceAnomaly, ProductDeduplication } from '@/lib/product-ingestion.types'
 
 interface StagingProduct {
@@ -180,7 +180,7 @@ export function StagingReviewTable({
     <div className="w-full overflow-x-auto border rounded-lg">
       <Table>
         <TableHeader>
-          <TableRow className="bg-gray-50">
+          <TableRow className="bg-muted/50">
             <TableHead className="w-12">
               <input type="checkbox" />
             </TableHead>
@@ -209,21 +209,21 @@ export function StagingReviewTable({
               <TableCell>
                 <div className="space-y-1">
                   <p className="font-medium text-sm">{product.normalized_name}</p>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-muted-foreground">
                     Confidence: {product.confidence_score}%
                   </p>
                   {product.barcode && (
-                    <p className="text-xs text-gray-400">Barcode: {product.barcode}</p>
+                    <p className="text-xs text-muted-foreground">Barcode: {product.barcode}</p>
                   )}
                 </div>
               </TableCell>
 
               <TableCell className="text-sm">
-                {product.brand || <span className="text-gray-400">—</span>}
+                {product.brand || <span className="text-muted-foreground">—</span>}
               </TableCell>
 
               <TableCell className="text-sm">
-                {product.unit || <span className="text-gray-400">—</span>}
+                {product.unit || <span className="text-muted-foreground">—</span>}
               </TableCell>
 
               <TableCell className="text-sm">

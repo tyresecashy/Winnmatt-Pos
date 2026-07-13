@@ -174,10 +174,7 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     logger.error('[M-Pesa Status] Endpoint error', error)
     return NextResponse.json(
-      {
-        error: 'Internal server error',
-        message: error instanceof Error ? error.message : 'Unknown error',
-      },
+      { error: 'Internal server error' },
       { status: 500 }
     )
   }

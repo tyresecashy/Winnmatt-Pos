@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { logger } from '@/lib/logger'
+import { useEffect, useState, useCallback, startTransition } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -77,7 +78,7 @@ import { useBranch } from '@/contexts/branch-context'
 import { formatKSh } from '@/lib/currency'
 
 const PRIORITY_COLORS: Record<string, string> = {
-  low: 'bg-gray-100 text-gray-800',
+  low: 'bg-muted text-muted-foreground',
   normal: 'bg-blue-100 text-blue-800',
   high: 'bg-yellow-100 text-yellow-800',
   urgent: 'bg-red-100 text-red-800',
@@ -117,11 +118,7 @@ export default function TasksPage() {
   const [newLocation, setNewLocation] = useState('')
   const [newAssignedTo, setNewAssignedTo] = useState('')
 
-  useEffect(() => {
-    loadData()
-  }, [branchId])
-
-  async function loadData() {
+  const loadData = useCallback(async () => {
     setLoading(true)
     try {
       const [tasksData, categoriesData, rolesData, assignmentsData] = await Promise.all([
@@ -136,11 +133,15 @@ export default function TasksPage() {
       setRoles(rolesData)
       setAssignments(assignmentsData)
     } catch (error) {
-      console.error('Failed to load data:', error)
+      logger.error('Failed to load data:', error)
     } finally {
       setLoading(false)
     }
-  }
+  }, [branchId])
+
+  useEffect(() => {
+    startTransition(() => { loadData() })
+  }, [branchId, loadData])
 
   async function handleCreateTask() {
     if (!newTitle || !branchId) return
@@ -254,7 +255,9 @@ export default function TasksPage() {
                         <SelectValue placeholder="Select category" />
                       </SelectTrigger>
                       <SelectContent>
-                        {categories.map((cat) => (
+                        {categories.length === 0 ? (
+                          <SelectItem value="__none__" disabled>No categories available</SelectItem>
+                        ) : categories.map((cat) => (
                           <SelectItem key={cat.id} value={cat.id}>
                             {cat.name}
                           </SelectItem>
@@ -302,7 +305,9 @@ export default function TasksPage() {
                       <SelectValue placeholder="Select worker (optional)" />
                     </SelectTrigger>
                     <SelectContent>
-                      {assignments.map((assignment) => (
+                      {assignments.length === 0 ? (
+                        <SelectItem value="__none__" disabled>No workers available for this branch</SelectItem>
+                      ) : assignments.map((assignment) => (
                         <SelectItem key={assignment.employee_id} value={assignment.employee_id}>
                           {assignment.employee?.first_name} {assignment.employee?.last_name}
                           {assignment.role?.name ? ` - ${assignment.role.name}` : assignment.employee?.staff_number ? ` (${assignment.employee.staff_number})` : ''}

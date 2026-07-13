@@ -2,6 +2,9 @@
 
 import { supabaseAdmin } from '@/lib/supabase-server'
 import { logger } from '@/lib/logger'
+
+// Json type defined locally — not exported from @supabase/supabase-js in this version
+type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
 import crypto from 'crypto'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -87,7 +90,7 @@ export async function createWebhookEndpoint(
     return { success: true, data: data as WebhookEndpoint }
   } catch (error) {
     logger.error('[Webhook] Failed to create endpoint:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -108,7 +111,7 @@ export async function updateWebhookEndpoint(
     return { success: true }
   } catch (error) {
     logger.error('[Webhook] Failed to update endpoint:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -126,7 +129,7 @@ export async function deleteWebhookEndpoint(id: string): Promise<{ success: bool
     return { success: true }
   } catch (error) {
     logger.error('[Webhook] Failed to delete endpoint:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -205,7 +208,7 @@ export async function sendWebhook(
       .insert({
         endpoint_id: endpointId,
         event,
-        payload,
+        payload: payload as unknown as Json,
         status: 'pending',
         attempt: 1,
         max_attempts: endpoint.retry_count,
@@ -218,10 +221,10 @@ export async function sendWebhook(
     // Send the webhook
     const result = await deliverWebhook(endpoint, delivery as WebhookDelivery, payload)
 
-    return { success: true, deliveryId: delivery.id, ...result }
+    return { deliveryId: delivery.id, ...result, success: true }
   } catch (error) {
     logger.error('[Webhook] Failed to send webhook:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -406,12 +409,12 @@ export async function retryWebhookDelivery(
     if (createError) throw createError
 
     // Send the webhook
-    const result = await deliverWebhook(endpoint, newDelivery as WebhookDelivery, delivery.payload)
+    const result = await deliverWebhook(endpoint, newDelivery as WebhookDelivery, delivery.payload as unknown as Record<string, unknown>)
 
-    return { success: true, ...result }
+    return { ...result, success: true }
   } catch (error) {
     logger.error('[Webhook] Failed to retry delivery:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 

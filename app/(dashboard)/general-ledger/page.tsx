@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { startTransition, useCallback, useEffect, useMemo, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -28,12 +28,14 @@ import { formatKSh } from '@/lib/currency'
 import {
   getJournalEntries, getJournalEntry, createJournalEntry, voidJournalEntry,
   getAccounts,
-  type JournalEntry, type JournalEntryLine, type Account,
-} from '@/lib/finance-actions'
+} from '@/lib/modules/finance'
+import type { JournalEntry, JournalEntryLine, Account } from '@/lib/modules/finance'
 import {
   BookOpen, Plus, MoreHorizontal, Search, Loader2, Eye, XCircle,
   FileText, Calendar, ArrowUpDown, RefreshCw, Filter, ChevronDown,
 } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
+import { createBrowserClient } from '@/lib/supabase-typed'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -79,6 +81,9 @@ export default function GeneralLedgerPage() {
     ] as Array<{ account_id: string; debit: string; credit: string; description: string }>,
   })
 
+  // ── Auth ──
+  const [userId, setUserId] = useState<string>('')
+
   // ── Date Filters ──
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
@@ -97,14 +102,21 @@ export default function GeneralLedgerPage() {
       ])
       setEntries(entriesData)
       setAccounts(accountsData)
-    } catch (err: any) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' })
+    } catch (err: unknown) {
+      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Unknown error', variant: 'destructive' })
     } finally {
       setLoading(false)
     }
   }, [toast, dateFrom, dateTo])
 
-  useEffect(() => { loadData() }, [loadData])
+  useEffect(() => { startTransition(() => { loadData() }) }, [loadData])
+
+  // ── Load User ID ──
+  useEffect(() => {
+    createBrowserClient().auth.getUser().then(({ data }: { data: { user?: { id: string } | null } }) => {
+      if (data.user) setUserId(data.user.id)
+    })
+  }, [])
 
   // ── Filtered Entries ──
   const filteredEntries = useMemo(() => {
@@ -129,8 +141,8 @@ export default function GeneralLedgerPage() {
     try {
       const detail = await getJournalEntry(entry.id)
       setDetailEntry(detail)
-    } catch (err: any) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' })
+    } catch (err: unknown) {
+      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Unknown error', variant: 'destructive' })
     } finally {
       setLoadingDetail(false)
     }
@@ -142,11 +154,11 @@ export default function GeneralLedgerPage() {
     if (!reason) return
 
     try {
-      await voidJournalEntry(entry.id, reason)
+      await voidJournalEntry(entry.id, reason, userId)
       toast({ title: 'Entry voided' })
       loadData()
-    } catch (err: any) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' })
+    } catch (err: unknown) {
+      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Unknown error', variant: 'destructive' })
     }
   }
 
@@ -205,7 +217,7 @@ export default function GeneralLedgerPage() {
       await createJournalEntry({
         entry_date: createForm.entry_date,
         description: createForm.description,
-        notes: createForm.notes || undefined,
+        created_by: userId,
         lines: validLines.map(l => ({
           account_id: l.account_id,
           debit: parseFloat(l.debit) || 0,
@@ -225,8 +237,8 @@ export default function GeneralLedgerPage() {
         ],
       })
       loadData()
-    } catch (err: any) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' })
+    } catch (err: unknown) {
+      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Unknown error', variant: 'destructive' })
     } finally {
       setSaving(false)
     }
@@ -377,7 +389,7 @@ export default function GeneralLedgerPage() {
               {filteredEntries.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                    No journal entries found
+                    <EmptyState icon={BookOpen} title="No journal entries found" compact />
                   </TableCell>
                 </TableRow>
               ) : (
@@ -387,9 +399,9 @@ export default function GeneralLedgerPage() {
                     <TableCell>{new Date(entry.entry_date).toLocaleDateString()}</TableCell>
                     <TableCell>
                       <p className="font-medium truncate max-w-[300px]">{entry.description}</p>
-                      {entry.lines && (
+                      {(entry as unknown as { lines?: unknown[] }).lines && (
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          {entry.lines.length} line{(entry.lines.length || 0) !== 1 ? 's' : ''}
+                          {(entry as unknown as { lines: unknown[] }).lines.length} line{(entry as unknown as { lines: unknown[] }).lines.length !== 1 ? 's' : ''}
                         </p>
                       )}
                     </TableCell>
@@ -397,14 +409,14 @@ export default function GeneralLedgerPage() {
                       {entry.reference_type ? `${entry.reference_type}` : '-'}
                     </TableCell>
                     <TableCell className="text-right font-medium">
-                      {entry.total_debit > 0 ? formatKSh(entry.total_debit) : '-'}
+                      {(entry.total_debit ?? 0) > 0 ? formatKSh(entry.total_debit ?? 0) : '-'}
                     </TableCell>
                     <TableCell className="text-right font-medium">
-                      {entry.total_credit > 0 ? formatKSh(entry.total_credit) : '-'}
+                      {(entry.total_credit ?? 0) > 0 ? formatKSh(entry.total_credit ?? 0) : '-'}
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline" className={STATUS_COLORS[entry.status]}>
-                        {STATUS_LABELS[entry.status]}
+                      <Badge variant="outline" className={STATUS_COLORS[entry.status ?? '']}>
+                        {STATUS_LABELS[entry.status ?? '']}
                       </Badge>
                     </TableCell>
                     <TableCell>
@@ -466,8 +478,8 @@ export default function GeneralLedgerPage() {
                 </div>
                 <div>
                   <p className="text-muted-foreground">Status</p>
-                  <Badge variant="outline" className={STATUS_COLORS[detailEntry.status]}>
-                    {STATUS_LABELS[detailEntry.status]}
+                  <Badge variant="outline" className={STATUS_COLORS[detailEntry.status ?? '']}>
+                    {STATUS_LABELS[detailEntry.status ?? '']}
                   </Badge>
                 </div>
                 <div>
@@ -498,20 +510,20 @@ export default function GeneralLedgerPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {detailEntry.lines?.map((line: JournalEntryLine) => (
+                    {(detailEntry as unknown as { lines?: JournalEntryLine[] }).lines?.map((line: JournalEntryLine) => (
                       <TableRow key={line.id}>
                         <TableCell className="text-muted-foreground">{line.line_number}</TableCell>
                         <TableCell>
-                          <p className="font-medium">{(line.account as any)?.name}</p>
+                          <p className="font-medium">{(line as unknown as { account?: { name?: string } }).account?.name}</p>
                           <p className="text-xs text-muted-foreground font-mono">
-                            {(line.account as any)?.account_number}
+                            {(line as unknown as { account?: { account_number?: string } }).account?.account_number}
                           </p>
                         </TableCell>
                         <TableCell className="text-right font-medium">
-                          {line.debit > 0 ? formatKSh(line.debit) : ''}
+                          {(line.debit ?? 0) > 0 ? formatKSh(line.debit ?? 0) : ''}
                         </TableCell>
                         <TableCell className="text-right font-medium">
-                          {line.credit > 0 ? formatKSh(line.credit) : ''}
+                          {(line.credit ?? 0) > 0 ? formatKSh(line.credit ?? 0) : ''}
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
                           {line.description || ''}
@@ -520,8 +532,8 @@ export default function GeneralLedgerPage() {
                     ))}
                     <TableRow className="font-bold border-t-2">
                       <TableCell colSpan={2}>Total</TableCell>
-                      <TableCell className="text-right">{formatKSh(detailEntry.total_debit)}</TableCell>
-                      <TableCell className="text-right">{formatKSh(detailEntry.total_credit)}</TableCell>
+                      <TableCell className="text-right">{formatKSh(detailEntry.total_debit ?? 0)}</TableCell>
+                      <TableCell className="text-right">{formatKSh(detailEntry.total_credit ?? 0)}</TableCell>
                       <TableCell></TableCell>
                     </TableRow>
                   </TableBody>
@@ -594,9 +606,11 @@ export default function GeneralLedgerPage() {
                           <SelectValue placeholder="Account" />
                         </SelectTrigger>
                         <SelectContent>
-                          {accounts.map((acc) => (
+                          {accounts.length === 0 ? (
+                            <SelectItem value="__none__" disabled>No accounts configured</SelectItem>
+                          ) : accounts.map((acc) => (
                             <SelectItem key={acc.id} value={acc.id}>
-                              {acc.account_number} - {acc.name}
+                              {acc.code} - {acc.name}
                             </SelectItem>
                           ))}
                         </SelectContent>

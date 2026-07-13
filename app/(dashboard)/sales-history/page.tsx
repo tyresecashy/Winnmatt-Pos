@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '@/contexts/auth-context'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
-import { getSales } from '@/lib/sales-actions'
+import { getSales } from '@/lib/modules/sales'
 import { SalesHistoryClient } from './client'
 import { formatKSh } from '@/lib/currency'
 
@@ -45,8 +45,8 @@ export default function SalesHistoryPage() {
 
     const fetchPromise = (async () => {
       try {
-        const fetchedSales = await getSales(branchId, 50)
-        setSales(fetchedSales)
+        const fetchedSales = await getSales({ branch_id: branchId, limit: 50 })
+        setSales(fetchedSales.data)
         lastFetchAtRef.current = Date.now()
       } catch (error) {
         logger.error('Failed to load sales:', error)

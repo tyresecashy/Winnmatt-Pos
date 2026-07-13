@@ -85,7 +85,7 @@ export async function getExpenseCategories(): Promise<ExpenseCategory[]> {
       .select('*')
       .order('sort_order', { ascending: true })
     if (error) throw error
-    return data || []
+    return (data || []) as unknown as ExpenseCategory[]
   } catch (error) {
     logger.error('[EXP] Failed to fetch categories:', error)
     return []
@@ -106,7 +106,7 @@ export async function createExpenseCategory(
       .select()
       .single()
     if (error) throw error
-    return data
+    return data as unknown as ExpenseCategory
   } catch (error) {
     logger.error('[EXP] Failed to create category:', error)
     return null
@@ -254,7 +254,7 @@ export async function createExpense(
     return { success: true, data: data as unknown as Expense }
   } catch (error) {
     logger.error('[EXP] Failed to create expense:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -277,7 +277,7 @@ export async function updateExpense(
     return { success: true }
   } catch (error) {
     logger.error('[EXP] Failed to update expense:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -297,7 +297,7 @@ export async function deleteExpense(id: string): Promise<{ success: boolean; err
     return { success: true }
   } catch (error) {
     logger.error('[EXP] Failed to delete expense:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -328,17 +328,23 @@ export async function approveExpense(
 
     // Emit expense.approved or expense.rejected event
     const eventType = action === 'approved' ? 'expense.approved' : 'expense.rejected'
-    await emitEvent(eventType, {
-      expense_id: id,
-      action,
-      rejection_reason: rejectionReason || null,
-      approved_by: auth.profile!.id,
-    }, { source: 'finance', entity_type: 'expense', entity_id: id })
+    await emitEvent({
+      eventType,
+      payload: {
+        expense_id: id,
+        action,
+        rejection_reason: rejectionReason || null,
+        approved_by: auth.profile!.id,
+      },
+      source: 'finance',
+      entityType: 'expense',
+      entityId: id,
+    })
 
     return { success: true }
   } catch (error) {
     logger.error('[EXP] Failed to approve/reject expense:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -360,13 +366,13 @@ export async function getExpenseStats(
       .order('expense_date', { ascending: false })
 
     if (error) throw error
-    const exps = (allExpenses || []) as any[]
+    const exps = (allExpenses || []) as unknown as { status: string; amount_cents: number; category_id: string; category?: { name: string; color: string }; expense_date: string; vendor: string | null }[]
 
     const approved = exps.filter(e => e.status === 'approved')
     const pending = exps.filter(e => e.status === 'pending')
     const rejected = exps.filter(e => e.status === 'rejected')
 
-    const totalCents = approved.reduce((s: number, e: any) => s + Number(e.amount_cents), 0)
+    const totalCents = approved.reduce((s: number, e) => s + Number(e.amount_cents), 0)
 
     // Category breakdown
     const catMap = new Map<string, { name: string; color: string; total: number; count: number }>()
@@ -499,7 +505,7 @@ export async function createRecurringExpense(
     return { success: true, data: data as unknown as RecurringExpense }
   } catch (error) {
     logger.error('[EXP] Failed to create recurring expense:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -508,6 +514,11 @@ export async function toggleRecurringExpense(
   isActive: boolean
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    const auth = await authenticateServerAction()
+    if (!auth.success || !auth.profile) {
+      return { success: false, error: 'Authentication required' }
+    }
+
     const { error } = await supabaseAdmin
       .from('recurring_expenses')
       .update({ is_active: isActive, updated_at: new Date().toISOString() })
@@ -516,12 +527,17 @@ export async function toggleRecurringExpense(
     return { success: true }
   } catch (error) {
     logger.error('[EXP] Failed to toggle recurring expense:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
 export async function deleteRecurringExpense(id: string): Promise<{ success: boolean; error?: string }> {
   try {
+    const auth = await authenticateServerAction()
+    if (!auth.success || !auth.profile) {
+      return { success: false, error: 'Authentication required' }
+    }
+
     const { error } = await supabaseAdmin
       .from('recurring_expenses')
       .delete()
@@ -530,6 +546,6 @@ export async function deleteRecurringExpense(id: string): Promise<{ success: boo
     return { success: true }
   } catch (error) {
     logger.error('[EXP] Failed to delete recurring expense:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }

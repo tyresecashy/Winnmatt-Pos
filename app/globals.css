@@ -1,5 +1,6 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
+@import "shadcn/tailwind.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -11,39 +12,39 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  
+
   /* Primary: WINNMATT Red */
   --primary: oklch(0.55 0.22 25);
   --primary-foreground: oklch(1 0 0);
-  
+
   /* Secondary: WINNMATT Yellow/Gold */
   --secondary: oklch(0.88 0.15 85);
   --secondary-foreground: oklch(0.2 0 0);
-  
+
   --muted: oklch(0.96 0.01 85);
   --muted-foreground: oklch(0.45 0.02 0);
-  
+
   /* Accent: Warm Yellow */
   --accent: oklch(0.92 0.12 90);
   --accent-foreground: oklch(0.2 0 0);
-  
+
   /* Destructive: Deeper Red for alerts */
-  --destructive: oklch(0.5 0.25 25);
+  --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(1 0 0);
-  
+
   --border: oklch(0.9 0.01 85);
   --input: oklch(0.92 0.01 85);
   --ring: oklch(0.55 0.22 25);
-  
+
   /* Charts with WINNMATT palette */
   --chart-1: oklch(0.55 0.22 25);
   --chart-2: oklch(0.85 0.15 85);
   --chart-3: oklch(0.65 0.18 30);
   --chart-4: oklch(0.75 0.12 80);
   --chart-5: oklch(0.45 0.15 20);
-  
-  --radius: 0.5rem;
-  
+
+  --radius: 0.625rem;
+
   /* Sidebar */
   --sidebar: oklch(0.18 0.02 25);
   --sidebar-foreground: oklch(0.95 0 0);
@@ -53,7 +54,7 @@
   --sidebar-accent-foreground: oklch(0.95 0 0);
   --sidebar-border: oklch(0.28 0.03 25);
   --sidebar-ring: oklch(0.55 0.22 25);
-  
+
   /* Custom WINNMATT tokens */
   --winnmatt-red: oklch(0.55 0.22 25);
   --winnmatt-yellow: oklch(0.88 0.15 85);
@@ -100,7 +101,7 @@
 }
 
 @theme inline {
-  --font-sans: 'Inter', 'Geist', 'Geist Fallback', system-ui, sans-serif;
+  --font-sans: var(--font-sans);
   --font-mono: 'Geist Mono', 'Geist Mono Fallback', monospace;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -145,6 +146,10 @@
   --color-success-foreground: var(--success-foreground);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
+  --font-heading: var(--font-sans);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
 }
 
 @layer base {
@@ -229,4 +234,12 @@
       height: 100vh !important;
     }
   }
+  html {
+    @apply font-sans;
+  }
+}
+
+/* Overlay sidebar: hide the gap so sidebar floats over content */
+[data-slot="sidebar"][data-overlay="true"] [data-slot="sidebar-gap"] {
+  display: none;
 }

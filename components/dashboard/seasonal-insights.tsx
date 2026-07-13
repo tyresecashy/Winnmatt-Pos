@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { AlertCircle, Calendar, Lightbulb, RefreshCw, ShoppingBag } from "lucide-react"
-import { getSeasonalInsights } from "@/lib/dashboard-actions"
+import { getSeasonalInsights } from "@/lib/modules/dashboard"
 import { formatKSh } from "@/lib/currency"
 
 interface SeasonalData {

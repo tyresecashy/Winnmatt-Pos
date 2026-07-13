@@ -12,9 +12,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { toast } from '@/hooks/use-toast'
 import {
   getFinancialPeriods, createFinancialPeriod, closeFinancialPeriod,
-  type FinancialPeriod
-} from '@/lib/finance-actions'
+} from '@/lib/modules/finance'
+import type { FinancialPeriod } from '@/lib/modules/finance'
 import { Calendar, Lock, CheckCircle, Plus, RefreshCw } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 
 export default function FinancialPeriodsPage() {
   const [periods, setPeriods] = useState<FinancialPeriod[]>([])
@@ -22,7 +23,7 @@ export default function FinancialPeriodsPage() {
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [createForm, setCreateForm] = useState({
     name: '',
-    period_type: 'monthly',
+    period_type: 'month',
     start_date: '',
     end_date: '',
   })
@@ -46,7 +47,7 @@ export default function FinancialPeriodsPage() {
       if (result.success) {
         toast({ title: 'Created', description: 'Financial period created' })
         setShowCreateDialog(false)
-        setCreateForm({ name: '', period_type: 'monthly', start_date: '', end_date: '' })
+        setCreateForm({ name: '', period_type: 'month', start_date: '', end_date: '' })
         loadPeriods()
       }
     } catch (err) {
@@ -58,8 +59,8 @@ export default function FinancialPeriodsPage() {
     if (!confirm(`Close period "${name}"?\n\nThis will:\n- Verify all entries are balanced\n- Create closing journal entries\n- Carry forward balances to retained earnings\n\nThis action cannot be undone.`)) return
 
     try {
-      const result = await closeFinancialPeriod(id)
-      toast({ title: 'Closed', description: result.message || `Period "${name}" closed` })
+      const result = await closeFinancialPeriod(id, '')
+      toast({ title: 'Closed', description: result.error || `Period "${name}" closed` })
       loadPeriods()
     } catch (err) {
       toast({ title: 'Cannot Close', description: err instanceof Error ? err.message : 'Failed', variant: 'destructive' })
@@ -97,7 +98,7 @@ export default function FinancialPeriodsPage() {
         </Card>
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Closed Periods</CardTitle></CardHeader>
-          <CardContent><div className="text-3xl font-bold text-gray-500">{closedPeriods.length}</div></CardContent>
+          <CardContent><div className="text-3xl font-bold text-muted-foreground">{closedPeriods.length}</div></CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Total Periods</CardTitle></CardHeader>
@@ -160,7 +161,7 @@ export default function FinancialPeriodsPage() {
               {periods.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                    No financial periods yet. Create one to start tracking.
+                    <EmptyState icon={Calendar} title="No financial periods yet" description="Create one to start tracking." compact />
                   </TableCell>
                 </TableRow>
               )}
@@ -185,10 +186,9 @@ export default function FinancialPeriodsPage() {
               <Select value={createForm.period_type} onValueChange={v => setCreateForm({ ...createForm, period_type: v })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="monthly">Monthly</SelectItem>
-                  <SelectItem value="quarterly">Quarterly</SelectItem>
-                  <SelectItem value="yearly">Yearly</SelectItem>
-                  <SelectItem value="custom">Custom</SelectItem>
+                  <SelectItem value="month">Monthly</SelectItem>
+                  <SelectItem value="quarter">Quarterly</SelectItem>
+                  <SelectItem value="year">Yearly</SelectItem>
                 </SelectContent>
               </Select>
             </div>

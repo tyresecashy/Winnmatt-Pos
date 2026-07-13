@@ -28,7 +28,7 @@ const stripePromise = loadStripe(
 interface StripeCheckoutFormProps {
   saleId: string
   amount: number
-  clientSecret: string
+  clientSecret?: string
   onSuccess: (paymentIntentId: string) => void
   onError: (error: string) => void
   onCancel: () => void
@@ -79,7 +79,7 @@ function StripeCheckoutForm({
           const piElement = elements.getElement(PaymentElement)
           if (piElement) {
             // The payment intent ID is available from the URL fragment or from Stripe
-            const { paymentIntent: confirmedPi } = await stripe.retrievePaymentIntent(clientSecret)
+            const { paymentIntent: confirmedPi } = await stripe.retrievePaymentIntent(clientSecret!)
             if (confirmedPi) {
               onSuccess(confirmedPi.id)
               return
@@ -129,19 +129,19 @@ function StripeCheckoutForm({
         <Alert
           className={
             message.includes("successful")
-              ? "bg-green-50 border-green-200"
+              ? "bg-success/15 border-success/30"
               : "bg-destructive/15 border-destructive/50"
           }
         >
           {message.includes("successful") ? (
-            <CheckCircle2 className="h-4 w-4 text-green-600" />
+            <CheckCircle2 className="h-4 w-4 text-success" />
           ) : (
             <AlertCircle className="h-4 w-4 text-destructive" />
           )}
           <AlertDescription
             className={
               message.includes("successful")
-                ? "text-green-800"
+                ? "text-success-foreground"
                 : "text-destructive"
             }
           >
@@ -189,7 +189,7 @@ export function StripeCheckout({
   onSuccess,
   onError,
   onCancel,
-}: StripeCheckoutProps) {
+}: StripeCheckoutFormProps) {
   const [clientSecret, setClientSecret] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)

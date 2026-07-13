@@ -156,11 +156,11 @@ export class TestCenterService {
 
     const healthScores: ModuleHealth[] = [];
 
-    for (const module of modules) {
+    for (const mod of modules) {
       const { data: suites } = await supabase
         .from('test_suites')
         .select('*')
-        .eq('module', module)
+        .eq('module', mod)
         .order('timestamp', { ascending: false })
         .limit(10);
 
@@ -175,7 +175,7 @@ export class TestCenterService {
         }
 
         healthScores.push({
-          module,
+          module: mod,
           health_score: latest.health_score,
           total_tests: latest.total,
           passed: latest.passed,
@@ -185,7 +185,7 @@ export class TestCenterService {
         });
       } else {
         healthScores.push({
-          module,
+          module: mod,
           health_score: 100,
           total_tests: 0,
           passed: 0,
@@ -271,16 +271,16 @@ export class TestCenterService {
     const modules = ['sales', 'inventory', 'customers', 'finance', 'workforce'];
     const testTypes: TestType[] = ['unit', 'integration', 'api'];
 
-    for (const module of modules) {
+    for (const mod of modules) {
       for (const type of testTypes) {
         const testCount = Math.floor(Math.random() * 20) + 10;
         const passed = Math.floor(testCount * (0.9 + Math.random() * 0.1));
         const failed = testCount - passed;
 
         const suite = {
-          name: `${module} ${type} Tests`,
+          name: `${mod} ${type} Tests`,
           type: type,
-          module,
+          module: mod,
           tests: [],
           total: testCount,
           passed,

@@ -49,8 +49,7 @@ import {
 } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { cn } from '@/lib/utils'
-import { getAllBranches, getProductsAtBranch } from '@/lib/transfer-actions'
-import { createTransferWizard } from '@/lib/transfer-wizard-actions'
+import { getAllBranches, getProductsAtBranch, createTransferWizard } from '@/lib/modules/transfers'
 
 interface Branch {
   id: string
@@ -235,7 +234,7 @@ export function NewTransferWizardDialog({ open, onOpenChange, onSuccess }: NewTr
             setProductsError('No products with stock found at this branch.')
             return
           }
-          const valid = products.filter((p): p is Product => p.product !== null)
+          const valid = products as unknown as Product[]
           setSourceProducts(valid)
           productsCacheRef.current[sourceBranch] = valid
         } catch (err) {

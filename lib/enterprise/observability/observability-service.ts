@@ -14,7 +14,7 @@ export interface LogEntry {
   source: string;
   trace_id?: string;
   span_id?: string;
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
 }
 
 export interface Trace {
@@ -34,7 +34,7 @@ export interface Span {
   end_time: string;
   duration_ms: number;
   status: 'ok' | 'error';
-  attributes: Record<string, any>;
+  attributes: Record<string, unknown>;
 }
 
 export interface UserJourney {
@@ -56,7 +56,7 @@ export interface UserEvent {
   name: string;
   timestamp: string;
   duration_ms?: number;
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
 }
 
 export interface ObservabilityDashboard {
@@ -289,7 +289,7 @@ export class ObservabilityService {
       .slice(-limit);
   }
 
-  async correlateIncident(incidentId: string): Promise<any> {
+  async correlateIncident(incidentId: string): Promise<Record<string, unknown>> {
     // Correlate logs, metrics, and traces for an incident
     return {
       incident_id: incidentId,

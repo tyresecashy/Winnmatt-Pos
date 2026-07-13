@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, startTransition } from 'react'
 import { useAuth } from '@/contexts/auth-context'
-import { getSystemHealth, getSystemAuditLog } from '@/lib/system-health-actions'
+import { getSystemHealth, getSystemAuditLog } from '@/lib/modules/system'
 import { formatKSh } from '@/lib/currency'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
@@ -81,13 +82,13 @@ export default function OperationsPage() {
       getSystemHealth(),
       getSystemAuditLog(50),
     ])
-    if (healthData) setHealth(healthData as SystemHealthData)
+    if (healthData) setHealth(healthData as unknown as SystemHealthData)
     setAuditLog(auditData as AuditEntry[])
     setLoading(false)
   }, [])
 
   useEffect(() => {
-    fetchData()
+    startTransition(() => { fetchData() })
   }, [fetchData])
 
   const handleRefresh = useCallback(async () => {
@@ -148,7 +149,7 @@ export default function OperationsPage() {
     )
   }
 
-  const statCards = [
+  const statCards: { title: string; value: number; icon: React.ComponentType<{ className?: string }>; color: string; bg: string; format: 'number' | 'currency'; suffix?: string }[] = [
     { title: 'Total Users', value: health?.database.users ?? 0, icon: Users, color: 'text-blue-600', bg: 'bg-blue-50 dark:bg-blue-950', format: 'number' as const },
     { title: 'Total Products', value: health?.database.products ?? 0, icon: Package, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-950', format: 'number' as const },
     { title: "Today's Sales", value: health?.today.sales ?? 0, icon: ShoppingCart, color: 'text-violet-600', bg: 'bg-violet-50 dark:bg-violet-950', format: 'number' as const },
@@ -192,7 +193,7 @@ export default function OperationsPage() {
                 ) : (
                   <p className="text-2xl font-bold">
                     <AnimatedCounter value={stat.value as number} />
-                    {(stat as any).suffix ? <span className="text-muted-foreground text-lg ml-1">{(stat as any).suffix}</span> : null}
+                    {stat.suffix ? <span className="text-muted-foreground text-lg ml-1">{stat.suffix}</span> : null}
                   </p>
                 )}
               </CardContent>
@@ -253,7 +254,7 @@ export default function OperationsPage() {
         </CardHeader>
         <CardContent>
           {auditLog.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">No audit log entries found.</p>
+            <EmptyState title="No audit log entries found" compact />
           ) : (
             <Table>
               <TableHeader>

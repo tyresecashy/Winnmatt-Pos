@@ -13,7 +13,7 @@ export default function OfflinePage() {
           <div className="mx-auto mb-4 p-4 bg-yellow-100 rounded-full w-fit">
             <WifiOff className="h-12 w-12 text-yellow-600" />
           </div>
-          <CardTitle className="text-2xl">You're Offline</CardTitle>
+          <CardTitle className="text-2xl">You&apos;re Offline</CardTitle>
           <p className="text-muted-foreground">
             No internet connection detected. Some features may be limited.
           </p>
@@ -40,7 +40,7 @@ export default function OfflinePage() {
           <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200">
             <h3 className="font-medium text-yellow-800 mb-2">Offline Mode Active</h3>
             <p className="text-sm text-yellow-700">
-              Transactions will be queued and synced when you're back online.
+              Transactions will be queued and synced when you&apos;re back online.
             </p>
           </div>
 

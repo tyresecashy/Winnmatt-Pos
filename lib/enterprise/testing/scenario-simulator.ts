@@ -24,7 +24,7 @@ export interface ScenarioConfig {
   description: string;
   severity: ScenarioSeverity;
   duration_minutes: number;
-  parameters: Record<string, any>;
+  parameters: Record<string, unknown>;
 }
 
 export interface ScenarioResult {
@@ -338,7 +338,7 @@ export class ScenarioSimulatorService {
     result.metrics.transactions_processed = Math.floor(Math.random() * 1000) + 500;
     result.metrics.average_response_time_ms = Math.floor(Math.random() * 2000) + 500;
     result.metrics.error_rate = Math.random() * 0.05;
-    result.metrics.peak_concurrent_users = params.concurrent_users;
+    result.metrics.peak_concurrent_users = params.concurrent_users as any;
     result.metrics.user_impact = 'Slightly slower checkout times';
 
     // Identify issues
@@ -425,7 +425,7 @@ export class ScenarioSimulatorService {
   private async simulateMassRefund(result: ScenarioResult, config: ScenarioConfig) {
     const params = config.parameters;
     
-    result.metrics.transactions_processed = params.refund_count;
+    result.metrics.transactions_processed = params.refund_count as any;
     result.metrics.average_response_time_ms = 800;
     result.metrics.error_rate = 0.02;
     result.metrics.user_impact = 'Refund processing delayed';
@@ -469,7 +469,7 @@ export class ScenarioSimulatorService {
     return this.results.find(r => r.id === id);
   }
 
-  generateScenarioReport(): any {
+  generateScenarioReport(): Record<string, unknown> {
     const totalScenarios = this.results.length;
     const completed = this.results.filter(r => r.status === 'completed').length;
     const failed = this.results.filter(r => r.status === 'failed').length;

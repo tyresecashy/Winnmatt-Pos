@@ -37,7 +37,7 @@ export async function globalSearch(
     const { branchId, entityTypes, limit = 50 } = filters
 
     const { data, error } = await supabaseAdmin.rpc('search_all', {
-      search_query: query.trim(),
+      p_search_query: query.trim(),
       branch_id: branchId || null,
       entity_types: entityTypes || null,
       result_limit: limit,
@@ -52,7 +52,7 @@ export async function globalSearch(
     return { success: true, data: (data || []) as SearchResult[] }
   } catch (error) {
     logger.error('[Search] Error:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Search failed' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -131,15 +131,15 @@ async function fallbackSearch(
         .or(`staff_number.ilike.${searchPattern}`)
         .limit(limit)
 
-      for (const e of employees || []) {
-        const fullName = (e as any).user?.full_name || 'Unknown'
+      for (const e of (employees || []) as { id: string; staff_number: string; position: string | null; department_id: string | null; user?: { full_name: string; email: string } }[]) {
+        const fullName = e.user?.full_name || 'Unknown'
         results.push({
           entity_type: 'employee',
           entity_id: e.id,
           title: fullName,
           subtitle: e.staff_number,
           metadata: {
-            email: (e as any).user?.email,
+            email: e.user?.email,
             position: e.position,
             department: e.department_id,
           },
@@ -150,18 +150,20 @@ async function fallbackSearch(
 
     // Search suppliers
     if (!entityTypes || entityTypes.includes('supplier')) {
-      const { data: suppliers } = await supabaseAdmin
+      const { data: suppliers, error: suppliersError } = await supabaseAdmin
         .from('suppliers')
-        .select('id, name, contact_name, email, phone, status')
-        .or(`name.ilike.${searchPattern},contact_name.ilike.${searchPattern},email.ilike.${searchPattern}`)
+        .select('id, name, contact_person, email, phone, status')
+        .or(`name.ilike.${searchPattern},contact_person.ilike.${searchPattern},email.ilike.${searchPattern}`)
         .limit(limit)
 
-      for (const s of suppliers || []) {
+      if (suppliersError) throw suppliersError
+
+      for (const s of (suppliers || []) as { id: string; name: string; contact_person: string | null; email: string | null; phone: string | null; status: string | null }[]) {
         results.push({
           entity_type: 'supplier',
           entity_id: s.id,
           title: s.name,
-          subtitle: s.contact_name,
+          subtitle: s.contact_person,
           metadata: {
             email: s.email,
             phone: s.phone,
@@ -179,7 +181,7 @@ async function fallbackSearch(
     return { success: true, data: results.slice(0, limit) }
   } catch (error) {
     logger.error('[Search] Fallback search error:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Search failed' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 

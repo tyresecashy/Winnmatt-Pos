@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { startTransition, useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -24,7 +24,12 @@ import {
   type CustomerCRMDetail,
   type CustomerActivity,
   type CustomerSaleItem,
-} from '@/lib/customer-crm-actions'
+} from '@/lib/modules/crm'
+import { EmptyState } from '@/components/ui/empty-state'
+import { getLoyaltyHistory, type LoyaltyTransaction } from '@/lib/modules/customers'
+import { EditCustomerDialog } from '@/components/customers/edit-customer-dialog'
+import { AIInsightSection } from '@/components/ai/ai-insight-section'
+import { analyzeCustomerDetailAI } from '@/lib/modules/ai'
 
 const typeColors: Record<string, { bg: string; text: string }> = {
   retail: { bg: 'bg-blue-100', text: 'text-blue-700' },
@@ -50,19 +55,23 @@ export default function CustomerCRMDetailPage() {
   const [loading, setLoading] = useState(true)
   const [activity, setActivity] = useState<CustomerActivity[]>([])
   const [salesHistory, setSalesHistory] = useState<CustomerSaleItem[]>([])
+  const [loyaltyHistory, setLoyaltyHistory] = useState<LoyaltyTransaction[]>([])
   const [activeTab, setActiveTab] = useState('overview')
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
 
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      const [cust, acts, sales] = await Promise.all([
+      const [cust, acts, sales, loyalty] = await Promise.all([
         getCustomerCRMDetail(customerId),
         getCustomerActivity(customerId),
         getCustomerSalesHistory(customerId),
+        getLoyaltyHistory(customerId),
       ])
       if (cust) setCustomer(cust)
       setActivity(acts)
       setSalesHistory(sales)
+      setLoyaltyHistory(loyalty)
     } catch (err) {
       toast({ title: 'Error', description: 'Failed to load customer data', variant: 'destructive' })
     } finally {
@@ -71,7 +80,7 @@ export default function CustomerCRMDetailPage() {
   }, [customerId, toast])
 
   useEffect(() => {
-    void loadData()
+    startTransition(() => { void loadData() })
   }, [loadData])
 
   if (loading) return <LoadingSkeleton />
@@ -111,7 +120,7 @@ export default function CustomerCRMDetailPage() {
             <Users className="h-4 w-4 mr-2" />
             All Customers
           </Button>
-          <Button variant="outline">
+          <Button variant="outline" onClick={() => setEditDialogOpen(true)}>
             <Edit3 className="h-4 w-4 mr-2" />
             Edit
           </Button>
@@ -121,6 +130,37 @@ export default function CustomerCRMDetailPage() {
           </Button>
         </div>
       </div>
+
+      {/* AI Customer Health */}
+      <AIInsightSection
+        title="AI Customer Health"
+        description="Churn risk analysis, spending insights, and next-best-action"
+        analyzeFn={() => analyzeCustomerDetailAI({
+          customer: {
+            name: customer.name,
+            type: customer.type || 'retail',
+            tier: customer.tier || 'bronze',
+            totalVisits: customer.total_visits || 0,
+            totalSpent: (customer.total_spent_cents || 0) / 100,
+            creditBalance: (customer.credit_balance || 0) / 100,
+            averageOrderValue: customer.total_visits > 0
+              ? ((customer.total_spent_cents || 0) / customer.total_visits) / 100
+              : 0,
+            lastPurchaseDate: customer.last_purchase_date
+              ? new Date(customer.last_purchase_date).toISOString()
+              : null,
+          },
+          recentActivity: (activity || []).slice(0, 10).map(a => ({
+            description: a.description || 'Activity',
+            date: a.created_at || new Date().toISOString(),
+          })),
+          salesHistory: (salesHistory || []).slice(0, 10).map(s => ({
+            date: s.created_at || new Date().toISOString(),
+            total: s.total_amount || 0,
+            items: s.item_count || 0,
+          })),
+        })}
+      />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-4 gap-4">
@@ -151,7 +191,7 @@ export default function CustomerCRMDetailPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold text-emerald-600">{formatKSh(customer.lifetime_value_cents)}</p>
+            <p className="text-2xl font-bold text-success">{formatKSh(customer.lifetime_value_cents)}</p>
           </CardContent>
         </Card>
         <Card>
@@ -161,7 +201,7 @@ export default function CustomerCRMDetailPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className={`text-2xl font-bold ${customer.return_rate > 15 ? 'text-red-600' : customer.return_rate > 5 ? 'text-amber-600' : 'text-green-600'}`}>
+            <p className={`text-2xl font-bold ${customer.return_rate > 15 ? 'text-destructive' : customer.return_rate > 5 ? 'text-warning' : 'text-success'}`}>
               {customer.return_rate}%
             </p>
           </CardContent>
@@ -252,12 +292,12 @@ export default function CustomerCRMDetailPage() {
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Lifetime Value</span>
-                  <span className="font-medium text-emerald-600">{formatKSh(customer.lifetime_value_cents)}</span>
+                  <span className="font-medium text-success">{formatKSh(customer.lifetime_value_cents)}</span>
                 </div>
                 {customer.days_since_last_purchase !== null && (
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Days Since Last Purchase</span>
-                    <span className={`font-medium ${customer.days_since_last_purchase > 60 ? 'text-red-600' : customer.days_since_last_purchase > 30 ? 'text-amber-600' : 'text-green-600'}`}>
+                    <span className={`font-medium ${customer.days_since_last_purchase > 60 ? 'text-destructive' : customer.days_since_last_purchase > 30 ? 'text-warning' : 'text-success'}`}>
                       {customer.days_since_last_purchase}
                     </span>
                   </div>
@@ -272,15 +312,15 @@ export default function CustomerCRMDetailPage() {
               <CardContent className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Return Rate</span>
-                  <span className={`font-medium ${customer.return_rate > 15 ? 'text-red-600' : ''}`}>{customer.return_rate}%</span>
+                  <span className={`font-medium ${customer.return_rate > 15 ? 'text-destructive' : ''}`}>{customer.return_rate}%</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Total Returned</span>
-                  <span className="font-medium text-red-600">{formatKSh(customer.total_returned_cents)}</span>
+                  <span className="font-medium text-destructive">{formatKSh(customer.total_returned_cents)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Credit Balance</span>
-                  <span className={`font-medium ${customer.credit_balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                  <span className={`font-medium ${customer.credit_balance > 0 ? 'text-destructive' : 'text-success'}`}>
                     {formatKSh(Math.abs(customer.credit_balance))}
                   </span>
                 </div>
@@ -302,6 +342,29 @@ export default function CustomerCRMDetailPage() {
               </CardContent>
             </Card>
           )}
+
+          {/* Contact Preferences */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">Contact Preferences</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium">SMS Notifications</p>
+                  <p className="text-xs text-muted-foreground">Receive promotions and updates via SMS</p>
+                </div>
+                <Badge variant="outline" className="bg-success/10 text-success border-success/30">Active</Badge>
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium">Email Notifications</p>
+                  <p className="text-xs text-muted-foreground">Receive promotions and updates via email</p>
+                </div>
+                <Badge variant="outline" className="bg-success/10 text-success border-success/30">Active</Badge>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* Purchase History Tab */}
@@ -317,7 +380,14 @@ export default function CustomerCRMDetailPage() {
               ) : (
                 <div className="space-y-2">
                   {salesHistory.map(sale => (
-                    <div key={sale.id} className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors">
+                    <div
+                      key={sale.id}
+                      className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors cursor-pointer"
+                      onClick={() => {
+                        toast({ title: sale.receipt_number, description: `Total: ${formatKSh(sale.total_amount)} | ${new Date(sale.created_at).toLocaleDateString()}` })
+                        router.push(`/sales-history?search=${encodeURIComponent(sale.receipt_number)}`)
+                      }}
+                    >
                       <div className="flex items-center gap-4">
                         <div className="rounded-full bg-primary/10 p-2">
                           <ShoppingBag className="h-4 w-4 text-primary" />
@@ -368,7 +438,7 @@ export default function CustomerCRMDetailPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between">
                           <p className="text-sm">{act.description}</p>
-                          <span className={`text-xs font-medium ${act.amount_cents < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                          <span className={`text-xs font-medium ${act.amount_cents < 0 ? 'text-destructive' : 'text-success'}`}>
                             {act.amount_cents < 0 ? '-' : '+'}{formatKSh(Math.abs(act.amount_cents))}
                           </span>
                         </div>
@@ -387,75 +457,139 @@ export default function CustomerCRMDetailPage() {
 
         {/* Loyalty & Credit Tab */}
         <TabsContent value="loyalty">
-          <div className="grid grid-cols-2 gap-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <Award className="h-4 w-4 text-amber-500" />
-                  Loyalty Points
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="text-center py-4">
-                  <p className="text-4xl font-bold text-amber-600">{customer.loyalty_points}</p>
-                  <p className="text-sm text-muted-foreground mt-1">Available Points</p>
-                </div>
-                {customer.tier && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Current Tier</span>
-                    <Badge variant="outline" className={tierColors[tier]}>{tier}</Badge>
+          <div className="grid gap-4">
+            <div className="grid grid-cols-2 gap-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Award className="h-4 w-4 text-warning" />
+                    Loyalty Points
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="text-center py-4">
+                    <p className="text-4xl font-bold text-warning">{customer.loyalty_points}</p>
+                    <p className="text-sm text-muted-foreground mt-1">Available Points</p>
                   </div>
-                )}
-              </CardContent>
-            </Card>
+                  {customer.tier && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Current Tier</span>
+                      <Badge variant="outline" className={tierColors[tier]}>{tier}</Badge>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <CreditCard className="h-4 w-4" />
+                    Credit Account
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="text-center py-4">
+                    <p className={`text-4xl font-bold ${customer.credit_balance > 0 ? 'text-destructive' : 'text-success'}`}>
+                      {formatKSh(Math.abs(customer.credit_balance))}
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {customer.credit_balance > 0 ? 'Outstanding Balance' : 'No Balance'}
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Credit Limit</span>
+                      <span className="font-medium">{formatKSh(customer.credit_limit)}</span>
+                    </div>
+                    {customer.credit_limit > 0 && (
+                      <div>
+                        <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                          <span>Utilization</span>
+                          <span>{Math.round((customer.credit_balance / customer.credit_limit) * 100)}%</span>
+                        </div>
+                        <div className="w-full bg-muted rounded-full h-2">
+                          <div
+                            className={`h-2 rounded-full transition-all ${
+                              (customer.credit_balance / customer.credit_limit) > 0.8
+                                ? 'bg-destructive'
+                                : (customer.credit_balance / customer.credit_limit) > 0.5
+                                ? 'bg-warning'
+                                : 'bg-success'
+                            }`}
+                            style={{ width: `${Math.min((customer.credit_balance / customer.credit_limit) * 100, 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
 
             <Card>
               <CardHeader>
                 <CardTitle className="text-sm flex items-center gap-2">
-                  <CreditCard className="h-4 w-4" />
-                  Credit Account
+                  <Clock className="h-4 w-4" />
+                  Loyalty Transaction History
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="text-center py-4">
-                  <p className={`text-4xl font-bold ${customer.credit_balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                    {formatKSh(Math.abs(customer.credit_balance))}
-                  </p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {customer.credit_balance > 0 ? 'Outstanding Balance' : 'No Balance'}
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Credit Limit</span>
-                    <span className="font-medium">{formatKSh(customer.credit_limit)}</span>
-                  </div>
-                  {customer.credit_limit > 0 && (
-                    <div>
-                      <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                        <span>Utilization</span>
-                        <span>{Math.round((customer.credit_balance / customer.credit_limit) * 100)}%</span>
-                      </div>
-                      <div className="w-full bg-muted rounded-full h-2">
-                        <div
-                          className={`h-2 rounded-full transition-all ${
-                            (customer.credit_balance / customer.credit_limit) > 0.8
-                              ? 'bg-red-500'
-                              : (customer.credit_balance / customer.credit_limit) > 0.5
-                              ? 'bg-amber-500'
-                              : 'bg-green-500'
-                          }`}
-                          style={{ width: `${Math.min((customer.credit_balance / customer.credit_limit) * 100, 100)}%` }}
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
+              <CardContent>
+                {loyaltyHistory.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-4 text-center">No loyalty transactions</p>
+                ) : (
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b text-xs text-muted-foreground">
+                        <th className="text-left p-2 font-medium">Date</th>
+                        <th className="text-left p-2 font-medium">Type</th>
+                        <th className="text-right p-2 font-medium">Points</th>
+                        <th className="text-right p-2 font-medium">Balance</th>
+                        <th className="text-left p-2 font-medium">Reason</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {loyaltyHistory.map((tx) => (
+                        <tr key={tx.id} className="border-b last:border-0 hover:bg-muted/50">
+                          <td className="p-2 text-sm">{new Date(tx.created_at).toLocaleDateString()}</td>
+                          <td className="p-2">
+                            <Badge variant={tx.type === 'earn' ? 'default' : tx.type === 'redeem' ? 'secondary' : 'outline'}>
+                              {tx.type}
+                            </Badge>
+                          </td>
+                          <td className={`p-2 text-right font-mono ${tx.points_delta >= 0 ? 'text-success' : 'text-destructive'}`}>
+                            {tx.points_delta >= 0 ? '+' : ''}{tx.points_delta}
+                          </td>
+                          <td className="p-2 text-right font-mono">{tx.balance_after}</td>
+                          <td className="p-2 text-sm text-muted-foreground max-w-[200px] truncate">{tx.reason || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </CardContent>
             </Card>
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Edit Customer Dialog */}
+      <EditCustomerDialog
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        customer={customer ? {
+          id: customer.id,
+          name: customer.name,
+          phone: customer.phone,
+          email: customer.email,
+          type: customer.type,
+          tier: customer.tier,
+          credit_limit: customer.credit_limit,
+          birthday: customer.birthday,
+          notes: customer.notes,
+          tags: customer.tags ?? [],
+        } : null}
+        onSuccess={() => { loadData() }}
+      />
     </div>
   )
 }
@@ -464,13 +598,13 @@ export default function CustomerCRMDetailPage() {
 
 function ActivityIcon({ type }: { type: CustomerActivity['type'] }) {
   const icons: Record<string, React.ReactNode> = {
-    purchase: <div className="rounded-full bg-green-100 p-1.5"><ShoppingBag className="h-3 w-3 text-green-600" /></div>,
-    return: <div className="rounded-full bg-red-100 p-1.5"><RotateCcw className="h-3 w-3 text-red-600" /></div>,
-    loyalty_earn: <div className="rounded-full bg-amber-100 p-1.5"><Award className="h-3 w-3 text-amber-600" /></div>,
-    loyalty_redeem: <div className="rounded-full bg-purple-100 p-1.5"><Star className="h-3 w-3 text-purple-600" /></div>,
-    payment: <div className="rounded-full bg-blue-100 p-1.5"><CreditCard className="h-3 w-3 text-blue-600" /></div>,
+    purchase: <div className="rounded-full bg-success/15 p-1.5"><ShoppingBag className="h-3 w-3 text-success" /></div>,
+    return: <div className="rounded-full bg-destructive/15 p-1.5"><RotateCcw className="h-3 w-3 text-destructive" /></div>,
+    loyalty_earn: <div className="rounded-full bg-warning/15 p-1.5"><Award className="h-3 w-3 text-warning" /></div>,
+    loyalty_redeem: <div className="rounded-full bg-chart-3/15 p-1.5"><Star className="h-3 w-3 text-chart-3" /></div>,
+    payment: <div className="rounded-full bg-primary/15 p-1.5"><CreditCard className="h-3 w-3 text-primary" /></div>,
   }
-  return icons[type] || <div className="rounded-full bg-gray-100 p-1.5"><Activity className="h-3 w-3 text-gray-600" /></div>
+  return icons[type] || <div className="rounded-full bg-muted p-1.5"><Activity className="h-3 w-3 text-muted-foreground" /></div>
 }
 
 // ─── Loading & Error States ───────────────────────────────────────────────────
@@ -497,11 +631,13 @@ function LoadingSkeleton() {
 
 function NotFoundState({ onBack }: { onBack: () => void }) {
   return (
-    <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-      <AlertTriangle className="h-12 w-12 text-muted-foreground" />
-      <h2 className="text-xl font-semibold">Customer Not Found</h2>
-      <p className="text-sm text-muted-foreground">The customer you are looking for does not exist or has been removed.</p>
-      <Button onClick={onBack}><ArrowLeft className="h-4 w-4 mr-2" /> Back to Customers</Button>
+    <div className="min-h-[60vh] flex items-center justify-center">
+      <EmptyState
+        icon={AlertTriangle}
+        title="Customer Not Found"
+        description="The customer you are looking for does not exist or has been removed."
+        actions={[{ label: 'Back to Customers', onClick: onBack, variant: 'outline', icon: ArrowLeft }]}
+      />
     </div>
   )
 }

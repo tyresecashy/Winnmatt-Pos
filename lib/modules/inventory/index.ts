@@ -3,7 +3,16 @@
  *
  * Handles products, stock levels, transfers, and warehouse operations.
  * Other modules should ONLY import from this file.
+ *
+ * Implementation: Delegates to lib/products-actions.ts,
+ * lib/inventory-analytics-actions.ts, lib/stock-count-actions.ts,
+ * and lib/inventory-actions.ts.
  */
+
+import { logger } from '@/lib/logger'
+import * as products from '@/lib/products-actions'
+import * as analytics from '@/lib/inventory-analytics-actions'
+import * as stockCount from '@/lib/stock-count-actions'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -83,18 +92,61 @@ export const INVENTORY_EVENTS = {
   STOCK_COUNTED: 'stock.counted',
 } as const
 
+// ─── Backward-Compatible Re-exports (products-actions) ─────────────────────
+
+export { getAllProducts } from '@/lib/products-actions'
+export { getCategories } from '@/lib/products-actions'
+export { createProduct } from '@/lib/products-actions'
+export { updateProduct } from '@/lib/products-actions'
+export { deleteProduct } from '@/lib/products-actions'
+export { getProductsForPOS } from '@/lib/products-actions'
+export { searchProducts } from '@/lib/products-actions'
+export { getProductById } from '@/lib/products-actions'
+export { getInventoryForBranch } from '@/lib/products-actions'
+export { getInventoryForProduct } from '@/lib/products-actions'
+export { updateInventory } from '@/lib/products-actions'
+export { createStockMovement } from '@/lib/products-actions'
+export { adjustStockQuantity } from '@/lib/products-actions'
+// setReorderLevel and getProductDetails are not available from products-actions at this time
+
+// ─── Backward-Compatible Re-exports (inventory-analytics-actions) ──────────
+
+export { getInventoryAnalytics } from '@/lib/inventory-analytics-actions'
+export { getReorderSuggestions } from '@/lib/inventory-analytics-actions'
+export { getTopPerformers } from '@/lib/inventory-analytics-actions'
+export { createPurchaseOrdersFromSuggestions } from '@/lib/inventory-analytics-actions'
+export { dismissReorderSuggestion } from '@/lib/inventory-analytics-actions'
+export type { AnalyticsProduct, ReorderSuggestion } from '@/lib/inventory-analytics-actions'
+
+// ─── Backward-Compatible Re-exports (stock-count-actions) ──────────────────
+
+export { createStockCount } from '@/lib/stock-count-actions'
+export { getStockCounts } from '@/lib/stock-count-actions'
+export { getStockCountWithItems } from '@/lib/stock-count-actions'
+export { populateStockCount } from '@/lib/stock-count-actions'
+export { updateStockCountItem } from '@/lib/stock-count-actions'
+export { completeStockCount } from '@/lib/stock-count-actions'
+export { approveStockCount } from '@/lib/stock-count-actions'
+export { cancelStockCount } from '@/lib/stock-count-actions'
+export type { StockCount, StockCountItem } from '@/lib/stock-count-actions'
+
+// ─── Backward-Compatible Re-exports (inventory-actions) ────────────────────
+
+export { getStockMovements } from '@/lib/inventory-actions'
+export { adjustInventoryStock } from '@/lib/inventory-actions'
+
 // ─── Public API ─────────────────────────────────────────────────────────────
 
-/**
- * Get product by ID.
- */
 export async function getProduct(productId: string): Promise<Product | null> {
-  throw new Error('Not implemented')
+  try {
+    const result = await products.getProductById(productId)
+    return result as unknown as Product | null
+  } catch (error) {
+    logger.error('[Inventory Module] getProduct failed', error instanceof Error ? error.message : String(error))
+    return null
+  }
 }
 
-/**
- * Get products with filters.
- */
 export async function getProducts(filters: {
   branch_id?: string
   category_id?: string
@@ -103,23 +155,50 @@ export async function getProducts(filters: {
   limit?: number
   offset?: number
 }): Promise<{ data: Product[]; total: number }> {
-  throw new Error('Not implemented')
+  try {
+    const all = await products.getAllProducts()
+    const list = (all || []) as unknown as Product[]
+    let filtered = [...list]
+    if (filters.branch_id) {
+      filtered = filtered.filter((p) => p.branch_id === filters.branch_id)
+    }
+    if (filters.category_id) {
+      filtered = filtered.filter((p) => p.category_id === filters.category_id)
+    }
+    if (filters.search) {
+      const q = filters.search.toLowerCase()
+      filtered = filtered.filter((p) => p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q))
+    }
+    if (filters.status) {
+      filtered = filtered.filter((p) => p.status === filters.status)
+    }
+    const total = filtered.length
+    if (filters.limit || filters.offset) {
+      const start = filters.offset || 0
+      const end = start + (filters.limit || 100)
+      filtered = filtered.slice(start, end)
+    }
+    return { data: filtered, total }
+  } catch (error) {
+    logger.error('[Inventory Module] getProducts failed', error instanceof Error ? error.message : String(error))
+    return { data: [], total: 0 }
+  }
 }
 
-/**
- * Get inventory level for a product at a branch.
- */
 export async function getInventoryLevel(
   productId: string,
   branchId: string
 ): Promise<InventoryLevel | null> {
-  throw new Error('Not implemented')
+  try {
+    const rows = await products.getInventoryForProduct(productId)
+    const match = (rows as unknown as InventoryLevel[]).find(r => r.branch_id === branchId)
+    return match ?? null
+  } catch (error) {
+    logger.error('[Inventory Module] getInventoryLevel failed', error instanceof Error ? error.message : String(error))
+    return null
+  }
 }
 
-/**
- * Adjust stock level.
- * Emits: stock.changed
- */
 export async function adjustStock(
   productId: string,
   branchId: string,
@@ -127,16 +206,15 @@ export async function adjustStock(
   type: string,
   notes?: string
 ): Promise<{ success: boolean; error?: string }> {
-  throw new Error('Not implemented')
-}
-
-/**
- * Get stock movements for a product.
- */
-export async function getStockMovements(
-  productId: string,
-  branchId?: string,
-  limit?: number
-): Promise<StockMovement[]> {
-  throw new Error('Not implemented')
+  try {
+    // Look up inventory record first to get inventoryId
+    const rows = await products.getInventoryForProduct(productId)
+    const inventoryRows = rows as unknown as { id: string; branch_id: string; product_id: string }[]
+    const match = inventoryRows.find(r => r.branch_id === branchId)
+    const inventoryId = match?.id ?? ''
+    return await products.adjustStockQuantity(inventoryId, productId, branchId, quantity, notes ?? type ?? 'adjustment')
+  } catch (error) {
+    logger.error('[Inventory Module] adjustStock failed', error instanceof Error ? error.message : String(error))
+    return { success: false, error: 'Operation failed. Please try again.' }
+  }
 }

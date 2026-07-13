@@ -1,9 +1,11 @@
 'use client'
 
+import { logger } from '@/lib/logger'
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -109,7 +111,7 @@ export default function WebhooksPage() {
       const data = await getWebhookEndpoints()
       setEndpoints(data)
     } catch (error) {
-      console.error('Failed to load endpoints:', error)
+      logger.error('Failed to load endpoints:', error)
     } finally {
       setLoading(false)
     }
@@ -161,7 +163,7 @@ export default function WebhooksPage() {
       const data = await getWebhookDeliveries(endpoint.id)
       setDeliveries(data)
     } catch (error) {
-      console.error('Failed to load deliveries:', error)
+      logger.error('Failed to load deliveries:', error)
     } finally {
       setLoadingDeliveries(false)
     }
@@ -501,7 +503,7 @@ export default function WebhooksPage() {
             ) : deliveries.length === 0 ? (
               <div className="p-8 text-center text-muted-foreground">
                 <Send className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>No deliveries yet</p>
+                <EmptyState title="No deliveries yet" compact />
               </div>
             ) : (
               <div className="max-h-[60vh] overflow-y-auto">

@@ -59,9 +59,10 @@ import {
   Mail,
   User,
 } from "lucide-react"
+import { EmptyState } from "@/components/ui/empty-state"
 import { useAuth } from "@/contexts/auth-context"
-import { getBranches, createBranch, updateBranch, toggleBranchStatus, getBranchManagers } from "@/lib/branch-actions"
-import type { BranchRow } from "@/lib/branch-actions"
+import { getBranches, createBranch, updateBranch, toggleBranchStatus, getBranchManagers } from "@/lib/modules/branches"
+import type { BranchRow } from "@/lib/modules/branches"
 
 const TYPE_LABELS: Record<string, string> = {
   main: "Main",
@@ -120,7 +121,6 @@ export default function BranchesPage() {
   const [formError, setFormError] = useState<string | null>(null)
   const [toggleConfirm, setToggleConfirm] = useState<BranchRow | null>(null)
 
-  const hasLoadedRef = useRef(false)
   const canManage = ["super_admin", "admin"].includes(profile?.role || "")
 
   const loadBranches = useCallback(async () => {
@@ -128,7 +128,6 @@ export default function BranchesPage() {
     try {
       const data = await getBranches()
       setBranches(data || [])
-      hasLoadedRef.current = true
     } catch (error) {
       logger.error("Failed to load branches:", error)
       setBranches([])
@@ -147,8 +146,10 @@ export default function BranchesPage() {
   }, [])
 
   useEffect(() => {
-    void loadBranches()
-    void loadManagers()
+    const init = async () => {
+      await Promise.all([loadBranches(), loadManagers()])
+    }
+    init()
   }, [loadBranches, loadManagers])
 
   const resetForm = () => {
@@ -217,9 +218,9 @@ export default function BranchesPage() {
 
       let result: BranchRow | null
       if (editingBranch) {
-        result = await updateBranch(editingBranch.id, payload)
+        result = await updateBranch(editingBranch.id, payload) as unknown as BranchRow
       } else {
-        result = await createBranch(payload)
+        result = await createBranch(payload) as unknown as BranchRow
       }
 
       if (result) {
@@ -566,25 +567,13 @@ export default function BranchesPage() {
               ))}
             </div>
           ) : filteredBranches.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
-                <Store className="h-6 w-6 text-muted-foreground" />
-              </div>
-              <p className="text-lg font-medium">
-                {searchTerm ? "No branches found" : "No branches yet"}
-              </p>
-              <p className="text-sm text-muted-foreground mt-1">
-                {searchTerm
-                  ? "Try a different search term."
-                  : "Create your first branch to start managing locations."}
-              </p>
-              {!searchTerm && canManage && (
-                <Button className="mt-4" onClick={openCreateDialog}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Branch
-                </Button>
-              )}
-            </div>
+            <EmptyState
+              icon={Store}
+              title={searchTerm ? "No branches found" : "No branches yet"}
+              description={searchTerm ? "Try a different search term." : "Create your first branch to start managing locations."}
+              actions={!searchTerm && canManage ? [{ label: 'Add Branch', onClick: openCreateDialog, icon: Plus }] : undefined}
+              compact
+            />
           ) : viewMode === "compare" ? (
             <Table>
               <TableHeader>

@@ -21,7 +21,7 @@ export interface SubsystemHealth {
   uptime_percentage: number;
   last_incident?: string;
   dependencies: string[];
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
 }
 
 export interface SystemHealth {
@@ -207,7 +207,7 @@ export class HealthCenterService {
     return trend;
   }
 
-  async getHealthSummary(): Promise<any> {
+  async getHealthSummary(): Promise<Record<string, unknown>> {
     const health = await this.checkAllSubsystems();
     
     return {

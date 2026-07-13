@@ -22,8 +22,9 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { AlertTriangle, Package, SearchX, Loader2, Bell, BellOff, RefreshCw } from "lucide-react"
+import { EmptyState } from "@/components/ui/empty-state"
 import { useAuth } from "@/contexts/auth-context"
-import { getInventoryForBranch } from "@/lib/products-actions"
+import { getInventoryForBranch } from "@/lib/modules/inventory"
 
 interface StockAlertItem {
   id: string
@@ -41,21 +42,14 @@ export default function StockAlertsPage() {
   const [inventory, setInventory] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [alertFilter, setAlertFilter] = useState<string>("all")
-  const [enabledAlerts, setEnabledAlerts] = useState<Set<string>>(new Set())
-  const [preferencesLoaded, setPreferencesLoaded] = useState(false)
-  const hasLoadedRef = useRef(false)
-
-  // Load saved alert preferences from localStorage on mount
-  useEffect(() => {
+  const [enabledAlerts, setEnabledAlerts] = useState<Set<string>>(() => {
     try {
       const saved = localStorage.getItem('stock_alert_preferences')
-      if (saved) {
-        const parsed = JSON.parse(saved) as string[]
-        setEnabledAlerts(new Set(parsed))
-      }
+      if (saved) return new Set(JSON.parse(saved) as string[])
     } catch { /* ignore parse errors */ }
-    setPreferencesLoaded(true)
-  }, [])
+    return new Set()
+  })
+  const hasLoadedRef = useRef(false)
 
   const loadInventory = useCallback(async () => {
     if (!profile?.branch_id) {
@@ -80,7 +74,10 @@ export default function StockAlertsPage() {
   }, [profile])
 
   useEffect(() => {
-    void loadInventory()
+    const fetchData = async () => {
+      await loadInventory()
+    }
+    fetchData()
   }, [loadInventory])
 
   const stockAlerts: StockAlertItem[] = useMemo(() => {
@@ -104,7 +101,7 @@ export default function StockAlertsPage() {
         quantity,
         reorder_level: reorderLevel,
         status,
-        alerts_enabled: preferencesLoaded && enabledAlerts.has(item.product_id),
+        alerts_enabled: enabledAlerts.has(item.product_id),
       }
     })
   }, [inventory, enabledAlerts])
@@ -266,17 +263,12 @@ export default function StockAlertsPage() {
               ))}
             </div>
           ) : filteredAlerts.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
-                <Bell className="h-6 w-6 text-muted-foreground" />
-              </div>
-              <p className="text-lg font-medium">No stock alerts</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                {alertFilter !== 'all'
-                  ? 'No items match the selected filter.'
-                  : 'All items have adequate stock levels.'}
-              </p>
-            </div>
+            <EmptyState
+              icon={Bell}
+              title="No stock alerts"
+              description={alertFilter !== 'all' ? 'No items match the selected filter.' : 'All items have adequate stock levels.'}
+              compact
+            />
           ) : (
             <Table>
               <TableHeader>

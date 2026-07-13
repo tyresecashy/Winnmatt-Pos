@@ -113,7 +113,7 @@ export async function getWeeklySalesTrend(branchId: string) {
     const dailyMap: Record<string, { sales: number; count: number }> = {}
 
     salesData.forEach((s) => {
-      const dateStr = getNairobiDateKey(s.created_at)
+      const dateStr = getNairobiDateKey(s.created_at ?? '')
 
       if (!dailyMap[dateStr]) {
         dailyMap[dateStr] = { sales: 0, count: 0 }
@@ -438,7 +438,7 @@ export async function getRecentTransactions(branchId: string, limit: number = 5)
     }
 
     // Get customer info
-    const customerIds = [...new Set(salesData.map((s) => s.customer_id).filter(Boolean))]
+    const customerIds = [...new Set(salesData.map((s) => s.customer_id).filter((id): id is string => Boolean(id)))]
     const { data: customers } =
       customerIds.length > 0
         ? await supabaseAdmin
@@ -519,7 +519,7 @@ export async function getSeasonalInsights(branchId: string) {
     const monthProjection = daysElapsed > 0 ? Math.round(monthTotal * (daysInMonth / daysElapsed)) : monthTotal
 
     // Get customer types for retail vs wholesale
-    const customerIds = [...new Set(monthSalesData.map((s) => s.customer_id).filter(Boolean))]
+    const customerIds = [...new Set(monthSalesData.map((s) => s.customer_id).filter((id): id is string => Boolean(id)))]
     const { data: customers } = await supabaseAdmin
       .from('customers')
       .select('id, type')
@@ -533,7 +533,7 @@ export async function getSeasonalInsights(branchId: string) {
     // Calculate retail vs wholesale
     const retailVsWholesale = { retail: 0, wholesale: 0 }
     monthSalesData.forEach((sale) => {
-      const customerType = customerTypeMap[sale.customer_id] || 'retail'
+      const customerType = customerTypeMap[sale.customer_id ?? ''] || 'retail'
       if (customerType === 'wholesale') {
         retailVsWholesale.wholesale += sale.total_amount
       } else {

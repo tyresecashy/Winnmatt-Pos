@@ -36,6 +36,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Plus, Search, MoreHorizontal, Pencil, Shield, ShieldCheck, User, Key, MapPin, AlertCircle, Loader2, XCircle, SearchX } from "lucide-react"
+import { EmptyState } from "@/components/ui/empty-state"
 import { formatDate } from "@/lib/date-time"
 import { getUsers, resetUserPassword, deactivateUser, reactivateUser } from "@/lib/user-management"
 import { AddUserDialog } from "@/components/users/add-user-dialog"
@@ -326,22 +327,12 @@ export default function UsersPage() {
             </CardHeader>
             <CardContent>
               {filteredUsers.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
-                    {users.length === 0
-                      ? <User className="h-6 w-6 text-muted-foreground" />
-                      : <SearchX className="h-6 w-6 text-muted-foreground" />
-                    }
-                  </div>
-                  <p className="text-lg font-medium">
-                    {users.length === 0 ? 'No users yet' : 'No users match your search'}
-                  </p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {users.length === 0
-                      ? 'Invite users to collaborate on this workspace.'
-                      : 'Try different search terms.'}
-                  </p>
-                </div>
+                <EmptyState
+                  icon={users.length === 0 ? User : SearchX}
+                  title={users.length === 0 ? 'No users yet' : 'No users match your search'}
+                  description={users.length === 0 ? 'Invite users to collaborate on this workspace.' : 'Try different search terms.'}
+                  compact
+                />
               ) : (
                 <Table>
                   <TableHeader>
@@ -389,7 +380,7 @@ export default function UsersPage() {
                             variant="outline"
                             className={user.status === 'active' 
                               ? 'bg-green-100 text-green-700 border-green-300'
-                              : 'bg-gray-100 text-gray-700 border-gray-300'
+                              : 'bg-muted text-muted-foreground border'
                             }
                           >
                             {user.status === 'active' ? 'Active' : 'Inactive'}

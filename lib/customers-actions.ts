@@ -108,14 +108,15 @@ export async function getCustomerById(customerId: string) {
 
     // Get purchase stats from sales
     const { data: stats, error: statsError } = await supabaseAdmin
-      .rpc('get_customer_stats', { customer_id: customerId })
+      .rpc('get_customer_stats' as any, { p_customer_id: customerId } as any)
 
     if (!statsError && stats) {
+      const statsArr = (stats || []) as unknown as Array<{ total_purchases: number; purchase_count: number; last_visit: string | null }>
       return {
         ...customer,
-        total_purchases: stats[0]?.total_purchases || 0,
-        purchase_count: stats[0]?.purchase_count || 0,
-        last_visit: stats[0]?.last_visit,
+        total_purchases: statsArr[0]?.total_purchases || 0,
+        purchase_count: statsArr[0]?.purchase_count || 0,
+        last_visit: statsArr[0]?.last_visit,
       }
     }
 
@@ -307,7 +308,7 @@ export async function createCustomer(
     logger.error('Error creating customer:', error)
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to create customer',
+      error: 'Operation failed. Please try again.',
     }
   }
 }
@@ -366,7 +367,7 @@ export async function updateCustomer(
     logger.error('Error updating customer:', error)
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to update customer',
+      error: 'Operation failed. Please try again.',
     }
   }
 }
@@ -399,7 +400,9 @@ export async function getCustomersWithStats() {
 
     // Calculate stats per customer
     const statsMap: Record<string, { total_purchases: number; purchase_count: number }> = {}
-    stats?.forEach((sale) => {
+    const statsArr = (stats || []) as unknown as Array<{ customer_id: string | null; total_amount: number }>
+    statsArr?.forEach((sale) => {
+      if (!sale.customer_id) return
       if (!statsMap[sale.customer_id]) {
         statsMap[sale.customer_id] = {
           total_purchases: 0,

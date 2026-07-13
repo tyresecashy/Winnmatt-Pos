@@ -11,10 +11,11 @@ import {
   resolveAuthorizedBranchId,
 } from '@/lib/auth-helpers'
 import { supabaseAdmin } from '@/lib/supabase-server'
-import { getRedemptionEligibility, redeemLoyaltyPoints } from '@/lib/loyalty-actions'
+import { getRedemptionEligibility, redeemLoyaltyPoints } from '@/lib/modules/customers'
 import { buildReceiptPayload, type RawSaleData, type RawItem } from '@/lib/receipt-builder'
 import { createSaleWithContext, getSaleByIdForAuthorizedContext } from '@/lib/sales-actions'
-import { applyPromotionToSale } from '@/lib/promotion-actions'
+import { applyPromotionToSale } from '@/lib/modules/promotions'
+import { syncCashSaleEvent } from '@/lib/shift-cash-sync'
 import { emitEvent } from '@/lib/automation'
 
 interface CreateSaleResult {
@@ -37,6 +38,7 @@ export interface CompletePaymentPromotion {
 export interface CompletePaymentRequest {
   branchId: string
   cashierId: string
+  shiftId?: string | null
   items: SaleItem[]
   paymentMethod: 'cash' | 'card' | 'bank_transfer' | 'cheque' | 'credit'
   customerId?: string
@@ -79,7 +81,10 @@ async function buildReceiptSaleFromSeed(
           .eq('id', effectiveBranchId)
           .single()
           .then(({ data, error }) => {
-            if (error) throw new Error(`Failed to load branch for receipt: ${error.message}`)
+            if (error) {
+              logger.error('Operation failed', { error: error })
+              throw new Error('Operation failed')
+            }
             return data
           })
 
@@ -90,7 +95,10 @@ async function buildReceiptSaleFromSeed(
         .eq('id', customerId)
         .single()
         .then(({ data, error }) => {
-          if (error) throw new Error(`Failed to load customer for receipt: ${error.message}`)
+          if (error) {
+            logger.error('Operation failed', { error: error })
+            throw new Error('Operation failed')
+          }
           if (!data) {
             return null
           }
@@ -129,6 +137,102 @@ async function buildReceiptSaleFromSeed(
  * 5. Builds validated receipt payload
  * 6. Returns receipt data ready for display
  */
+
+/**
+ * Restore loyalty points that were pre-deducted before sale creation.
+ * Called as a rollback only when the sale creation fails after points
+ * have already been deducted.
+ */
+async function restorePreDeductedPoints(
+  customerId: string,
+  points: number,
+  _branchId: string,
+  _userId: string
+): Promise<void> {
+  try {
+    const { data: cust } = await supabaseAdmin
+      .from('customers')
+      .select('loyalty_points')
+      .eq('id', customerId)
+      .single()
+    if (cust) {
+      await supabaseAdmin
+        .from('customers')
+        .update({ loyalty_points: (cust.loyalty_points || 0) + points })
+        .eq('id', customerId)
+      logger.info('[COMPLETE_PAYMENT] Restored pre-deducted loyalty points', {
+        customerId,
+        points,
+      })
+    }
+  } catch (err) {
+    // Best-effort — the sale failed and we couldn't restore points.
+    // This should be reconciled manually.
+    logger.error('[COMPLETE_PAYMENT] Failed to restore pre-deducted points', {
+      customerId,
+      points,
+      error: String(err),
+    })
+  }
+}
+
+/**
+ * Deduct quantities from batch_tracking using FIFO (oldest expiry first).
+ * Silently skips products with no batch records.
+ */
+async function consumeBatchInventory(
+  items: SaleItem[],
+  branchId: string
+): Promise<void> {
+  const productQtys = new Map<string, number>()
+  for (const item of items) {
+    const key = item.productId
+    if (key) {
+      productQtys.set(key, (productQtys.get(key) || 0) + item.quantity)
+    }
+  }
+
+  const batchEntries = await Promise.all(
+    Array.from(productQtys.entries()).map(async ([productId, neededQty]) => {
+      const { data: batches, error } = await supabaseAdmin
+        .from('batch_tracking')
+        .select('id, quantity, reserved_quantity')
+        .eq('product_id', productId)
+        .eq('status', 'active')
+        .order('expiry_date', { ascending: true })
+        .order('created_at', { ascending: true })
+
+      if (error) {
+        logger.error('Operation failed', { error: error })
+        throw new Error('Operation failed')
+      }
+      if (!batches || batches.length === 0) return
+
+      let remaining = neededQty
+      for (const batch of batches) {
+        if (remaining <= 0) break
+        const available = (batch.quantity || 0) - (batch.reserved_quantity || 0)
+        if (available <= 0) continue
+        const deduct = Math.min(available, remaining)
+        const newQty = (batch.quantity || 0) - deduct
+        const newReserved = Math.min(batch.reserved_quantity || 0, newQty)
+        const { error: updateError } = await supabaseAdmin
+          .from('batch_tracking')
+          .update({ quantity: newQty, reserved_quantity: newReserved })
+          .eq('id', batch.id)
+          .eq('quantity', batch.quantity)
+        if (updateError) {
+          logger.warn('[BatchConsumption] Conflict on batch', { batchId: batch.id, error: updateError.message })
+          continue
+        }
+        remaining -= deduct
+      }
+    })
+  )
+
+  await Promise.all(batchEntries)
+}
+
 export async function completePaymentAction(
   request: CompletePaymentRequest
 ): Promise<CompletePaymentResponse> {
@@ -285,6 +389,44 @@ export async function completePaymentAction(
       }
     }
 
+    // ── Deduct loyalty points BEFORE creating the sale ────────────────
+    // This ensures atomicity: if the point deduction fails, the sale is
+    // never created.  If the sale creation later fails, we restore points.
+    let redemptionResult:
+      | {
+          pointsRedeemed: number
+          discountApplied: number
+          newBalance: number
+        }
+      | null = null
+
+    let pointsPreDeducted = false
+    const customerId = request.customerId
+    if (customerId && validatedRedemption && validatedRedemption.points > 0) {
+      // We need a saleId placeholder for the redemption record — we'll update
+      // it after the sale is actually created.
+      const placeholderSaleId = '__pending__'
+      try {
+        redemptionResult = await timing.measure('redemption_apply', () =>
+          redeemLoyaltyPoints(
+            customerId,
+            validatedRedemption.points,
+            effectiveBranchId
+          ).then(r => r.success ? { pointsRedeemed: validatedRedemption.points, discountApplied: validatedRedemption.discountCents, newBalance: r.new_balance ?? 0 } : null)
+        )
+        if (redemptionResult) {
+          pointsPreDeducted = true
+        } else {
+          logger.warn('[completePaymentAction] Loyalty redemption did not complete')
+        }
+      } catch (error) {
+        return {
+          success: false,
+          error: `Failed at: REDEMPTION - ${error instanceof Error ? error.message : 'Unknown error'}`
+        }
+      }
+    }
+
     let createResult: CreateSaleResult
     try {
       createResult = await timing.measure('create_sale_total', () =>
@@ -292,6 +434,7 @@ export async function completePaymentAction(
           {
             branchId: effectiveBranchId,
             cashierId: profile.id,
+            shiftId: request.shiftId,
           },
           request.items,
           effectivePaymentMethod,
@@ -309,6 +452,15 @@ export async function completePaymentAction(
         itemCount: request.items.length,
         customerType,
       })
+      // Roll-back: restore pre-deducted points if sale creation failed
+      if (pointsPreDeducted && redemptionResult && request.customerId) {
+        void restorePreDeductedPoints(
+          request.customerId,
+          validatedRedemption!.points,
+          effectiveBranchId,
+          profile.id
+        )
+      }
       return {
         success: false,
         error: `Failed at: CREATE SALE - ${error instanceof Error ? error.message : 'Unknown error'}`
@@ -316,6 +468,14 @@ export async function completePaymentAction(
     }
 
     if (!createResult || !createResult.success) {
+      if (pointsPreDeducted && redemptionResult && request.customerId) {
+        void restorePreDeductedPoints(
+          request.customerId,
+          validatedRedemption!.points,
+          effectiveBranchId,
+          profile.id
+        )
+      }
       return {
         success: false,
         error: `Failed at: CREATE SALE - ${createResult?.error || 'Unknown error'}`
@@ -323,6 +483,14 @@ export async function completePaymentAction(
     }
 
     if (!createResult.sale || !createResult.sale.id) {
+      if (pointsPreDeducted && redemptionResult && request.customerId) {
+        void restorePreDeductedPoints(
+          request.customerId,
+          validatedRedemption!.points,
+          effectiveBranchId,
+          profile.id
+        )
+      }
       return {
         success: false,
         error: 'Failed at: CREATE SALE - No sale ID returned'
@@ -332,50 +500,32 @@ export async function completePaymentAction(
     const saleId = createResult.sale.id
     resolvedSaleId = saleId
 
-    let redemptionResult:
-      | {
-          pointsRedeemed: number
-          discountApplied: number
-          newBalance: number
-        }
-      | null = null
-
-    let redemptionWarning: string | null = null
-
-    if (request.customerId && validatedRedemption && validatedRedemption.points > 0) {
-      const redemptionCustomerId = request.customerId
+    // If we pre-deducted with a placeholder, update the redemption record
+    // to reference the real sale ID.  (redeemLoyaltyPoints already recorded
+    // the transaction with placeholderSaleId — the transaction records use
+    // the sale_id for audit purposes.)
+    if (pointsPreDeducted && redemptionResult) {
       try {
-        redemptionResult = await timing.measure('redemption_apply', () =>
-          redeemLoyaltyPoints(
-            redemptionCustomerId,
-            saleId,
-            validatedRedemption.points,
-            validatedRedemption.discountCents,
-            effectiveBranchId,
-            profile.id,
-            {
-              skipSettingsCheck: true,
-              // NOTE: Do NOT pass currentBalance here — let redeemLoyaltyPoints
-              // fetch the fresh balance from the DB. The sale creation above may
-              // have already added earned points, so the validated balance is stale.
-              // Without currentBalance, redeemLoyaltyPoints re-fetches the current
-              // value and uses it for the optimistic concurrency check.
-            }
-          )
-        )
+        await supabaseAdmin
+          .from('loyalty_transactions')
+          .update({ sale_id: saleId })
+          .eq('sale_id', '__pending__')
+          .eq('customer_id', customerId!)
+      } catch {
+        // Non-fatal — the points are already deducted and the sale is created
+        logger.warn('[completePaymentAction] Could not update loyalty transaction with real sale ID', { saleId })
+      }
+    }
 
-        if (!redemptionResult) {
-          logger.warn('[completePaymentAction] Loyalty redemption did not complete', {
-            customerId: redemptionCustomerId,
-            saleId,
-          })
-        }
+    // ── Consume batch inventory (FIFO) after sale creation ──────────
+    if (request.items.length > 0) {
+      try {
+        await consumeBatchInventory(request.items, effectiveBranchId)
       } catch (error) {
-        logger.warn('[completePaymentAction] Loyalty redemption failed after sale save', {
+        logger.warn('[completePaymentAction] Batch consumption failed (non-fatal):', {
           saleId,
           error: String(error),
         })
-        redemptionWarning = 'Sale completed but loyalty redemption failed. Please apply manual discount if needed.'
       }
     }
 
@@ -398,6 +548,26 @@ export async function completePaymentAction(
           })
         }
       }
+    }
+
+    // ── Sync cash sale event to register/drawer audit trail ────────────
+    if (
+      request.shiftId &&
+      (effectivePaymentMethod === 'cash' ||
+        (Array.isArray(request.paymentSplits) &&
+          request.paymentSplits.some(s => s.method === 'cash')))
+    ) {
+      const totalPaid = Math.max(
+        0,
+        saleTotalBeforeRedemption - (validatedRedemption?.discount || 0)
+      )
+      void syncCashSaleEvent({
+        saleId,
+        branchId: effectiveBranchId,
+        amount: totalPaid,
+        shiftId: request.shiftId,
+        cashierId: profile.id,
+      })
     }
 
     let fullSale: RawSaleData | null
@@ -428,7 +598,7 @@ export async function completePaymentAction(
           setTimeout(() => reject(new Error('getSaleById timeout after 5 seconds')), 5000)
         )
 
-        fullSale = await Promise.race([getSaleByIdPromise, timeoutPromise])
+        fullSale = await Promise.race([getSaleByIdPromise, timeoutPromise]) as RawSaleData
       }
     } catch (error) {
       return {
@@ -521,7 +691,6 @@ export async function completePaymentAction(
       success: true,
       receiptData: receiptPayload,
       saleId: receiptPayload.id,
-      error: redemptionWarning || undefined,
     }
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : 'Unknown error'

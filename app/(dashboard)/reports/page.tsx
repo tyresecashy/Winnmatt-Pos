@@ -7,9 +7,10 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { toast } from '@/hooks/use-toast'
-import { generateTrialBalance, generateProfitAndLoss, generateBalanceSheet, generateCashFlowStatement } from '@/lib/finance-reports'
+import { generateTrialBalance, generateProfitAndLoss, generateBalanceSheet, generateCashFlowStatement, type TrialBalanceRow, type PLReport, type BalanceSheetReport } from '@/lib/modules/finance'
 import { formatKSh } from '@/lib/currency'
 import { exportToCSV, exportToExcel } from '@/lib/export-utils'
 import { BarChart3, FileText, Scale, TrendingUp, RefreshCw, Printer, Download } from 'lucide-react'
@@ -19,20 +20,25 @@ export default function ReportsPage() {
   const [startDate, setStartDate] = useState(`${new Date().getFullYear()}-01-01`)
   const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0])
 
-  const [trialBalance, setTrialBalance] = useState<any>(null)
-  const [plReport, setPlReport] = useState<any>(null)
-  const [balanceSheet, setBalanceSheet] = useState<any>(null)
-  const [cashFlow, setCashFlow] = useState<any>(null)
+  const [trialBalance, setTrialBalance] = useState<TrialBalanceRow | null>(null)
+  const [plReport, setPlReport] = useState<PLReport | null>(null)
+  const [balanceSheet, setBalanceSheet] = useState<BalanceSheetReport | null>(null)
+  const [cashFlow, setCashFlow] = useState<{
+    operating: { netIncome: number; description: string }
+    investing: { items: unknown[]; total: number; description: string }
+    financing: { items: unknown[]; total: number; description: string }
+    cashAccounts: number
+  } | null>(null)
 
   async function loadReport(type: string) {
     setLoading(true)
     try {
       switch (type) {
         case 'trial':
-          setTrialBalance(await generateTrialBalance(startDate, endDate))
+          setTrialBalance(await generateTrialBalance(startDate, endDate) as unknown as TrialBalanceRow)
           break
         case 'pl':
-          setPlReport(await generateProfitAndLoss(startDate, endDate))
+          setPlReport(await generateProfitAndLoss(startDate, endDate) as unknown as PLReport)
           break
         case 'balance':
           setBalanceSheet(await generateBalanceSheet(endDate))
@@ -53,7 +59,7 @@ export default function ReportsPage() {
 
   function handleExportTrialBalance() {
     if (!trialBalance) return
-    const rows = trialBalance.accounts.map((a: any) => ({
+    const rows = trialBalance.accounts.map(a => ({
       Code: a.code,
       Account: a.name,
       Type: a.account_type,
@@ -66,8 +72,8 @@ export default function ReportsPage() {
   function handleExportPL() {
     if (!plReport) return
     const rows = [
-      ...plReport.revenue.map((a: any) => ({ Category: 'Revenue', Account: a.name, Amount: a.balance })),
-      ...plReport.expenses.map((a: any) => ({ Category: 'Expense', Account: a.name, Amount: a.balance })),
+      ...plReport.revenue.map(a => ({ Category: 'Revenue', Account: a.name, Amount: a.balance })),
+      ...plReport.expenses.map(a => ({ Category: 'Expense', Account: a.name, Amount: a.balance })),
     ]
     exportToCSV(rows, `profit-loss-${endDate}`)
   }
@@ -75,9 +81,9 @@ export default function ReportsPage() {
   function handleExportBalanceSheet() {
     if (!balanceSheet) return
     const rows = [
-      ...balanceSheet.assets.map((a: any) => ({ Category: 'Asset', Account: a.name, Amount: a.balance })),
-      ...balanceSheet.liabilities.map((a: any) => ({ Category: 'Liability', Account: a.name, Amount: a.balance })),
-      ...balanceSheet.equity.map((a: any) => ({ Category: 'Equity', Account: a.name, Amount: a.balance })),
+      ...balanceSheet.assets.map(a => ({ Category: 'Asset', Account: a.name, Amount: a.balance })),
+      ...balanceSheet.liabilities.map(a => ({ Category: 'Liability', Account: a.name, Amount: a.balance })),
+      ...balanceSheet.equity.map(a => ({ Category: 'Equity', Account: a.name, Amount: a.balance })),
     ]
     exportToCSV(rows, `balance-sheet-${endDate}`)
   }
@@ -159,7 +165,7 @@ export default function ReportsPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {trialBalance.accounts.map((a: any) => (
+                      {trialBalance.accounts.map(a => (
                         <TableRow key={a.id}>
                           <TableCell className="font-mono text-sm">{a.code}</TableCell>
                           <TableCell>{a.name}</TableCell>
@@ -205,10 +211,10 @@ export default function ReportsPage() {
                         <TableRow><TableHead>Account</TableHead><TableHead className="text-right">Amount</TableHead></TableRow>
                       </TableHeader>
                       <TableBody>
-                        {plReport.revenue.map((a: any) => (
+                        {plReport.revenue.map(a => (
                           <TableRow key={a.id}><TableCell>{a.name}</TableCell><TableCell className="text-right">{formatKSh(a.balance)}</TableCell></TableRow>
                         ))}
-                        {plReport.revenue.length === 0 && <TableRow><TableCell colSpan={2} className="text-muted-foreground">No revenue recorded</TableCell></TableRow>}
+                        {plReport.revenue.length === 0 && <TableRow><TableCell colSpan={2} className="text-muted-foreground"><EmptyState title="No revenue recorded" compact /></TableCell></TableRow>}
                       </TableBody>
                     </Table>
                     <div className="text-right font-bold mt-2">Total Revenue: {formatKSh(plReport.totalRevenue)}</div>
@@ -222,10 +228,10 @@ export default function ReportsPage() {
                         <TableRow><TableHead>Account</TableHead><TableHead className="text-right">Amount</TableHead></TableRow>
                       </TableHeader>
                       <TableBody>
-                        {plReport.expenses.map((a: any) => (
+                        {plReport.expenses.map(a => (
                           <TableRow key={a.id}><TableCell>{a.name}</TableCell><TableCell className="text-right">{formatKSh(a.balance)}</TableCell></TableRow>
                         ))}
-                        {plReport.expenses.length === 0 && <TableRow><TableCell colSpan={2} className="text-muted-foreground">No expenses recorded</TableCell></TableRow>}
+                        {plReport.expenses.length === 0 && <TableRow><TableCell colSpan={2} className="text-muted-foreground"><EmptyState title="No expenses recorded" compact /></TableCell></TableRow>}
                       </TableBody>
                     </Table>
                     <div className="text-right font-bold mt-2">Total Expenses: {formatKSh(plReport.totalExpenses)}</div>
@@ -237,7 +243,7 @@ export default function ReportsPage() {
                   </div>
                 </div>
               ) : (
-                <div className="text-center text-muted-foreground py-8">Click "Profit & Loss" tab to load</div>
+                <div className="text-center text-muted-foreground py-8">Click &quot;Profit & Loss&quot; tab to load</div>
               )}
             </CardContent>
           </Card>
@@ -259,7 +265,7 @@ export default function ReportsPage() {
                   {/* Assets */}
                   <div>
                     <h3 className="text-lg font-semibold mb-3 text-blue-700">Assets</h3>
-                    {balanceSheet.assets.map((a: any) => (
+                    {balanceSheet.assets.map(a => (
                       <div key={a.id} className="flex justify-between py-1 border-b"><span className="text-sm">{a.name}</span><span className="text-sm">{formatKSh(a.balance)}</span></div>
                     ))}
                     <div className="text-right font-bold mt-2 text-blue-800">Total: {formatKSh(balanceSheet.totalAssets)}</div>
@@ -268,7 +274,7 @@ export default function ReportsPage() {
                   {/* Liabilities */}
                   <div>
                     <h3 className="text-lg font-semibold mb-3 text-red-700">Liabilities</h3>
-                    {balanceSheet.liabilities.map((a: any) => (
+                    {balanceSheet.liabilities.map(a => (
                       <div key={a.id} className="flex justify-between py-1 border-b"><span className="text-sm">{a.name}</span><span className="text-sm">{formatKSh(a.balance)}</span></div>
                     ))}
                     <div className="text-right font-bold mt-2 text-red-800">Total: {formatKSh(balanceSheet.totalLiabilities)}</div>
@@ -276,16 +282,16 @@ export default function ReportsPage() {
 
                   {/* Equity */}
                   <div>
-                    <h3 className="text-lg font-semibold mb-3 text-purple-700">Equity</h3>
-                    {balanceSheet.equity.map((a: any) => (
+                    <h3 className="text-lg font-semibold mb-3 text-muted-foreground">Equity</h3>
+                    {balanceSheet.equity.map(a => (
                       <div key={a.id} className="flex justify-between py-1 border-b"><span className="text-sm">{a.name}</span><span className="text-sm">{formatKSh(a.balance)}</span></div>
                     ))}
-                    <div className="text-right font-bold mt-2 text-purple-800">Total: {formatKSh(balanceSheet.totalEquity)}</div>
+                    <div className="text-right font-bold mt-2 text-foreground">Total: {formatKSh(balanceSheet.totalEquity)}</div>
                   </div>
                 </div>
                 </>
               ) : (
-                <div className="text-center text-muted-foreground py-8">Click "Balance Sheet" tab to load</div>
+                <div className="text-center text-muted-foreground py-8">Click &quot;Balance Sheet&quot; tab to load</div>
               )}
             </CardContent>
           </Card>
@@ -308,20 +314,20 @@ export default function ReportsPage() {
                     <p className="text-sm text-blue-700 mt-1">{cashFlow.operating.description}</p>
                     <p className="text-lg font-bold mt-2">Net Income: {formatKSh(cashFlow.operating.netIncome)}</p>
                   </div>
-                  <div className="p-4 bg-gray-50 rounded-lg">
-                    <h3 className="font-semibold text-gray-800">Investing Activities</h3>
-                    <p className="text-sm text-gray-700 mt-1">{cashFlow.investing.description}</p>
+                  <div className="p-4 bg-muted rounded-lg">
+                    <h3 className="font-semibold text-foreground">Investing Activities</h3>
+                    <p className="text-sm text-muted-foreground mt-1">{cashFlow.investing.description}</p>
                     <p className="text-lg font-bold mt-2">Total: {formatKSh(cashFlow.investing.total)}</p>
                   </div>
-                  <div className="p-4 bg-purple-50 rounded-lg">
-                    <h3 className="font-semibold text-purple-800">Financing Activities</h3>
-                    <p className="text-sm text-purple-700 mt-1">{cashFlow.financing.description}</p>
+                  <div className="p-4 bg-muted rounded-lg">
+                    <h3 className="font-semibold text-foreground">Financing Activities</h3>
+                    <p className="text-sm text-muted-foreground mt-1">{cashFlow.financing.description}</p>
                     <p className="text-lg font-bold mt-2">Total: {formatKSh(cashFlow.financing.total)}</p>
                   </div>
                   <p className="text-sm text-muted-foreground">Cash accounts tracked: {cashFlow.cashAccounts}</p>
                 </div>
               ) : (
-                <div className="text-center text-muted-foreground py-8">Click "Cash Flow" tab to load</div>
+                <div className="text-center text-muted-foreground py-8">Click &quot;Cash Flow&quot; tab to load</div>
               )}
             </CardContent>
           </Card>

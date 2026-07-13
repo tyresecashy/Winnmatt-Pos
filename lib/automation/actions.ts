@@ -123,7 +123,7 @@ async function executeAudit(
         timestamp: new Date().toISOString(),
       },
       severity: 'info',
-    })
+    } as any)
 
     logger.info('[Automation] Audit log written', { action, entityType, entityId })
   } catch (err) {

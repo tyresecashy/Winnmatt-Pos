@@ -11,7 +11,8 @@ import {
 } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import { Loader2, History } from "lucide-react"
-import { getStockMovements } from "@/lib/inventory-actions"
+import { EmptyState } from "@/components/ui/empty-state"
+import { getStockMovements } from "@/lib/modules/inventory"
 
 interface StockMovementsDialogProps {
   isOpen: boolean
@@ -33,12 +34,12 @@ interface Movement {
   created_at: string
 }
 
-const movementTypeLabels: Record<string, { label: string; color: string }> = {
+const movementTypeLabels: Record<string, { label: string; color: "default" | "secondary" | "destructive" | "outline" }> = {
   sale: { label: "Sale", color: "destructive" },
   receipt: { label: "Purchase Receipt", color: "default" },
   transfer: { label: "Transfer", color: "secondary" },
   adjustment: { label: "Adjustment", color: "outline" },
-  damage: { label: "Damage", color: "warning" },
+  damage: { label: "Damage", color: "destructive" },
 }
 
 export function StockMovementsDialog({
@@ -54,7 +55,7 @@ export function StockMovementsDialog({
     setIsLoading(true)
     try {
       const data = await getStockMovements(product.id, branchId)
-      setMovements(data)
+      setMovements(data as unknown as Movement[])
     } catch (error) {
       logger.error("Failed to load stock movements:", error)
     } finally {
@@ -90,7 +91,7 @@ export function StockMovementsDialog({
             </div>
           ) : movements.length === 0 ? (
             <div className="py-8 text-center">
-              <p className="text-muted-foreground">No stock movements recorded</p>
+              <EmptyState title="No stock movements recorded" compact />
             </div>
           ) : (
             <div className="space-y-3">
@@ -102,7 +103,7 @@ export function StockMovementsDialog({
                 return (
                   <div key={movement.id} className="border rounded-lg p-3 space-y-1">
                     <div className="flex items-center justify-between">
-                      <Badge variant={typeInfo.color as any}>{typeInfo.label}</Badge>
+                      <Badge variant={typeInfo.color}>{typeInfo.label}</Badge>
                       <span className={`font-semibold ${isIncrease ? "text-green-600" : "text-red-600"}`}>
                         {isIncrease ? "+" : "-"}{absQty}
                       </span>

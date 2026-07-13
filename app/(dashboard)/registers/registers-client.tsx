@@ -30,7 +30,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatKSh } from '@/lib/currency'
 import { useToast } from '@/components/ui/use-toast'
-import { createRegister, updateRegister } from '@/lib/cash-actions'
+import { EmptyState } from '@/components/ui/empty-state'
+import { createRegister, updateRegister } from '@/lib/modules/cash'
 
 interface Register {
   id: string
@@ -78,17 +79,17 @@ interface Cashier {
   role: string
 }
 
-const statusConfig: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' | 'warning' }> = {
+const statusConfig: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' | 'ghost' }> = {
   online: { label: 'Online', variant: 'default' },
   offline: { label: 'Offline', variant: 'secondary' },
-  maintenance: { label: 'Maintenance', variant: 'warning' },
+  maintenance: { label: 'Maintenance', variant: 'secondary' as const },
   disabled: { label: 'Disabled', variant: 'destructive' },
 }
 
-const hwStatusConfig: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' | 'warning' }> = {
+const hwStatusConfig: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' | 'ghost' }> = {
   connected: { label: 'Connected', variant: 'default' },
   disconnected: { label: 'Disconnected', variant: 'destructive' },
-  error: { label: 'Error', variant: 'warning' },
+  error: { label: 'Error', variant: 'secondary' as const },
   unknown: { label: 'Unknown', variant: 'secondary' },
 }
 
@@ -102,7 +103,7 @@ export function RegistersClient({
 }: {
   initialRegisters: Register[]
   initialDrawers: Drawer[]
-  summary: any
+  summary: { totalCashIn: number; totalCashOut: number; netCash: number; openDrawers: number; totalDrawers: number; totalVariance: number; eventCount: number } | null
   branches: Branch[]
   cashiers: Cashier[]
   currentBranchId: string | null
@@ -266,9 +267,7 @@ export function RegistersClient({
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {filtered.length === 0 ? (
           <Card className="col-span-full">
-            <CardContent className="py-12 text-center text-muted-foreground">
-              No registers found
-            </CardContent>
+            <EmptyState title="No registers found" compact />
           </Card>
         ) : filtered.map((reg) => {
           const cfg = statusConfig[reg.status] || { label: reg.status, variant: 'secondary' as const }
@@ -293,7 +292,7 @@ export function RegistersClient({
                     )}
                   </div>
                   <div className="flex flex-col items-end gap-1">
-                    <Badge variant={cfg.variant as any}>{cfg.label}</Badge>
+                    <Badge variant={cfg.variant as 'default' | 'secondary' | 'destructive' | 'outline' | 'ghost'}>{cfg.label}</Badge>
                     <div className="flex items-center gap-1 text-xs">
                       <Battery className="h-3 w-3" />
                       {reg.battery_level !== null ? `${reg.battery_level}%` : 'N/A'}
@@ -393,7 +392,7 @@ export function RegistersClient({
             <TableBody>
               {initialDrawers.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-6">No drawers configured</TableCell>
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-6"><EmptyState title="No drawers configured" compact /></TableCell>
                 </TableRow>
               ) : initialDrawers.map(d => (
                 <TableRow key={d.id}>

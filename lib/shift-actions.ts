@@ -3,18 +3,22 @@
 import { logger } from '@/lib/logger'
 import { emitEvent } from '@/lib/automation'
 import { supabaseAdmin } from '@/lib/supabase-server'
+import { syncShiftOpenCash, syncShiftCloseCash } from '@/lib/shift-cash-sync'
 
 /**
  * OPEN SHIFT - Start a new cashier shift
  * - Creates shift record
  * - Records opening float
  * - Ties shift to cashier and branch
+ * - Syncs with register/drawer cash management
  * - Can only open one shift per cashier per day
  */
 export async function openShift(
   branchId: string,
   cashierId: string,
-  openingFloat: number // in KES
+  openingFloat: number, // in KES
+  registerId?: string,
+  drawerId?: string
 ) {
   try {
     // Validation 1: Check if cashier already has open shift today
@@ -121,6 +125,18 @@ export async function openShift(
 
     if (auditError) throw auditError
 
+    // Step 4: Sync with cash management (register/drawer) if a register was selected
+    if (registerId) {
+      await syncShiftOpenCash({
+        shiftId: newShift.id,
+        branchId,
+        cashierId,
+        openingFloat,
+        registerId,
+        drawerId,
+      })
+    }
+
     // Emit automation event (fire-and-forget)
     emitEvent({
       eventType: 'shift.opened',
@@ -144,7 +160,7 @@ export async function openShift(
     logger.error('Error opening shift:', error)
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to open shift',
+      error: 'Operation failed. Please try again.',
     }
   }
 }
@@ -159,7 +175,9 @@ export async function getActiveShift(branchId: string, cashierId: string) {
       .select(`
         *,
         cashier:users!cashier_id(id, full_name),
-        branch:branches!branch_id(id, name)
+        branch:branches!branch_id(id, name),
+        register:registers!register_id(id, register_name),
+        drawer:cash_drawers!drawer_id(id, drawer_name)
       `)
       .eq('branch_id', branchId)
       .eq('cashier_id', cashierId)
@@ -313,6 +331,20 @@ export async function closeShift(
 
     if (auditError) throw auditError
 
+    // Step 4: Sync with cash management (register/drawer) if the shift is linked to one
+    if (shift.register_id && shift.drawer_id) {
+      await syncShiftCloseCash({
+        shiftId,
+        branchId: shift.branch_id,
+        cashierId,
+        countedCash,
+        expectedCash,
+        difference,
+        registerId: shift.register_id,
+        drawerId: shift.drawer_id,
+      })
+    }
+
     // Emit automation event (fire-and-forget)
     emitEvent({
       eventType: 'shift.closed',
@@ -353,7 +385,7 @@ export async function closeShift(
     logger.error('Error closing shift:', error)
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to close shift',
+      error: 'Operation failed. Please try again.',
     }
   }
 }
@@ -492,7 +524,7 @@ export async function reopenShift(
     logger.error('Error reopening shift:', error)
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to reopen shift',
+      error: 'Operation failed. Please try again.',
     }
   }
 }

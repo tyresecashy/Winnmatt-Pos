@@ -1,0 +1,380 @@
+﻿node.exe : npm warn exec The following package was not found and will be installed: fallow@3.3.0
+At C:\Users\tyres\AppData\Roaming\npm\npx.ps1:24 char:5
++     & "node$exe"  "$basedir/node_modules/npm/bin/npx-cli.js" $args
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (npm warn exec T...d: fallow@3.3.0:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+Would remove export from lib\modules\workforce\index.ts:214 `getEmployeesLegacy`
+Would remove export from lib\modules\workforce\index.ts:203 `updateGoalProgress`
+Would remove export from lib\modules\workforce\index.ts:83 `WORKFORCE_EVENTS`
+Would remove export from db\archived\mobile-app\app\screens\TaskDashboardScreen.tsx:40 `default`
+Would remove export from lib\enterprise\incidents\incident-center.ts:46 `IncidentCenterService`
+Would remove export from lib\modules\inventory\index.ts:137 `adjustInventoryStock`
+Would remove export from lib\modules\inventory\index.ts:119 `dismissReorderSuggestion`
+Would remove export from lib\modules\inventory\index.ts:111 `getProductDetails`
+Would remove export from lib\modules\inventory\index.ts:110 `setReorderLevel`
+Would remove export from lib\modules\inventory\index.ts:109 `adjustStockQuantity`
+Would remove export from lib\modules\inventory\index.ts:108 `createStockMovement`
+Would remove export from lib\modules\inventory\index.ts:107 `updateInventory`
+Would remove export from lib\modules\inventory\index.ts:106 `getInventoryForProduct`
+Would remove export from lib\modules\inventory\index.ts:104 `getProductById`
+Would remove export from lib\modules\inventory\index.ts:83 `INVENTORY_EVENTS`
+Would remove export from components\ui\badge.tsx:49 `badgeVariants`
+Would remove export from components\ui\tooltip.tsx:57 `TooltipProvider`
+Would remove export from lib\api\middleware.ts:149 `requireRole`
+Would remove export from lib\api\middleware.ts:139 `withCORS`
+Would remove export from lib\api-schemas.ts:49 `mpesaCallbackSchema`
+Would remove export from lib\api-schemas.ts:28 `mpesaCallbackItemSchema`
+Would remove export from lib\api-schemas.ts:4 `priceApproveActionSchema`
+Would remove export from lib\modules\branches\index.ts:33 `getBranchById`
+Would remove export from lib\export-utils.ts:135 `formatExportCurrency`
+Would remove export from lib\export-utils.ts:124 `formatExportDate`
+Would remove export from lib\export-utils.ts:80 `printHTML`
+Would remove export from lib\export-utils.ts:71 `exportToJSON`
+Would remove export from lib\export-utils.ts:39 `exportToExcel`
+Would remove export from components\ui\use-toast.ts:74 `reducer`
+Would remove export from db\archived\mobile-app\app\screens\BarcodeScannerScreen.tsx:25 `default`
+Would remove export from lib\modules\automation\index.ts:67 `deleteAction`
+Would remove export from lib\modules\automation\index.ts:66 `upsertAction`
+Would remove export from lib\modules\automation\index.ts:65 `deleteCondition`
+Would remove export from lib\modules\automation\index.ts:64 `upsertCondition`
+Would remove export from lib\modules\automation\index.ts:59 `getAutomationRule`
+Would remove export from lib\modules\automation\index.ts:17 `ALL_EVENTS`
+Would remove export from lib\analytics\sales-analytics.ts:48 `SalesAnalyticsService`
+Would remove export from lib\modules\promotions\index.ts:31 `getPromotionById`
+Would remove export from components\ui\scroll-area.tsx:55 `ScrollBar`
+Would remove export from lib\types\database.ts:8845 `Constants`
+Would remove export from lib\ai\tool-registry.ts:68 `ToolRegistry`
+Would remove export from components\dashboard\seasonal-insights.tsx:25 `SeasonalInsights`
+Would remove export from lib\modules\customers\index.ts:281 `getCustomersWithStats`
+Would remove export from lib\modules\customers\index.ts:124 `getCustomerById`
+Would remove export from lib\modules\customers\index.ts:60 `CUSTOMER_EVENTS`
+Would remove export from lib\payroll-calculations.ts:102 `computeTaxPreview`
+Would remove export from db\archived\mobile-app\app\screens\TimeClockScreen.tsx:29 `default`
+Would remove export from lib\modules\ai\index.ts:32 `aiConfirmAction`
+Would remove export from lib\modules\ai\index.ts:31 `aiExecute`
+Would remove export from lib\modules\ai\index.ts:22 `analyzeFinancialInsights`
+Would remove export from db\archived\mobile-app\lib\offline-storage.ts:205 `offlineStorage`
+Would remove export from lib\analytics\report-builder.ts:53 `ReportBuilderService`
+Would remove export from lib\product-normalizer.ts:294 `getStagingProducts`
+Would remove export from lib\product-normalizer.ts:208 `normalizeProduct`
+Would remove export from lib\product-normalizer.ts:183 `calculateConfidenceScore`
+Would remove export from lib\product-normalizer.ts:112 `extractBrand`
+Would remove export from lib\product-normalizer.ts:92 `normalizeName`
+Would remove export from lib\product-normalizer.ts:60 `normalizeUnit`
+Would remove export from lib\date-time.ts:1 `NAIROBI_TIME_ZONE`
+Would remove export from components\products\product-dialog.tsx:56 `ProductForm`
+Would remove export from hooks\use-toast.ts:74 `reducer`
+Would remove export from lib\realtime\event-bus.ts:46 `shutdownEventBus`
+Would remove export from lib\realtime\event-bus.ts:38 `matchEvents`
+Would remove export from lib\modules\warehouse\index.ts:123 `recordStockMovement`
+Would remove export from lib\modules\warehouse\index.ts:114 `getProductStockMovements`
+Would remove export from lib\modules\warehouse\index.ts:76 `getLocationById`
+Would remove export from lib\modules\warehouse\index.ts:29 `getWarehouseById`
+Would remove export from components\ui\alert.tsx:76 `AlertAction`
+Would remove export from db\archived\mobile-app\app\screens\PhotoCaptureScreen.tsx:24 `default`
+Would remove export from lib\analytics\index.ts:25 `AnalyticsService`
+Would remove export from lib\analytics\workforce-analytics.ts:55 `WorkforceAnalyticsService`
+Would remove export from lib\enterprise\health\health-center.ts:38 `HealthCenterService`
+Would remove export from lib\modules\cash\index.ts:168 `reopenShift`
+Would remove export from lib\modules\cash\index.ts:159 `getShiftHistory`
+Would remove export from lib\modules\cash\index.ts:150 `getShiftSummary`
+Would remove export from lib\modules\expenses\index.ts:216 `getInvoiceStats`
+Would remove export from lib\modules\expenses\index.ts:180 `getInvoice`
+Would remove export from lib\modules\expenses\index.ts:171 `getInvoices`
+Would remove export from lib\modules\expenses\index.ts:68 `getExpenseById`
+Would remove export from lib\modules\tax\index.ts:134 `getDefaultTaxRate`
+Would remove export from lib\supplier-portal\supplier-service.ts:89 `SupplierPortalService`
+Would remove export from lib\i18n.tsx:156 `useTranslations`
+Would remove export from lib\offline-storage.ts:368 `syncPendingSales`
+Would remove export from lib\offline-storage.ts:352 `waitForOnline`
+Would remove export from lib\offline-storage.ts:348 `isOnline`
+Would remove export from lib\offline-storage.ts:342 `setSetting`
+Would remove export from lib\offline-storage.ts:337 `getSetting`
+Would remove export from lib\offline-storage.ts:331 `clearCart`
+Would remove export from lib\offline-storage.ts:326 `getCart`
+Would remove export from lib\offline-storage.ts:319 `saveCart`
+Would remove export from lib\offline-storage.ts:288 `clearSyncedSales`
+Would remove export from lib\offline-storage.ts:284 `removePendingSale`
+Would remove export from lib\offline-storage.ts:263 `getPendingSalesCount`
+Would remove export from lib\offline-storage.ts:250 `queuePendingSale`
+Would remove export from lib\offline-storage.ts:215 `searchCachedCustomers`
+Would remove export from lib\offline-storage.ts:211 `getCachedCustomers`
+Would remove export from lib\offline-storage.ts:203 `cacheCustomers`
+Would remove export from lib\offline-storage.ts:186 `getProductByBarcode`
+Would remove export from lib\offline-storage.ts:175 `searchCachedProducts`
+Would remove export from lib\offline-storage.ts:171 `getCachedProducts`
+Would remove export from lib\offline-storage.ts:163 `cacheProducts`
+Would remove export from lib\offline-storage.ts:27 `initOfflineDB`
+Would remove export from lib\realtime\types.ts:10 `EventTypes`
+Would remove export from lib\enterprise\observability\observability-service.ts:94 `ObservabilityService`
+Would remove export from lib\enterprise\security\security-center.ts:78 `SecurityCenterService`
+Would remove export from lib\modules\suppliers\index.ts:236 `getSupplierReturnStats`
+Would remove export from lib\modules\suppliers\index.ts:234 `getSupplierInvoiceStats`
+Would remove export from lib\modules\suppliers\index.ts:230 `cancelSupplierReturnAction`
+Would remove export from lib\modules\suppliers\index.ts:49 `searchSuppliers`
+Would remove export from lib\modules\finance\index.ts:664 `completeReconciliation`
+Would remove export from lib\modules\finance\index.ts:478 `getAccountsByType`
+Would remove export from lib\modules\finance\index.ts:133 `FINANCE_EVENTS`
+Would remove export from lib\analytics\inventory-analytics.ts:61 `InventoryAnalyticsService`
+Would remove export from lib\api\response.ts:72 `apiConflict`
+Would remove export from lib\api\response.ts:64 `apiForbidden`
+Would remove export from lib\api\response.ts:60 `apiUnauthorized`
+Would remove export from lib\api\response.ts:44 `apiError`
+Would remove export from lib\api\response.ts:21 `apiNoContent`
+Would remove export from lib\analytics\financial-analytics.ts:47 `FinancialAnalyticsService`
+Would remove export from lib\multi-branch\branch-service.ts:69 `BranchService`
+Would remove export from lib\customer-app\customer-service.ts:503 `customerAppService`
+Would remove export from lib\customer-app\customer-service.ts:82 `CustomerAppService`
+Would remove export from components\ui\tabs.tsx:90 `tabsListVariants`
+Would remove export from contexts\branch-context.tsx:24 `BranchProvider`
+Would remove export from lib\motion.ts:122 `prefersReducedMotion`
+Would remove export from lib\motion.ts:102 `animateCounter`
+Would remove export from lib\motion.ts:72 `fadeUpItem`
+Would remove export from lib\motion.ts:60 `staggerContainer`
+Would remove export from lib\motion.ts:35 `cardHover`
+Would remove export from lib\motion.ts:32 `tapScale`
+Would remove export from lib\motion.ts:31 `hoverScale`
+Would remove export from lib\motion.ts:19 `easings`
+Would remove export from lib\motion.ts:7 `durations`
+Would remove export from lib\supabase-server.ts:380 `getSupabaseAdmin`
+Would remove export from db\archived\mobile-app\app\screens\CustomerDashboardScreen.tsx:38 `default`
+Would remove export from db\archived\mobile-app\app\screens\TaskDetailScreen.tsx:34 `default`
+Would remove export from lib\modules\sales\index.ts:257 `holdSale`
+Would remove export from lib\modules\sales\index.ts:88 `SALE_EVENTS`
+Would remove export from components\ui\calendar.tsx:222 `CalendarDayButton`
+Would remove export from components\ui\kbd.tsx:26 `KbdGroup`
+Would remove export from lib\modules\transfers\index.ts:134 `updateTransferStatus`
+Would remove export from lib\modules\transfers\index.ts:116 `getLegacyTransfers`
+Would remove export from lib\modules\transfers\index.ts:107 `getTransferWizards`
+Would remove export from lib\auth-helpers.ts:534 `authorizeTransferProfile`
+Would remove export from lib\auth-helpers.ts:108 `loadUserProfile`
+Would remove export from lib\auth-helpers.ts:39 `extractDebugUserId`
+Would remove export from lib\enterprise\performance\performance-lab.ts:57 `PerformanceLabService`
+Would remove `@radix-ui/react-accordion` from dependencies in C:\Users\tyres\Desktop\Projects\winnmatt_pos\package.json
+Would remove `@radix-ui/react-alert-dialog` from dependencies in 
+C:\Users\tyres\Desktop\Projects\winnmatt_pos\package.json
+Would remove `@radix-ui/react-aspect-ratio` from dependencies in 
+C:\Users\tyres\Desktop\Projects\winnmatt_pos\package.json
+Would remove `@radix-ui/react-avatar` from dependencies in C:\Users\tyres\Desktop\Projects\winnmatt_pos\package.json
+Would remove `@radix-ui/react-checkbox` from dependencies in C:\Users\tyres\Desktop\Projects\winnmatt_pos\package.json
+Would remove `@radix-ui/react-collapsible` from dependencies in 
+C:\Users\tyres\Desktop\Projects\winnmatt_pos\package.json
+Would remove `@radix-ui/react-context-menu` from dependencies in 
+C:\Users\tyres\Desktop\Projects\winnmatt_pos\package.json
+Would remove `@radix-ui/react-dialog` from dependencies in C:\Users\tyres\Desktop\Projects\winnmatt_pos\package.json
+Would remove `@radix-ui/react-dropdown-menu` from dependencies in 
+C:\Users\tyres\Desktop\Projects\winnmatt_pos\package.json
+Would remove `@radix-ui/react-hover-card` from dependencies in 
+C:\Users\tyres\Desktop\Projects\winnmatt_pos\package.json
+Would remove `@radix-ui/react-menubar` from dependencies in C:\Users\tyres\Desktop\Projects\winnmatt_pos\package.json
+Would remove `@radix-ui/react-navigation-menu` from dependencies in 
+C:\Users\tyres\Desktop\Projects\winnmatt_pos\package.json
+Would remove `@radix-ui/react-popover` from dependencies in C:\Users\tyres\Desktop\Projects\winnmatt_pos\package.json
+Would remove `@radix-ui/react-progress` from dependencies in C:\Users\tyres\Desktop\Projects\winnmatt_pos\package.json
+Would remove `@radix-ui/react-radio-group` from dependencies in 
+C:\Users\tyres\Desktop\Projects\winnmatt_pos\package.json
+Would remove `@radix-ui/react-scroll-area` from dependencies in 
+C:\Users\tyres\Desktop\Projects\winnmatt_pos\package.json
+Would remove `@radix-ui/react-select` from dependencies in C:\Users\tyres\Desktop\Projects\winnmatt_pos\package.json
+Would remove `@radix-ui/react-separator` from dependencies in C:\Users\tyres\Desktop\Projects\winnmatt_pos\package.json
+Would remove `@radix-ui/react-slider` from dependencies in C:\Users\tyres\Desktop\Projects\winnmatt_pos\package.json
+Would remove `@radix-ui/react-switch` from dependencies in C:\Users\tyres\Desktop\Projects\winnmatt_pos\package.json
+Would remove `@radix-ui/react-tabs` from dependencies in C:\Users\tyres\Desktop\Projects\winnmatt_pos\package.json
+Would remove `@radix-ui/react-toggle` from dependencies in C:\Users\tyres\Desktop\Projects\winnmatt_pos\package.json
+Would remove `@radix-ui/react-toggle-group` from dependencies in 
+C:\Users\tyres\Desktop\Projects\winnmatt_pos\package.json
+Would remove `@radix-ui/react-tooltip` from dependencies in C:\Users\tyres\Desktop\Projects\winnmatt_pos\package.json
+Would remove `autoprefixer` from dependencies in C:\Users\tyres\Desktop\Projects\winnmatt_pos\package.json
+Would remove `embla-carousel-react` from dependencies in C:\Users\tyres\Desktop\Projects\winnmatt_pos\package.json
+Would remove `input-otp` from dependencies in C:\Users\tyres\Desktop\Projects\winnmatt_pos\package.json
+Would remove `jspdf` from dependencies in C:\Users\tyres\Desktop\Projects\winnmatt_pos\package.json
+Would remove `jspdf-autotable` from dependencies in C:\Users\tyres\Desktop\Projects\winnmatt_pos\package.json
+Would remove `react-resizable-panels` from dependencies in C:\Users\tyres\Desktop\Projects\winnmatt_pos\package.json
+Would remove `sonner` from dependencies in C:\Users\tyres\Desktop\Projects\winnmatt_pos\package.json
+Would remove `vaul` from dependencies in C:\Users\tyres\Desktop\Projects\winnmatt_pos\package.json
+Would remove `@eslint/eslintrc` from devDependencies in C:\Users\tyres\Desktop\Projects\winnmatt_pos\package.json
+Would create .fallowrc.json with 38 ignoreExports rule(s):
+--- .fallowrc.json (does not exist)
++++ .fallowrc.json (proposed)
+@@ -0,0 +1,177 @@
++{
++  // This file is JSONC: fallow reads these comments; generic JSON tools may not.
++  "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
++  "entry": [
++    "src/index.{ts,tsx,js,jsx}",
++    "src/main.{ts,tsx,js,jsx}"
++  ],
++  "duplicates": {
++    // Hide pair-only clones; focus on widespread copy-paste
++    // worth refactoring. Lower to 2 to report every duplicate pair.
++    "minOccurrences": 3
++    // Common additions (uncomment to enable):
++    // "ignore": [
++    //   "**/lib/**",          // for repos that publish transpiled output to lib/
++    //   "**/legacy/**",       // for repos with legacy-build artifacts
++    //   "**/__generated__/**", // Relay, GraphQL Code Generator
++    //   "**/generated/**"     // OpenAPI, Protobuf codegen
++    // ]
++  },
++  "rules": {
++    "unused-dependencies": "warn"
++  },
++  "ignoreExports": [
++    {
++      "file": "lib/finance-actions.ts",
++      "exports": ["*"]
++    },
++    {
++      "file": "lib/modules/finance/index.ts",
++      "exports": ["*"]
++    },
++    {
++      "file": "lib/bulk-operations-actions.ts",
++      "exports": ["*"]
++    },
++    {
++      "file": "lib/supabase-server.ts",
++      "exports": ["*"]
++    },
++    {
++      "file": "lib/types/database.ts",
++      "exports": ["*"]
++    },
++    {
++      "file": "lib/automation/types.ts",
++      "exports": ["*"]
++    },
++    {
++      "file": "lib/modules/automation/index.ts",
++      "exports": ["*"]
++    },
++    {
++      "file": "lib/purchase-actions.ts",
++      "exports": ["*"]
++    },
++    {
++      "file": "lib/purchase-order-actions.ts",
++      "exports": ["*"]
++    },
++    {
++      "file": "components/receipt-preview.tsx",
++      "exports": ["*"]
++    },
++    {
++      "file": "lib/sales-actions.ts",
++      "exports": ["*"]
++    },
++    {
++      "file": "lib/modules/system/index.ts",
++      "exports": ["*"]
++    },
++    {
++      "file": "lib/staging-actions.ts",
++      "exports": ["*"]
++    },
++    {
++      "file": "lib/modules/tax/index.ts",
++      "exports": ["*"]
++    },
++    {
++      "file": "lib/tax-actions.ts",
++      "exports": ["*"]
++    },
++    {
++      "file": "lib/modules/security/index.ts",
++      "exports": ["*"]
++    },
++    {
++      "file": "lib/security-actions.ts",
++      "exports": ["*"]
++    },
++    {
++      "file": "lib/modules/cash/index.ts",
++      "exports": ["*"]
++    },
++    {
++      "file": "lib/shift-actions.ts",
++      "exports": ["*"]
++    },
++    {
++      "file": "lib/cash-actions.ts",
++      "exports": ["*"]
++    },
++    {
++      "file": "lib/invoice-actions.ts",
++      "exports": ["*"]
++    },
++    {
++      "file": "lib/modules/expenses/index.ts",
++      "exports": ["*"]
++    },
++    {
++      "file": "lib/modules/warehouse/index.ts",
++      "exports": ["*"]
++    },
++    {
++      "file": "lib/warehouse-actions.ts",
++      "exports": ["*"]
++    },
++    {
++      "file": "lib/modules/reports/index.ts",
++      "exports": ["*"]
++    },
++    {
++      "file": "lib/report-actions.ts",
++      "exports": ["*"]
++    },
++    {
++      "file": "lib/modules/procurement/index.ts",
++      "exports": ["*"]
++    },
++    {
++      "file": "lib/procurement-actions.ts",
++      "exports": ["*"]
++    },
++    {
++      "file": "lib/dashboard-actions.ts",
++      "exports": ["*"]
++    },
++    {
++      "file": "lib/modules/dashboard/index.ts",
++      "exports": ["*"]
++    },
++    {
++      "file": "lib/developer-actions.ts",
++      "exports": ["*"]
++    },
++    {
++      "file": "lib/invoice-matching-actions.ts",
++      "exports": ["*"]
++    },
++    {
++      "file": "lib/system-health-actions.ts",
++      "exports": ["*"]
++    },
++    {
++      "file": "lib/notification-actions.ts",
++      "exports": ["*"]
++    },
++    {
++      "file": "lib/permission-actions.ts",
++      "exports": ["*"]
++    },
++    {
++      "file": "lib/realtime/_in-memory.ts",
++      "exports": ["*"]
++    },
++    {
++      "file": "lib/realtime/_redis.ts",
++      "exports": ["*"]
++    },
++    {
++      "file": "lib/realtime/event-bus.ts",
++      "exports": ["*"]
++    }
++  ]
++}
+
+Dry run complete. No files were modified.

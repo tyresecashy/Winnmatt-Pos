@@ -25,6 +25,29 @@ export async function getRegisters(branchId?: string) {
   }
 }
 
+export async function getRegisterById(id: string) {
+  try {
+    const auth = await authenticateServerAction()
+    if (!auth.success || !auth.profile) return null
+
+    const { data, error } = await supabaseAdmin
+      .from('registers')
+      .select(`
+        *,
+        branch:branches!branch_id(id, name, code),
+        current_cashier:users!current_cashier_id(id, full_name)
+      `)
+      .eq('id', id)
+      .single()
+
+    if (error) throw error
+    return data
+  } catch (error) {
+    logger.error('Error fetching register:', error)
+    return null
+  }
+}
+
 export async function createRegister(data: {
   register_name: string
   branch_id: string
@@ -43,10 +66,14 @@ export async function createRegister(data: {
       .select()
       .single()
 
-    if (error) throw new Error(error.message)
+    if (error) {
+      if (error) logger.error('Operation failed', { error: error })
+      throw new Error('Operation failed')
+    }
     return { success: true, data: result }
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to create register' }
+    logger.error('Operation failed', { error: error })
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -58,15 +85,22 @@ export async function updateRegister(id: string, data: Record<string, unknown>) 
     }
 
     const { error } = await supabaseAdmin.from('registers').update(data).eq('id', id)
-    if (error) throw new Error(error.message)
+    if (error) {
+      if (error) logger.error('Operation failed', { error: error })
+      throw new Error('Operation failed')
+    }
     return { success: true }
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to update register' }
+    logger.error('Operation failed', { error: error })
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
 export async function getCashDrawers(branchId: string) {
   try {
+    const auth = await authenticateServerAction()
+    if (!auth.success || !auth.profile) return []
+
     const { data, error } = await supabaseAdmin
       .from('cash_drawers')
       .select(`
@@ -90,16 +124,25 @@ export async function createCashDrawer(data: {
   register_id?: string
 }) {
   try {
+    const auth = await authenticateServerAction()
+    if (!auth.success || !auth.profile) {
+      return { success: false, error: auth.error || 'Unauthorized' }
+    }
+
     const { data: result, error } = await supabaseAdmin
       .from('cash_drawers')
       .insert(data)
       .select()
       .single()
 
-    if (error) throw new Error(error.message)
+    if (error) {
+      if (error) logger.error('Operation failed', { error: error })
+      throw new Error('Operation failed')
+    }
     return { success: true, data: result }
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to create drawer' }
+    logger.error('Operation failed', { error: error })
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -108,6 +151,9 @@ export async function getCashEvents(
   opts?: { drawerId?: string; limit?: number; eventType?: string }
 ) {
   try {
+    const auth = await authenticateServerAction()
+    if (!auth.success || !auth.profile) return []
+
     let query = supabaseAdmin
       .from('cash_events')
       .select(`
@@ -142,25 +188,39 @@ export async function recordCashEvent(data: {
   reference_type?: string
   reference_id?: string
   reason: string
-  performed_by: string
+  performed_by?: string
   notes?: string
 }) {
   try {
+    const auth = await authenticateServerAction()
+    if (!auth.success || !auth.profile) {
+      return { success: false, error: auth.error || 'Unauthorized' }
+    }
+
+    // Use server-verified user, not client-supplied value
+    const { performed_by: _clientPerformer, ...rest } = data
     const { data: result, error } = await supabaseAdmin
       .from('cash_events')
-      .insert(data)
+      .insert({ ...rest, performed_by: auth.profile.id })
       .select()
       .single()
 
-    if (error) throw new Error(error.message)
+    if (error) {
+      if (error) logger.error('Operation failed', { error: error })
+      throw new Error('Operation failed')
+    }
     return { success: true, data: result }
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to record event' }
+    logger.error('Operation failed', { error: error })
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
 export async function getCashSummary(branchId: string) {
   try {
+    const auth = await authenticateServerAction()
+    if (!auth.success || !auth.profile) return null
+
     const today = new Date().toISOString().split('T')[0]
 
     const { data: todayEvents } = await supabaseAdmin

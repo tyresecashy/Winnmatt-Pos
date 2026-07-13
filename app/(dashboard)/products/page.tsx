@@ -29,6 +29,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Plus, Search, SearchX, MoreHorizontal, Pencil, Trash2, Package, AlertTriangle, Loader2, ChevronLeft, ChevronRight } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 import { ProductDialog } from '@/components/products/product-dialog'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
@@ -46,7 +47,7 @@ import {
   createProduct,
   updateProduct,
   deleteProduct,
-} from '@/lib/products-actions'
+} from '@/lib/modules/inventory'
 import type { ProductFormValues } from '@/components/products/product-dialog'
 import { useAuth } from '@/contexts/auth-context'
 
@@ -123,7 +124,7 @@ export default function ProductsPage() {
     currentPage * pageSize
   )
 
-  async function handleCreateProduct(values: any) {
+  async function handleCreateProduct(values: ProductFormValues) {
     // Validate branch is available
     if (!profile?.branch_id) {
       return { success: false, error: 'Your branch information is not available. Please log in again.' }
@@ -134,8 +135,8 @@ export default function ProductsPage() {
       const result = await createProduct(
         values.sku,
         values.name,
-        values.description,
-        values.categoryId,
+        values.description || '',
+        values.categoryId || '',
         values.purchasePrice,
         values.sellingPrice,
         values.reorderLevel,
@@ -314,17 +315,12 @@ export default function ProductsPage() {
               ))}
             </div>
           ) : filteredProducts.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
-                <SearchX className="h-6 w-6 text-muted-foreground" />
-              </div>
-              <p className="text-lg font-medium">No products found</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                {products.length === 0
-                  ? 'Add your first product to get started.'
-                  : 'Try adjusting your search or filters.'}
-              </p>
-            </div>
+            <EmptyState
+              icon={SearchX}
+              title="No products found"
+              description={products.length === 0 ? 'Add your first product to get started.' : 'Try adjusting your search or filters.'}
+              compact
+            />
           ) : (
             <>
               <Table>

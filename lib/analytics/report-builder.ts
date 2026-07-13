@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-server'
+import { logger } from '@/lib/logger'
 
 const supabase = supabaseAdmin
 
@@ -7,7 +8,7 @@ export interface ReportWidget {
   type: 'chart' | 'table' | 'metric' | 'list';
   title: string;
   dataSource: string;
-  config: any;
+  config: Record<string, unknown>;
   position: { x: number; y: number; w: number; h: number };
 }
 
@@ -40,8 +41,14 @@ export interface DataSource {
   name: string;
   type: 'sql' | 'api' | 'aggregation';
   query: string;
-  parameters: any[];
+  parameters: string[];
   cacheDuration: number;
+}
+
+export interface ReportResult {
+  template: string;
+  generatedAt: string;
+  widgets: (ReportWidget & { data: unknown[]; config: Record<string, unknown> })[];
 }
 
 export class ReportBuilderService {
@@ -240,37 +247,147 @@ export class ReportBuilderService {
     return Array.from(this.dataSources.values());
   }
 
-  async executeQuery(dataSourceId: string, parameters: any[]): Promise<any[]> {
+  async executeQuery(dataSourceId: string, parameters: unknown[]): Promise<Record<string, unknown>[]> {
     const dataSource = this.dataSources.get(dataSourceId);
     if (!dataSource) return [];
 
     try {
-      let query = dataSource.query;
-      
-      // Replace parameters
-      parameters.forEach((param, index) => {
-        query = query.replace(`$${index + 1}`, `'${param}'`);
-      });
-
-      const { data, error } = await supabase.rpc('execute_sql', { query });
-      
-      if (error) {
-        console.error('Query execution error:', error);
-        return [];
-      }
-
-      return data || [];
+      // Use typed, safe query execution instead of raw SQL
+      // Maps data source IDs to safe query builder calls
+      return await this.executeSafeQuery(dataSource, parameters);
     } catch (error) {
-      console.error('Query execution failed:', error);
+      logger.error('Query execution failed:', { dataSourceId, error });
       return [];
     }
   }
 
-  async generateReport(templateId: string, parameters: any = {}): Promise<any> {
+  /** Execute a data source query using the safe Supabase Query Builder */
+  private async executeSafeQuery(
+    dataSource: DataSource,
+    parameters: unknown[]
+  ): Promise<Record<string, unknown>[]> {
+    switch (dataSource.id) {
+      case 'sales-summary': {
+        const startDate = String(parameters[1] ?? '1970-01-01');
+        const endDate = String(parameters[2] ?? '2099-12-31');
+        const { data } = await supabase
+          .from('sales')
+          .select('created_at, total_amount, id')
+          .eq('payment_status', String(parameters[0] ?? 'completed'))
+          .gte('created_at', startDate)
+          .lte('created_at', endDate)
+          .order('created_at', { ascending: true });
+        return (data || []).reduce<Record<string, unknown>[]>((acc, row) => {
+          const date = row.created_at ? new Date(row.created_at).toISOString().split('T')[0] : 'unknown';
+          const existing = acc.find((r) => r.date === date);
+          if (existing) {
+            existing.revenue = (existing.revenue as number) + Number(row.total_amount ?? 0);
+            existing.transactions = (existing.transactions as number) + 1;
+          } else {
+            acc.push({
+              date,
+              revenue: Number(row.total_amount ?? 0),
+              transactions: 1,
+            });
+          }
+          return acc;
+        }, []);
+      }
+
+      case 'inventory-status': {
+        const { data } = await supabase
+          .from('products')
+          .select(`
+            id, name, category_id,
+            inventory!inner(quantity),
+            reorder_level, purchase_price
+          `)
+          .not('inventory.quantity', 'is', null);
+        return (data || [])
+          .filter((row: any) => {
+            const qty = row.inventory?.[0]?.quantity ?? 0;
+            return qty <= (row.reorder_level ?? 0);
+          })
+          .map((row: any) => ({
+            id: row.id,
+            name: row.name,
+            category_id: row.category_id,
+            current_stock: row.inventory?.[0]?.quantity ?? 0,
+            reorder_level: row.reorder_level,
+            purchase_price: row.purchase_price,
+          }));
+      }
+
+      case 'customer-segments': {
+        const { data } = await supabase
+          .from('sales')
+          .select('customer_id, total_amount')
+          .eq('payment_status', String(parameters[0] ?? 'completed'));
+        const grouped: Record<string, { orders: number; total_spent: number }> = {};
+        for (const row of data || []) {
+          if (!row.customer_id) continue;
+          if (!grouped[row.customer_id]) {
+            grouped[row.customer_id] = { orders: 0, total_spent: 0 };
+          }
+          grouped[row.customer_id].orders += 1;
+          grouped[row.customer_id].total_spent += Number(row.total_amount ?? 0);
+        }
+        return Object.entries(grouped).map(([customer_id, stats]) => ({
+          customer_id,
+          orders: stats.orders,
+          total_spent: stats.total_spent,
+        }));
+      }
+
+      case 'employee-performance': {
+        const { data } = await supabase
+          .from('employee_profiles')
+          .select(`
+            id, staff_number, position,
+            users!inner(full_name),
+            tasks(id, status)
+          `);
+        return (data || []).map((row: any) => {
+          const tasks = row.tasks || [];
+          return {
+            id: row.id,
+            staff_number: row.staff_number,
+            position: row.position,
+            full_name: row.users?.full_name ?? '',
+            tasks_assigned: tasks.length,
+            tasks_completed: tasks.filter((t: any) => t.status === String(parameters[0] ?? 'completed')).length,
+          };
+        });
+      }
+
+      case 'expense-breakdown': {
+        const { data } = await supabase
+          .from('expenses')
+          .select('amount, category_id, expense_categories(name)')
+          .eq('status', String(parameters[0] ?? 'approved'));
+        const rows = (data || []) as unknown as Array<Record<string, unknown>>;
+        const grouped: Record<string, number> = {};
+        for (const row of rows) {
+          const cat = (row.expense_categories as Record<string, unknown> | undefined)?.name as string ?? 'Unknown';
+          grouped[cat] = (grouped[cat] ?? 0) + Number(row.amount ?? 0);
+        }
+        return Object.entries(grouped).map(([category, total]) => ({
+          category,
+          total,
+        }));
+      }
+
+      default:
+        logger.warn('Unknown data source for safe query', { id: dataSource.id });
+        return [];
+    }
+  }
+
+  async generateReport(templateId: string, parameters: Record<string, unknown> = {}): Promise<ReportResult | null> {
     const template = this.templates.get(templateId);
     if (!template) return null;
 
-    const reportData: any = {
+    const reportData: ReportResult = {
       template: template.name,
       generatedAt: new Date().toISOString(),
       widgets: [],
@@ -281,9 +398,9 @@ export class ReportBuilderService {
       if (!dataSource) continue;
 
       const params = dataSource.parameters.map((param) => {
-        if (param === 'startDate') return parameters.startDate || new Date().toISOString();
-        if (param === 'endDate') return parameters.endDate || new Date().toISOString();
-        return parameters[param] || '';
+        if (param === 'startDate') return String(parameters.startDate || new Date().toISOString());
+        if (param === 'endDate') return String(parameters.endDate || new Date().toISOString());
+        return String(parameters[param] || '');
       });
 
       const data = await this.executeQuery(widget.dataSource, params);
@@ -291,13 +408,14 @@ export class ReportBuilderService {
       reportData.widgets.push({
         ...widget,
         data,
+        config: widget.config as Record<string, unknown>,
       });
     }
 
     return reportData;
   }
 
-  async exportReport(reportData: any, format: 'pdf' | 'excel' | 'csv'): Promise<string> {
+  async exportReport(reportData: ReportResult, format: 'pdf' | 'excel' | 'csv'): Promise<string> {
     // In production, this would generate the actual file
     // For now, return a mock URL
     return `https://reports.winnmatt.com/${reportData.template}.${format}`;
@@ -320,12 +438,17 @@ export class ReportBuilderService {
     return now.toISOString();
   }
 
-  async getReportAnalytics(): Promise<any> {
+  async getReportAnalytics(): Promise<{
+    totalTemplates: number;
+    scheduledReports: number;
+    popularTemplates: ReportTemplate[];
+    recentReports: { template: string; generatedAt: string }[];
+  }> {
     return {
       totalTemplates: this.templates.size,
       scheduledReports: this.scheduledReports.size,
       popularTemplates: Array.from(this.templates.values()).slice(0, 5),
-      recentExports: [],
+      recentReports: [],
     };
   }
 }

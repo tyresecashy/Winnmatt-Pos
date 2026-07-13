@@ -180,7 +180,7 @@ export async function setExchangeRate(
     return { success: true }
   } catch (error) {
     logger.error('[Currency] Failed to set exchange rate:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -229,6 +229,6 @@ export async function bulkUpdateExchangeRates(
     return { success: true, updated }
   } catch (error) {
     logger.error('[Currency] Failed to bulk update rates:', error)
-    return { success: false, updated: 0, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, updated: 0, error: 'Operation failed. Please try again.' }
   }
 }

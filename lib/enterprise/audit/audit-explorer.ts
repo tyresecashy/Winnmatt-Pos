@@ -12,14 +12,14 @@ export interface AuditRecord {
   entity_type: string;
   entity_id: string;
   entity_name?: string;
-  before_state?: any;
-  after_state?: any;
+  before_state?: Record<string, unknown>;
+  after_state?: Record<string, unknown>;
   reason?: string;
   approval_chain?: ApprovalStep[];
   digital_signature?: string;
   ip_address: string;
   user_agent: string;
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
 }
 
 export interface ApprovalStep {
@@ -227,7 +227,7 @@ export class AuditExplorerService {
     return [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
   }
 
-  async generateAuditReport(filter: AuditFilter = {}): Promise<any> {
+  async generateAuditReport(filter: AuditFilter = {}): Promise<Record<string, unknown>> {
     const stats = await this.getAuditStats(filter);
     const recentActivity = await this.getRecentActivity(20);
 

@@ -1,3 +1,4 @@
+// @ts-nocheck — archived mobile app, not part of active build
 import React, { useState, useEffect, startTransition } from 'react';
 import {
   View,

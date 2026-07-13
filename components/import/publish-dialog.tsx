@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button'
 import { useToast } from '@/hooks/use-toast'
 import { useAuth } from '@/contexts/auth-context'
 import { Loader2, Send } from 'lucide-react'
-import { publishBatchToLive } from '@/lib/staging-actions'
+import { publishBatchToLive } from '@/lib/modules/system'
 
 interface PublishDialogProps {
   batchId: string
@@ -38,7 +38,7 @@ export function PublishDialog({
 }: PublishDialogProps) {
   const [internalOpen, setInternalOpen] = useState(open)
   const [loading, setLoading] = useState(false)
-  const [published, setPublished] = useState<any>(null)
+  const [published, setPublished] = useState<{ success?: boolean; published?: number; updated?: number; total?: number; error?: string } | null>(null)
   const { toast } = useToast()
   const { user } = useAuth()
 
@@ -73,7 +73,7 @@ export function PublishDialog({
 
       toast({
         title: 'Published!',
-        description: `${result.total} products published to live catalog`,
+        description: `${(result as any).total ?? ''} products published to live catalog`,
       })
 
       // Close dialog after showing results

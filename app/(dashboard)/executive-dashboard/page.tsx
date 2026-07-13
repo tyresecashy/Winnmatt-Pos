@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { startTransition, useEffect, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -11,6 +11,7 @@ import {
   Clock, Truck, PiggyBank, CreditCard, BarChart3, Brain, Building2,
   Receipt, Percent, Boxes, Store, Leaf, Lightbulb,
 } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 import {
   getExecutiveKPI,
   getBranchPerformance,
@@ -22,7 +23,7 @@ import {
   type SalesHourly,
   type TopProduct,
   type AIInsight,
-} from '@/lib/executive-dashboard-actions'
+} from '@/lib/modules/dashboard'
 import { formatKSh } from '@/lib/currency'
 
 function formatCompact(amount: number): string {
@@ -66,7 +67,7 @@ export default function ExecutiveDashboardPage() {
     }
   }
 
-  useEffect(() => { loadAll() }, [])
+  useEffect(() => { startTransition(() => { loadAll() }) }, [])
 
   const maxHourlySales = Math.max(...hourlySales.map(h => h.sales), 1)
   const peakHour = [...hourlySales].sort((a, b) => b.sales - a.sales)[0]
@@ -203,11 +204,11 @@ export default function ExecutiveDashboardPage() {
             <CardTitle className="text-base flex items-center gap-2">
               <Store className="h-4 w-4" /> Branch Rankings
             </CardTitle>
-            <CardDescription>Today's sales by branch</CardDescription>
+            <CardDescription>Today&apos;s sales by branch</CardDescription>
           </CardHeader>
           <CardContent>
             {branches.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6">No branch data available</p>
+              <EmptyState title="No branch data available" compact />
             ) : (
               <div className="space-y-3">
                 {branches.map((b, idx) => (
@@ -252,7 +253,7 @@ export default function ExecutiveDashboardPage() {
           </CardHeader>
           <CardContent>
             {hourlySales.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6">No hourly data yet</p>
+              <EmptyState title="No hourly data yet" compact />
             ) : (
               <div className="space-y-1">
                 {/* Hourly bars */}
@@ -315,7 +316,7 @@ export default function ExecutiveDashboardPage() {
           </CardHeader>
           <CardContent className="p-0">
             {topProducts.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6">No sales data yet</p>
+              <EmptyState title="No sales data yet" compact />
             ) : (
               <div className="divide-y">
                 {topProducts.map((p, idx) => (

@@ -166,7 +166,7 @@ export function EditUserDialog({ open, user, onOpenChange, onUserUpdated }: Edit
 
           <div className="space-y-2">
             <Label htmlFor="role">Role</Label>
-            <Select value={role} onValueChange={(value) => setRole(value as any)} disabled={loading}>
+            <Select value={role} onValueChange={(value) => setRole(value as 'admin' | 'manager' | 'cashier')} disabled={loading}>
               <SelectTrigger id="role">
                 <SelectValue />
               </SelectTrigger>
@@ -189,7 +189,9 @@ export function EditUserDialog({ open, user, onOpenChange, onUserUpdated }: Edit
                 <SelectValue placeholder={branchesLoading ? "Loading branches..." : "Select a branch"} />
               </SelectTrigger>
               <SelectContent>
-                {branches.map((branch) => (
+                {branches.length === 0 && !branchesLoading ? (
+                  <SelectItem value="__none__" disabled>No branches available</SelectItem>
+                ) : branches.map((branch) => (
                   <SelectItem key={branch.id} value={branch.id}>
                     {branch.name}
                   </SelectItem>

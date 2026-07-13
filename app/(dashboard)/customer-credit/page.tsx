@@ -25,8 +25,8 @@ export default async function CustomerCreditPage() {
     supabase.from('customers').select('id, name, phone, credit_limit, credit_balance').order('name'),
   ])
 
-  const creditSummaries = (summaries || []) as any[]
-  const payments = (allPayments || []).map((p: any) => ({
+  const creditSummaries = summaries || []
+  const payments = (allPayments || []).map((p) => ({
     ...p,
     customer_name: p.customer?.name || 'Deleted Customer',
     recorded_by_name: p.recorded_by_user?.full_name || 'Unknown',

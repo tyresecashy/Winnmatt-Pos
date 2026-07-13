@@ -1,10 +1,11 @@
 'use client'
 import { logger } from '@/lib/logger';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState, useDeferredValue, startTransition } from 'react'
+import dynamic from 'next/dynamic'
 import { ProductSearchBar } from '@/components/pos/product-search-bar'
+import { EmptyState } from '@/components/ui/empty-state'
 import { ShoppingCart } from '@/components/pos/shopping-cart'
-import { PaymentPanel } from '@/components/pos/payment-panel'
 import { CustomerLookup } from '@/components/pos/customer-lookup'
 import { RecentTransactions } from '@/components/pos/recent-transactions'
 import { Button } from '@/components/ui/button'
@@ -26,17 +27,44 @@ import { formatKSh } from "@/lib/currency"
 import { MapPin, User, Clock, Receipt, Pause, Play, Trash2, Archive, Loader2, Keyboard, RotateCcw, Plus, Package, Shield } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
 import { useToast } from '@/components/ui/use-toast'
-import { getProductsForPOS, createProduct } from '@/lib/products-actions'
-import { getRedemptionEligibility } from '@/lib/loyalty-actions'
+import { getProductsForPOS, createProduct } from '@/lib/modules/inventory'
+import { getRedemptionEligibility } from '@/lib/modules/customers'
 import { verifySupervisorRole } from '@/lib/auth-helpers'
-import { createSale, getSaleById, holdSale, getHeldSales, resumeHeldSale, cancelHeldSale } from '@/lib/sales-actions'
+import { holdSale } from '@/lib/sales-actions'
+import { createSale, getSaleById, getHeldSales, resumeHeldSale, cancelHeldSale } from '@/lib/modules/sales'
 import { completePaymentAction, type CompletePaymentPromotion } from '@/lib/actions/complete-payment-action'
-import { PromotionPanel, type AppliedPromotion } from '@/components/pos/promotion-panel'
+import { type AppliedPromotion } from '@/components/pos/promotion-panel'
 import { QuickActionBar } from '@/components/pos/quick-action-bar'
+import { convertCartToQuote, emailSaleReceipt, smsSaleReceipt } from '@/lib/pos-actions'
 import { applyPromotionToSale } from '@/lib/promotion-actions'
 import { useReceiptSettings } from '@/hooks/use-receipt-settings'
+import { useDeviceHeartbeat } from '@/hooks/use-device-heartbeat'
+import { registerDevice } from '@/lib/modules/devices'
+import { useShiftGuard } from '@/hooks/use-shift-guard'
+import { QuickShiftDialog } from '@/components/pos/quick-shift-dialog'
+import { useIsMobile } from '@/hooks/use-is-mobile'
+import { getRegisters } from '@/lib/modules/cash'
+import { ensureRegisterForBranch } from '@/lib/shift-cash-sync'
 import type { SaleItem, HeldSale } from '@/lib/sales-actions'
 import type { SaleDetailsData } from '@/components/receipt-preview'
+
+// ── Dynamic imports (lazy load heavy components with framer-motion / Stripe) ──
+const PaymentPanel = dynamic(() => import('@/components/pos/payment-panel').then(mod => mod.PaymentPanel), {
+  ssr: false,
+  loading: () => (
+    <div className="h-40 flex items-center justify-center text-muted-foreground text-sm">
+      Loading payment panel…
+    </div>
+  ),
+})
+
+const PromotionPanel = dynamic(() => import('@/components/pos/promotion-panel').then(mod => mod.PromotionPanel), {
+  ssr: false,
+})
+
+const MobilePOSWrapper = dynamic(() => import('@/components/pos/mobile-pos-wrapper').then(mod => mod.MobilePOSWrapper), {
+  ssr: false,
+})
 
 /** Minimal product shape used in POS product lists. */
 export interface POSProduct {
@@ -109,6 +137,7 @@ export default function POSPage() {
   const { profile } = useAuth()
   const { toast } = useToast()
   const { settings: receiptSettings } = useReceiptSettings(profile?.branch_id ?? undefined)
+  const isMobile = useIsMobile()
   const searchInputRef = useRef<HTMLInputElement>(null)
   const customerLookupRef = useRef<HTMLButtonElement>(null)
   const [showShortcuts, setShowShortcuts] = useState(false)
@@ -120,6 +149,7 @@ export default function POSPage() {
   const [productsLoading, setProductsLoading] = useState(true)
   const [cart, setCart] = useState<CartItem[]>([])
   const [searchTerm, setSearchTerm] = useState('')
+  const deferredSearch = useDeferredValue(searchTerm)
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [selectedCustomer, setSelectedCustomer] = useState<SelectedCustomer | null>(null)
   const [isWholesale, setIsWholesale] = useState(false)
@@ -141,6 +171,88 @@ export default function POSPage() {
     pointsToRedeem: 0,
     redemptionDiscount: 0,
   })
+
+  // Device ID (must be declared before useDeviceHeartbeat)
+  const [deviceId, setDeviceId] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null
+    return localStorage.getItem('pos_device_id')
+  })
+
+  useDeviceHeartbeat(deviceId)
+
+  // Shift guard — block payments without an open shift
+  const {
+    activeShift,
+    isLoading: shiftLoading,
+    hasActiveShift,
+    openNewShift,
+    closeActiveShift,
+  } = useShiftGuard({
+    branchId: profile?.branch_id ?? null,
+    cashierId: profile?.id ?? '',
+  })
+  const [showShiftDialog, setShowShiftDialog] = useState(false)
+  const [shiftDialogMode, setShiftDialogMode] = useState<'open' | 'close'>('open')
+  const [shiftGateOpen, setShiftGateOpen] = useState(false) // true when we should show payment after opening shift
+  const [registers, setRegisters] = useState<Array<{ id: string; register_name: string }>>([])
+  const [loadingRegisters, setLoadingRegisters] = useState(false)
+
+  // Load registers for register selection in shift dialog
+  useEffect(() => {
+    if (!profile?.branch_id) return
+    const loadRegs = async () => {
+      setLoadingRegisters(true)
+      try {
+        const data = await getRegisters(profile.branch_id!)
+        const list = (data || []).map((r: { id: string; register_name?: string }) => ({
+          id: r.id,
+          register_name: r.register_name || 'Unnamed',
+        }))
+        setRegisters(list)
+      } catch {
+        logger.warn('[POS] Failed to load registers')
+      } finally {
+        setLoadingRegisters(false)
+      }
+    }
+    loadRegs()
+  }, [profile?.branch_id])
+
+  const handleCreateRegister = async () => {
+    if (!profile?.branch_id) return null
+    try {
+      const reg = await ensureRegisterForBranch(profile.branch_id)
+      if (reg) {
+        setRegisters(prev => {
+          if (prev.some(r => r.id === reg.id)) return prev
+          return [...prev, { id: reg.id, register_name: reg.register_name }]
+        })
+      }
+      return reg
+    } catch {
+      return null
+    }
+  }
+
+  // Auto-register device on mount
+  useEffect(() => {
+    if (!profile?.branch_id) return
+    if (deviceId) return
+
+    const doRegister = async () => {
+      const result = await registerDevice({
+        name: `POS-${profile?.full_name || 'Unknown'}`,
+        device_type: 'pos_terminal',
+        branch_id: profile.branch_id!,
+        app_version: '1.0.0',
+      })
+      if (result.success && result.id) {
+        localStorage.setItem('pos_device_id', result.id)
+        setDeviceId(result.id)
+      }
+    }
+    void doRegister()
+  }, [profile?.branch_id, profile?.full_name, deviceId])
 
   // Hold sale state
   const [showHoldDialog, setShowHoldDialog] = useState(false)
@@ -171,6 +283,10 @@ export default function POSPage() {
     }
   ) {
     const branchId = profile?.branch_id
+    if (!branchId) {
+      logger.warn('[POS] No branch ID available, skipping product refresh')
+      return
+    }
 
     const minIntervalMs = options?.minIntervalMs ?? 0
     const now = Date.now()
@@ -289,7 +405,7 @@ export default function POSPage() {
   )
 
   // Score products for barcode/SKU matching: exact matches rank above fuzzy matches
-  const getProductMatchScore = (product: any, searchTerm: string) => {
+  const getProductMatchScore = (product: POSProduct, searchTerm: string) => {
     if (!searchTerm) {
       return { score: 0, isExactMatch: false }
     }
@@ -315,17 +431,17 @@ export default function POSPage() {
     () =>
       allProducts
         .map((product) => {
-          const { score, isExactMatch } = getProductMatchScore(product, searchTerm)
+          const { score, isExactMatch } = getProductMatchScore(product, deferredSearch)
           return { ...product, _matchScore: score, _isExactMatch: isExactMatch }
         })
         .filter((product) => {
           const matchesSearch = product._matchScore > 0
-          const noSearch = !searchTerm
+          const noSearch = !deferredSearch
           const matchesCategory = !selectedCategory || product.category?.name === selectedCategory
           return (matchesSearch || noSearch) && matchesCategory
         })
         .sort((a, b) => (b._matchScore || 0) - (a._matchScore || 0)),
-    [allProducts, searchTerm, selectedCategory]
+    [allProducts, deferredSearch, selectedCategory]
   )
 
   const addToCart = (productId: string, isExactMatch: boolean = false) => {
@@ -623,7 +739,13 @@ export default function POSPage() {
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
         e.preventDefault()
         if (cart.length > 0) {
-          setShowPayment(true)
+          if (hasActiveShift) {
+            setShowPayment(true)
+          } else {
+            setShiftDialogMode('open')
+            setShiftGateOpen(true)
+            setShowShiftDialog(true)
+          }
         }
       }
       // F2 → hold sale (when cart has items)
@@ -658,7 +780,7 @@ export default function POSPage() {
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [showRecent, cart.length, searchTerm])
+  }, [showRecent, cart.length, searchTerm, hasActiveShift])
 
   // ─── Hold Sale Handlers ──────────────────────────────────────────────
 
@@ -673,7 +795,7 @@ export default function POSPage() {
         sku: '',
         quantity: item.quantity,
         unitPrice: item.price,
-        discountPercent: item.discount > 0 ? Math.round((item.discount / item.price) * 100) : 0,
+        discountPercent: item.discount > 0 ? (item.discount / item.price) * 100 : 0,
         sellingPrice: item.price,
       }))
 
@@ -722,7 +844,7 @@ export default function POSPage() {
     setHeldSalesLoading(true)
     setHeldSalesError(null)
     try {
-      const sales = await getHeldSales(profile.branch_id, profile?.id)
+      const sales = await getHeldSales(profile.branch_id)
       setHeldSales(sales)
     } catch (error) {
       setHeldSalesError('Failed to load held sales')
@@ -745,13 +867,13 @@ export default function POSPage() {
         return
       }
 
-      const result = await resumeHeldSale(sale.id, profile.branch_id)
+      const result = await resumeHeldSale(sale.id)
 
-      if (!result.success || !result.heldSale) {
+      if (!result.success || !result.data) {
         throw new Error(result.error || 'Failed to resume held sale')
       }
 
-      const heldSale = result.heldSale
+      const heldSale = result.data as unknown as HeldSale
 
       // Restore cart items
       const restoredItems: CartItem[] = heldSale.items.map((item) => ({
@@ -801,7 +923,7 @@ export default function POSPage() {
     if (!window.confirm('Discard this held sale permanently?')) return
 
     try {
-      const result = await cancelHeldSale(saleId, profile.branch_id)
+      const result = await cancelHeldSale(saleId)
 
       if (!result.success) {
         throw new Error(result.error || 'Failed to cancel held sale')
@@ -821,7 +943,7 @@ export default function POSPage() {
     }
   }
 
-  const buildReceiptData = (sale: any): SaleDetailsData => ({
+  const buildReceiptData = (sale: SaleDetailsData): SaleDetailsData => ({
     ...sale,
     businessSettings: {
       business_name: receiptSettings?.business_name || 'Winnmatt',
@@ -832,8 +954,31 @@ export default function POSPage() {
       receipt_footer_text: receiptSettings?.receipt_footer_text || '',
       thank_you_message: receiptSettings?.thank_you_message || 'Thank you for your purchase!',
     },
-    branchSettings: receiptSettings?.branchSettings,
+    branchSettings: receiptSettings?.branchSettings
+      ? {
+          receipt_header_text: receiptSettings.branchSettings.receipt_header_text || '',
+          phone_number: receiptSettings.branchSettings.phone_number || '',
+          email: receiptSettings.branchSettings.email || '',
+          address: receiptSettings.branchSettings.address || '',
+        }
+      : undefined,
   })
+
+  // Mobile: render simplified MobilePOSWrapper instead of full desktop layout
+  if (isMobile && typeof window !== 'undefined') {
+    return (
+      <MobilePOSWrapper
+        allProducts={allProducts}
+        profile={{
+          id: profile?.id ?? '',
+          branch_id: profile?.branch_id,
+          full_name: profile?.full_name,
+          role: profile?.role,
+        }}
+        branchName={profile?.branch?.name}
+      />
+    )
+  }
 
   return (
     <ErrorBoundary>
@@ -858,6 +1003,27 @@ export default function POSPage() {
               <Badge variant="secondary" className="text-[10px] py-0 px-1">
                 {profile.branch.code}
               </Badge>
+            )}
+            {/* Shift Status Dot */}
+            {!shiftLoading && (
+              <button
+                onClick={() => {
+                  if (hasActiveShift) {
+                    setShiftDialogMode('close')
+                    setShowShiftDialog(true)
+                  } else {
+                    setShiftDialogMode('open')
+                    setShowShiftDialog(true)
+                  }
+                }}
+                className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-md border border-border hover:bg-accent transition-colors"
+                title={hasActiveShift ? 'Shift active — click to close' : 'No open shift — click to open'}
+              >
+                <span className={`h-2 w-2 rounded-full ${hasActiveShift ? 'bg-success animate-pulse' : 'bg-destructive'}`} />
+                <span className="text-muted-foreground">
+                  {hasActiveShift ? `Shift #${activeShift?.shift_number?.split('-').pop() || ''}` : 'No Shift'}
+                </span>
+              </button>
             )}
           </div>
         </div>
@@ -1000,7 +1166,24 @@ export default function POSPage() {
                   })
                   toast({ title: 'Cart Duplicated', description: `Added ${cart.length} items to cart` })
                 }}
-                onConvertToQuote={() => toast({ title: 'Coming Soon', description: 'Quote conversion in development' })}
+                onConvertToQuote={async () => {
+                  if (!selectedCustomer?.id || !profile?.branch_id || cart.length === 0) return
+                  const result = await convertCartToQuote(
+                    selectedCustomer.id,
+                    profile.branch_id,
+                    cart.map(item => ({
+                      productId: item.id,
+                      productName: item.name,
+                      quantity: item.quantity,
+                      price: item.price,
+                    })),
+                  )
+                  if (result.success) {
+                    toast({ title: 'Quote Created', description: `Invoice #${result.invoiceNumber} created as draft` })
+                  } else {
+                    toast({ title: 'Error', description: result.error || 'Failed to create quote', variant: 'destructive' })
+                  }
+                }}
                 onVoid={() => {
                   if (cart.length === 0) return
                   setCart([])
@@ -1015,8 +1198,41 @@ export default function POSPage() {
                   })
                   toast({ title: 'Cart Cleared', description: 'Cart has been voided' })
                 }}
-                onEmailReceipt={() => toast({ title: 'Coming Soon', description: 'Email receipt in development' })}
-                onSMSReceipt={() => toast({ title: 'Coming Soon', description: 'SMS receipt in development' })}
+                onEmailReceipt={async () => {
+                  if (!fullSaleData?.id || !selectedCustomer?.email) {
+                    toast({ title: 'Cannot Send', description: 'No completed sale or customer email available', variant: 'destructive' })
+                    return
+                  }
+                  const result = await emailSaleReceipt(
+                    fullSaleData.id,
+                    selectedCustomer.email,
+                    selectedCustomer.name,
+                    fullSaleData.receipt_number,
+                  )
+                  if (result.success) {
+                    toast({ title: 'Receipt Sent', description: `Receipt emailed to ${selectedCustomer.email}` })
+                  } else {
+                    toast({ title: 'Error', description: result.error || 'Failed to send receipt', variant: 'destructive' })
+                  }
+                }}
+                onSMSReceipt={async () => {
+                  if (!fullSaleData?.id || !selectedCustomer?.phone) {
+                    toast({ title: 'Cannot Send', description: 'No completed sale or customer phone available', variant: 'destructive' })
+                    return
+                  }
+                  const result = await smsSaleReceipt(
+                    fullSaleData.id,
+                    selectedCustomer.phone,
+                    selectedCustomer.name,
+                    fullSaleData.receipt_number,
+                    fullSaleData.total_amount,
+                  )
+                  if (result.success) {
+                    toast({ title: 'SMS Sent', description: `Receipt sent to ${selectedCustomer.phone}` })
+                  } else {
+                    toast({ title: 'Error', description: result.error || 'Failed to send SMS', variant: 'destructive' })
+                  }
+                }}
                 onReprint={() => {
                   // Trigger the browser print dialog for the current page
                   window.print()
@@ -1042,7 +1258,20 @@ export default function POSPage() {
             onCartDiscountChange={setCartDiscount}
             total={total}
             showPayment={showPayment}
-            onShowPayment={setShowPayment}
+            onShowPayment={(show) => {
+              if (show) {
+                // Guard: require active shift to open payment
+                if (hasActiveShift) {
+                  setShowPayment(true)
+                } else {
+                  setShiftDialogMode('open')
+                  setShiftGateOpen(true)
+                  setShowShiftDialog(true)
+                }
+              } else {
+                setShowPayment(false)
+              }
+            }}
             fullSaleData={fullSaleData}
             onReceiptClose={() => {
               // Receipt has been viewed/printed, clear everything for next transaction
@@ -1071,9 +1300,10 @@ export default function POSPage() {
               }, 0)
             }}
             promotionDiscount={promotionDiscountCents}
-            onCompletePayment={async (receiptNumber, paymentMethod, options) => {
+            onCompletePayment={async (receiptNumber, paymentMethod, opts) => {
+              const options = opts as any
               if (paymentMethod === 'mpesa' && options?.skipSaleCreation && options?.saleId) {
-                const fullSale = await getSaleById(options.saleId)
+                const fullSale = await getSaleById(options.saleId as string) as unknown as SaleDetailsData
 
                 if (!fullSale || !fullSale.id) {
                   throw new Error('Failed to load the confirmed M-Pesa sale. Please check recent sales.')
@@ -1112,7 +1342,7 @@ export default function POSPage() {
 
               // ── Card skip-sale-creation (post-Stripe-confirmation) ──
               if (paymentMethod === 'card' && options?.skipSaleCreation && options?.saleId) {
-                const fullSale = await getSaleById(options.saleId)
+                const fullSale = await getSaleById(options.saleId) as unknown as SaleDetailsData
 
                 if (!fullSale || !fullSale.id) {
                   throw new Error('Failed to load the confirmed card sale. Please check recent sales.')
@@ -1166,7 +1396,7 @@ export default function POSPage() {
                   productId: item.id,
                   quantity: item.quantity,
                   unitPrice: item.price,
-                  discountPercent: item.discount > 0 ? Math.round((item.discount / item.price) * 100) : 0,
+                  discountPercent: item.discount > 0 ? (item.discount / item.price) * 100 : 0,
                 }))
 
                 if (paymentMethod === 'mpesa') {
@@ -1179,7 +1409,7 @@ export default function POSPage() {
                     cartDiscount,
                     'POS Sale',
                     'pending'
-                  )
+                  ) as any
 
                   if (!createResult.success || !createResult.sale?.id) {
                     throw new Error(createResult.error || 'Failed to create pending M-Pesa sale')
@@ -1228,7 +1458,7 @@ export default function POSPage() {
                     cartDiscount,
                     'POS Sale',
                     'pending'
-                  )
+                  ) as any
 
                   if (!createResult.success || !createResult.sale?.id) {
                     throw new Error(createResult.error || 'Failed to create pending card sale')
@@ -1263,6 +1493,7 @@ export default function POSPage() {
                 const paymentResult = await completePaymentAction({
                   branchId: profile.branch_id,
                   cashierId: profile.id,
+                  shiftId: activeShift?.id,
                   items: saleItems,
                   paymentMethod: effectivePaymentMethod as 'cash' | 'card' | 'bank_transfer' | 'cheque' | 'credit',
                   customerId: selectedCustomer?.id,
@@ -1430,6 +1661,24 @@ export default function POSPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Quick Shift Dialog */}
+      <QuickShiftDialog
+        mode={shiftDialogMode}
+        activeShift={activeShift}
+        cashierName={profile?.full_name || 'Cashier'}
+        open={showShiftDialog}
+        onOpenChange={(open) => {
+          setShowShiftDialog(open)
+          if (!open) {
+            setShiftGateOpen(false)
+          }
+        }}
+        onOpenShift={openNewShift as any}
+        onCloseShift={closeActiveShift}
+        registers={registers}
+        onCreateRegister={handleCreateRegister}
+      />
+
       {/* Held Sales Dialog — Enhanced */}
       <Dialog open={showHeldSales} onOpenChange={setShowHeldSales}>
         <DialogContent className="sm:max-w-xl max-h-[85vh] flex flex-col overflow-hidden p-0">
@@ -1457,7 +1706,7 @@ export default function POSPage() {
             ) : heldSales.length === 0 ? (
               <div className="text-center py-8">
                 <Archive className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
-                <p className="text-sm text-muted-foreground">No sales on hold</p>
+                <EmptyState title="No sales on hold" compact />
               </div>
             ) : (
               <div className="space-y-2">
@@ -1705,7 +1954,9 @@ function getHeldDuration(createdAt: string): 'recent' | 'long' | 'critical' {
 }
 
 function HeldTimeBadge({ createdAt }: { createdAt: string }) {
-  const diff = Date.now() - new Date(createdAt).getTime()
+  const [now, setNow] = useState(0)
+  useEffect(() => { startTransition(() => { setNow(Date.now()) }) }, [])
+  const diff = now - new Date(createdAt).getTime()
   const mins = Math.floor(diff / (1000 * 60))
   const hours = Math.floor(diff / (1000 * 60 * 60))
 

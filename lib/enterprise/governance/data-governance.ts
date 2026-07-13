@@ -244,7 +244,7 @@ export class DataGovernanceService {
     return Array.from(this.assets.values()).filter(a => a.owner === owner);
   }
 
-  async getDataGovernanceReport(): Promise<any> {
+  async getDataGovernanceReport(): Promise<Record<string, unknown>> {
     const assets = Array.from(this.assets.values());
     
     return {
@@ -269,12 +269,12 @@ export class DataGovernanceService {
     };
   }
 
-  private groupBy(array: any[], key: string): Record<string, number> {
+  private groupBy(array: DataAsset[], key: keyof DataAsset): Record<string, number> {
     return array.reduce((result, item) => {
-      const group = item[key] || 'unknown';
+      const group = String(item[key] || 'unknown');
       result[group] = (result[group] || 0) + 1;
       return result;
-    }, {});
+    }, {} as Record<string, number>);
   }
 }
 

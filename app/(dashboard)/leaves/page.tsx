@@ -1,5 +1,5 @@
 import { createServerActionClient } from '@/lib/supabase-server'
-import { getLeaves, getLeaveStats } from '@/lib/leave-actions'
+import { getLeaves, getLeaveStats } from '@/lib/modules/workforce'
 import { LeavesClient } from './leaves-client'
 
 export const dynamic = 'force-dynamic'

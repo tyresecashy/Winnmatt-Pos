@@ -1,5 +1,7 @@
 'use server'
 
+import { logger } from '@/lib/logger'
+
 import { authenticateServerAction } from '@/lib/auth-helpers'
 import { supabaseAdmin } from '@/lib/supabase-server'
 import { revalidatePath } from 'next/cache'
@@ -71,7 +73,8 @@ export async function createInvoiceFromSale(saleId: string, dueDate?: string) {
       .select('*')
       .eq('id', saleId)
       .single()
-    if (saleErr) return { error: 'Sale not found: ' + saleErr.message }
+    logger.error('Operation failed', { error: saleErr })
+    if (saleErr) return { error: 'Operation failed. Please try again.' }
     if (!sale.customer_id) return { error: 'Sale has no customer' }
 
     // Fetch sale items
@@ -117,11 +120,19 @@ export async function createInvoiceFromSale(saleId: string, dueDate?: string) {
       .select()
       .single()
 
-    if (invErr) return { error: invErr.message }
+    logger.error('Operation failed', { error: invErr })
+    if (invErr) return { error: 'Operation failed. Please try again.' }
 
     // Create invoice items
     if (saleItems && saleItems.length > 0) {
-      const items = saleItems.map((si: any, idx: number) => ({
+      const items = (saleItems as unknown as Array<{
+        product_id: string | null
+        product_name: string
+        unit_price: number
+        quantity: number
+        tax_percent: number
+        product: { name: string } | null
+      }>).map((si, idx) => ({
         invoice_id: invoice.id,
         product_id: si.product_id,
         product_name: si.product?.name || si.product_name || 'Unknown Product',
@@ -138,13 +149,15 @@ export async function createInvoiceFromSale(saleId: string, dueDate?: string) {
         .from('invoice_items')
         .insert(items)
 
-      if (itemsErr) return { error: 'Invoice created but items failed: ' + itemsErr.message }
+      logger.error('Operation failed', { error: itemsErr })
+      if (itemsErr) return { error: 'Operation failed. Please try again.' }
     }
 
     revalidatePath('/invoices')
     return { success: true, invoice }
-  } catch (err: any) {
-    return { error: err.message || 'Failed to create invoice' }
+  } catch (err: unknown) {
+    logger.error('Operation failed', { error: err })
+    return { error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -174,8 +187,11 @@ export async function getInvoices(options?: {
     .order('created_at', { ascending: false })
     .limit(options?.limit || 100)
 
-  if (error) throw new Error(error.message)
-  return (data || []) as Invoice[]
+  if (error) {
+    if (error) logger.error('Operation failed', { error: error })
+    throw new Error('Operation failed')
+  }
+  return (data || []) as unknown as Invoice[]
 }
 
 // ─── Get single invoice with items ─────────────────────────────────────────
@@ -187,7 +203,10 @@ export async function getInvoice(invoiceId: string) {
     .eq('id', invoiceId)
     .single()
 
-  if (invErr) throw new Error(invErr.message)
+  if (invErr) {
+    if (invErr) logger.error('Operation failed', { error: invErr })
+    throw new Error('Operation failed')
+  }
 
   const { data: items } = await supabaseAdmin
     .from('invoice_items')
@@ -198,7 +217,7 @@ export async function getInvoice(invoiceId: string) {
   return {
     ...invoice,
     items: items || [],
-  } as Invoice
+  } as unknown as Invoice
 }
 
 // ─── Update invoice status ─────────────────────────────────────────────────
@@ -208,7 +227,7 @@ export async function updateInvoiceStatus(invoiceId: string, status: string) {
     const auth = await authenticateServerAction()
     if (!auth.success || !auth.profile) return { error: 'Not authenticated' }
 
-    const updates: Record<string, any> = { status, updated_at: new Date().toISOString() }
+    const updates: Record<string, unknown> = { status, updated_at: new Date().toISOString() }
     if (status === 'paid') {
       updates.paid_date = new Date().toISOString().split('T')[0]
       const { data: inv } = await supabaseAdmin
@@ -227,13 +246,15 @@ export async function updateInvoiceStatus(invoiceId: string, status: string) {
       .update(updates)
       .eq('id', invoiceId)
 
-    if (error) return { error: error.message }
+    logger.error('Operation failed', { error: error })
+    if (error) return { error: 'Operation failed. Please try again.' }
 
     revalidatePath('/invoices')
     revalidatePath(`/invoices/${invoiceId}`)
     return { success: true }
-  } catch (err: any) {
-    return { error: err.message || 'Failed to update invoice status' }
+  } catch (err: unknown) {
+    logger.error('Operation failed', { error: err })
+    return { error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -272,15 +293,17 @@ export async function recordInvoicePayment(invoiceId: string, amountCents: numbe
       .eq('paid_amount_cents', invoice.paid_amount_cents)
       .select('id')
 
-    if (error) return { error: error.message }
+    logger.error('Operation failed', { error: error })
+    if (error) return { error: 'Operation failed. Please try again.' }
     if (!updatedRows || updatedRows.length === 0) {
       return { error: 'Concurrent modification detected — please retry' }
     }
 
     revalidatePath('/invoices')
     return { success: true }
-  } catch (err: any) {
-    return { error: err.message || 'Failed to record payment' }
+  } catch (err: unknown) {
+    logger.error('Operation failed', { error: err })
+    return { error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -306,12 +329,14 @@ export async function deleteInvoice(invoiceId: string) {
       .delete()
       .eq('id', invoiceId)
 
-    if (error) return { error: error.message }
+    logger.error('Operation failed', { error: error })
+    if (error) return { error: 'Operation failed. Please try again.' }
 
     revalidatePath('/invoices')
     return { success: true }
-  } catch (err: any) {
-    return { error: err.message || 'Failed to delete invoice' }
+  } catch (err: unknown) {
+    logger.error('Operation failed', { error: err })
+    return { error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -340,13 +365,13 @@ export async function getInvoiceStats() {
   let totalValue = 0
   let totalPaid = 0
 
-  for (const inv of allInvoices as any[]) {
+  for (const inv of allInvoices as { total_amount_cents?: number; paid_amount_cents?: number; status: string }[]) {
     totalValue += inv.total_amount_cents || 0
     totalPaid += inv.paid_amount_cents || 0
     statusBreakdown[inv.status] = (statusBreakdown[inv.status] || 0) + 1
     if (inv.status === 'overdue') {
       overdueCount++
-      overdueTotal += (inv.total_amount_cents - inv.paid_amount_cents)
+      overdueTotal += ((inv.total_amount_cents ?? 0) - (inv.paid_amount_cents ?? 0))
     }
   }
 

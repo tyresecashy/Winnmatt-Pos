@@ -1,7 +1,7 @@
 'use client'
 import { logger } from '@/lib/logger'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, startTransition } from 'react'
 import { useAuth } from '@/contexts/auth-context'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -36,7 +36,9 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useToast } from '@/components/ui/use-toast'
+import { EmptyState } from '@/components/ui/empty-state'
 import { formatKSh } from '@/lib/currency'
+import { DeviceStatusBadge, DrawerStatusBadge } from '@/components/cash-management/badges'
 import {
   getRegisters,
   getCashDrawers,
@@ -46,7 +48,7 @@ import {
   createRegister,
   createCashDrawer,
   updateRegister,
-} from '@/lib/cash-actions'
+} from '@/lib/modules/cash'
 import {
   DollarSign,
   ArrowUpRight,
@@ -212,7 +214,7 @@ export default function CashManagementPage() {
         getCashEvents(branchId, { limit: 100 }),
       ])
       setSummary(fetchedSummary)
-      setDrawers(fetchedDrawers as CashDrawerRecord[])
+      setDrawers(fetchedDrawers as unknown as CashDrawerRecord[])
       setRegisters(fetchedRegisters as RegisterRecord[])
       setEvents(fetchedEvents as CashEventRecord[])
     } catch (error) {
@@ -223,7 +225,7 @@ export default function CashManagementPage() {
   }, [branchId])
 
   useEffect(() => {
-    void loadData()
+    startTransition(() => { void loadData() })
   }, [loadData])
 
   const handleViewDrawerEvents = async (drawer: CashDrawerRecord) => {
@@ -369,7 +371,7 @@ export default function CashManagementPage() {
   }
 
   const getHealthColor = (score: number | null) => {
-    if (score === null) return 'bg-gray-300'
+    if (score === null) return 'bg-muted'
     if (score >= 80) return 'bg-green-500'
     if (score >= 50) return 'bg-amber-500'
     return 'bg-red-500'
@@ -387,32 +389,6 @@ export default function CashManagementPage() {
     if (level >= 70) return <Battery className="h-4 w-4 text-green-600" />
     if (level >= 30) return <Battery className="h-4 w-4 text-amber-600" />
     return <Battery className="h-4 w-4 text-red-600" />
-  }
-
-  const getStatusBadge = (status: string | null | undefined) => {
-    switch (status) {
-      case 'online':
-        return <Badge variant="default" className="bg-green-600">Online</Badge>
-      case 'offline':
-        return <Badge variant="destructive">Offline</Badge>
-      case 'maintenance':
-        return <Badge variant="secondary">Maintenance</Badge>
-      default:
-        return <Badge variant="outline">{status || 'Unknown'}</Badge>
-    }
-  }
-
-  const getDrawerStatusBadge = (status: string) => {
-    switch (status) {
-      case 'open':
-        return <Badge className="bg-green-600">Open</Badge>
-      case 'closed':
-        return <Badge variant="secondary">Closed</Badge>
-      case 'counted':
-        return <Badge variant="default">Counted</Badge>
-      default:
-        return <Badge variant="outline">{status}</Badge>
-    }
   }
 
   const getEventTypeBadge = (type: string) => {
@@ -520,9 +496,7 @@ export default function CashManagementPage() {
                     ))}
                   </div>
                 ) : drawers.length === 0 ? (
-                  <p className="py-8 text-center text-sm text-muted-foreground">
-                    No cash drawers found
-                  </p>
+                  <EmptyState title="No cash drawers found" compact />
                 ) : (
                   <ScrollArea className="h-[400px]">
                     <div className="space-y-2">
@@ -536,7 +510,7 @@ export default function CashManagementPage() {
                             <div className="flex items-center gap-2">
                               <Wallet className="h-4 w-4 text-muted-foreground shrink-0" />
                               <span className="font-medium text-sm truncate">{drawer.drawer_name}</span>
-                              {getDrawerStatusBadge(drawer.status)}
+                              <DrawerStatusBadge status={drawer.status} />
                             </div>
                             <div className="mt-1 flex items-center gap-4 text-xs text-muted-foreground">
                               <span>Bal: {formatKSh(drawer.current_balance)}</span>
@@ -576,9 +550,7 @@ export default function CashManagementPage() {
                     ))}
                   </div>
                 ) : registers.length === 0 ? (
-                  <p className="py-8 text-center text-sm text-muted-foreground">
-                    No registers found
-                  </p>
+                  <EmptyState title="No registers found" compact />
                 ) : (
                   <ScrollArea className="h-[400px]">
                     <div className="space-y-2">
@@ -591,7 +563,7 @@ export default function CashManagementPage() {
                             <div className="flex items-center gap-2">
                               <Monitor className="h-4 w-4 text-muted-foreground shrink-0" />
                               <span className="font-medium text-sm truncate">{reg.register_name}</span>
-                              {getStatusBadge(reg.status)}
+                              <DeviceStatusBadge status={reg.status} />
                             </div>
                             <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
                               {reg.current_cashier && (
@@ -665,9 +637,7 @@ export default function CashManagementPage() {
                   ))}
                 </div>
               ) : filteredEvents.length === 0 ? (
-                <p className="py-8 text-center text-sm text-muted-foreground">
-                  {eventSearch || eventTypeFilter ? 'No matching events found' : 'No cash events recorded yet'}
-                </p>
+                <EmptyState title={eventSearch || eventTypeFilter ? 'No matching events found' : 'No cash events recorded yet'} compact />
               ) : (
                 <ScrollArea className="h-[500px]">
                   <Table>
@@ -735,9 +705,7 @@ export default function CashManagementPage() {
                   ))}
                 </div>
               ) : registers.length === 0 ? (
-                <p className="py-8 text-center text-sm text-muted-foreground">
-                  No registers found
-                </p>
+                <EmptyState title="No registers found" compact />
               ) : (
                 <ScrollArea className="h-[500px]">
                   <Table>
@@ -764,7 +732,7 @@ export default function CashManagementPage() {
                               )}
                             </div>
                           </TableCell>
-                          <TableCell>{getStatusBadge(reg.status)}</TableCell>
+                          <TableCell>                          <DeviceStatusBadge status={reg.status} /></TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <div className="relative h-2 w-16 overflow-hidden rounded-full bg-primary/20">
@@ -854,9 +822,7 @@ export default function CashManagementPage() {
             </DialogDescription>
           </DialogHeader>
           {drawerEvents.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              No events recorded for this drawer
-            </p>
+            <EmptyState title="No events recorded for this drawer" compact />
           ) : (
             <ScrollArea className="h-[400px]">
               <Table>

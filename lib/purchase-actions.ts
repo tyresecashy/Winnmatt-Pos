@@ -94,7 +94,7 @@ export async function createPurchaseOrder(input: CreatePurchaseOrderInput) {
     logger.error('Error creating purchase order:', error)
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to create purchase order',
+      error: 'Operation failed. Please try again.',
     }
   }
 }
@@ -165,6 +165,10 @@ export async function getPurchaseOrderById(poId: string) {
 /**
  * Receive goods - update inventory and create stock movements
  * This is the critical workflow that brings stock into the business
+ *
+ * @deprecated Use receivePurchaseOrder from @/lib/procurement-actions instead.
+ *             This version is kept for backward compatibility but is no longer
+ *             called from any UI.
  */
 export async function receivePurchaseOrder(poId: string, partial?: boolean) {
   try {
@@ -252,13 +256,13 @@ export async function receivePurchaseOrder(poId: string, partial?: boolean) {
 
     // Update supplier balance (add to what we owe them)
     const { error: balanceError } = await supabaseAdmin
-      .rpc('increment', {
+      .rpc('increment' as never, {
         table_name: 'suppliers',
         id_column: 'id',
         id_value: po.supplier_id,
         increment_column: 'balance',
         increment_amount: po.total_amount,
-      })
+      } as never)
 
     // If RPC fails, try direct update instead
     if (balanceError) {
@@ -287,7 +291,7 @@ export async function receivePurchaseOrder(poId: string, partial?: boolean) {
     logger.error('Error receiving purchase order:', error)
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to receive purchase order',
+      error: 'Operation failed. Please try again.',
     }
   }
 }
@@ -323,7 +327,7 @@ export async function updatePurchaseOrderStatus(poId: string, status: 'draft' | 
     logger.error('Error updating purchase order status:', error)
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to update purchase order status',
+      error: 'Operation failed. Please try again.',
     }
   }
 }
@@ -354,7 +358,7 @@ export async function cancelPurchaseOrder(poId: string, reason?: string) {
     logger.error('Error cancelling purchase order:', error)
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to cancel purchase order',
+      error: 'Operation failed. Please try again.',
     }
   }
 }

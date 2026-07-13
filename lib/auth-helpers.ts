@@ -143,8 +143,12 @@ export async function loadUserProfileResult(userId: string): Promise<{
       return {
         profile: {
           ...data,
+          role: data.role as UserProfile['role'],
+          status: data.status as UserProfile['status'],
+          created_at: data.created_at || '',
+          updated_at: data.updated_at || '',
           branch: Array.isArray(data.branch) && data.branch.length > 0 ? data.branch[0] : undefined,
-        },
+        } as UserProfile,
       }
     }
 
@@ -195,7 +199,7 @@ export async function loadUserProfileResult(userId: string): Promise<{
 
       if (!fallbackProfile.branch_id) {
         return {
-          profile: fallbackProfile,
+          profile: fallbackProfile as unknown as UserProfile,
         }
       }
 
@@ -208,15 +212,19 @@ export async function loadUserProfileResult(userId: string): Promise<{
       if (branchError) {
         logger.warn('[AUTH] Branch lookup failed during fallback profile load:', { error: branchError.message })
         return {
-          profile: fallbackProfile,
+          profile: fallbackProfile as unknown as UserProfile,
         }
       }
 
       return {
         profile: {
           ...fallbackProfile,
+          role: fallbackProfile.role as UserProfile['role'],
+          status: fallbackProfile.status as UserProfile['status'],
+          created_at: fallbackProfile.created_at || '',
+          updated_at: fallbackProfile.updated_at || '',
           branch: branchData,
-        },
+        } as UserProfile,
       }
     }
 
@@ -266,7 +274,7 @@ export async function loadCheckoutUserProfileResult(userId: string): Promise<{
       }
 
       return {
-        profile: data,
+        profile: data as unknown as UserProfile,
       }
     }
 
@@ -475,9 +483,10 @@ export async function verifySupervisorRole(): Promise<{
       isSupervisor: data.role === 'super_admin' || data.role === 'admin',
     }
   } catch (error) {
+    logger.error('Operation failed', { error: error })
     return {
       isSupervisor: false,
-      error: error instanceof Error ? error.message : 'Verification failed',
+      error: 'Operation failed. Please try again.',
     }
   }
 }

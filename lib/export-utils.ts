@@ -75,17 +75,34 @@ export function exportToJSON(data: unknown[], filename: string) {
 }
 
 /**
+ * Escape HTML special characters to prevent XSS in document.write contexts.
+ */
+export function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+}
+
+/**
  * Print HTML content.
+ * NOTE: The `html` parameter is inserted directly into the print document.
+ * Only pass pre-sanitized or escaped content as `html`. Use `escapeHtml()`
+ * for user-controlled values.
  */
 export function printHTML(html: string, title?: string) {
   const printWindow = window.open('', '_blank')
   if (!printWindow) return
 
+  const safeTitle = escapeHtml(title || 'Print')
+
   printWindow.document.write(`
     <!DOCTYPE html>
     <html>
     <head>
-      <title>${title || 'Print'}</title>
+      <title>${safeTitle}</title>
       <style>
         body { font-family: Arial, sans-serif; margin: 20px; }
         h1 { font-size: 18px; margin-bottom: 10px; }

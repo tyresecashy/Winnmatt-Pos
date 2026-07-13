@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, startTransition } from 'react'
 import { useAuth } from '@/contexts/auth-context'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -33,13 +33,14 @@ import {
   getTaxGroups, createTaxGroup, updateTaxGroup, deleteTaxGroup,
   getCategoryTaxAssignments, assignTaxToCategory, removeCategoryTaxAssignment,
   getProductCategories,
-} from '@/lib/tax-actions'
+} from '@/lib/modules/tax'
 import type { TaxRate, TaxGroupCombined, CategoryTaxAssignment, ProductCategory } from '@/lib/tax-utils'
 import {
   BadgePercent, Plus, MoreHorizontal, Search, Percent, Layers,
   Tags, Check, X, Loader2, Edit3, Trash2, Star, ToggleLeft, ToggleRight,
   ReceiptText, DollarSign,
 } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 
 const TAX_TYPE_LABELS: Record<string, string> = {
   vat: 'VAT',
@@ -119,7 +120,7 @@ export default function TaxConfigPage() {
     }
   }, [toast])
 
-  useEffect(() => { void loadData() }, [loadData])
+  useEffect(() => { startTransition(() => { void loadData() }) }, [loadData])
 
   // ── Filters ──
   const filteredRates = useMemo(() => {
@@ -196,7 +197,7 @@ export default function TaxConfigPage() {
       if (editingRate) {
         result = await updateTaxRate(editingRate.id, payload)
       } else {
-        result = await createTaxRate(payload as any)
+        result = await createTaxRate(payload)
       }
 
       if (!result.success) throw new Error(result.error)
@@ -264,7 +265,7 @@ export default function TaxConfigPage() {
       if (editingGroup) {
         result = await updateTaxGroup(editingGroup.group_id, payload)
       } else {
-        result = await createTaxGroup(payload as any)
+        result = await createTaxGroup(payload)
       }
 
       if (!result.success) throw new Error(result.error)
@@ -311,13 +312,7 @@ export default function TaxConfigPage() {
 
     setAssignSaving(true)
     try {
-      const result = await assignTaxToCategory({
-        category_id: assignForm.category_id,
-        tax_group_id: assignForm.tax_group_id,
-        is_tax_inclusive: assignForm.is_tax_inclusive,
-        effective_from: assignForm.effective_from || undefined,
-        effective_to: assignForm.effective_to || undefined,
-      })
+      const result = await assignTaxToCategory(assignForm.category_id, assignForm.tax_group_id)
 
       if (!result.success) throw new Error(result.error)
       toast({ title: 'Assigned', description: 'Tax group assigned to category' })
@@ -345,11 +340,7 @@ export default function TaxConfigPage() {
   if (!isAdmin) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center">
-          <BadgePercent className="h-12 w-12 mx-auto text-muted-foreground/40 mb-3" />
-          <h2 className="text-lg font-semibold">Access Restricted</h2>
-          <p className="text-sm text-muted-foreground mt-1">Only administrators can configure tax settings.</p>
-        </div>
+        <EmptyState icon={BadgePercent} title="Access Restricted" description="Only administrators can configure tax settings." />
       </div>
     )
   }
@@ -452,13 +443,7 @@ export default function TaxConfigPage() {
                   {[1,2,3].map(i => <Skeleton key={i} className="h-12 w-full" />)}
                 </div>
               ) : filteredRates.length === 0 ? (
-                <div className="text-center py-12">
-                  <Percent className="h-12 w-12 mx-auto text-muted-foreground/40 mb-3" />
-                  <p className="text-muted-foreground">No tax rates found</p>
-                  <Button variant="outline" className="mt-3" onClick={openCreateRate}>
-                    <Plus className="h-4 w-4 mr-2" /> Add First Rate
-                  </Button>
-                </div>
+                <EmptyState icon={Percent} title="No tax rates found" actions={[{ label: 'Add First Rate', onClick: openCreateRate, variant: 'outline', icon: Plus }]} compact />
               ) : (
                 <Table>
                   <TableHeader>
@@ -566,8 +551,7 @@ export default function TaxConfigPage() {
             ) : filteredGroups.length === 0 ? (
               <Card className="col-span-2">
                 <CardContent className="text-center py-12">
-                  <Layers className="h-12 w-12 mx-auto text-muted-foreground/40 mb-3" />
-                  <p className="text-muted-foreground">No tax groups created yet</p>
+                  <EmptyState icon={Layers} title="No tax groups created yet" compact />
                 </CardContent>
               </Card>
             ) : (
@@ -619,7 +603,7 @@ export default function TaxConfigPage() {
                     </div>
                     {group.rates && group.rates.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-1">
-                        {group.rates.map((r: any) => (
+                        {group.rates.map((r) => (
                           <Badge key={r.rate_id} variant="outline" className="text-[10px]">
                             {r.rate_name} ({r.percentage}%)
                           </Badge>
@@ -651,13 +635,7 @@ export default function TaxConfigPage() {
                   {[1,2,3].map(i => <Skeleton key={i} className="h-12 w-full" />)}
                 </div>
               ) : assignments.length === 0 ? (
-                <div className="text-center py-12">
-                  <Tags className="h-12 w-12 mx-auto text-muted-foreground/40 mb-3" />
-                  <p className="text-muted-foreground">No categories have tax assignments yet</p>
-                  <Button variant="outline" className="mt-3" onClick={openAssignDialog}>
-                    <Plus className="h-4 w-4 mr-2" /> Assign Tax to Category
-                  </Button>
-                </div>
+                <EmptyState icon={Tags} title="No categories have tax assignments yet" actions={[{ label: 'Assign Tax to Category', onClick: openAssignDialog, variant: 'outline', icon: Plus }]} compact />
               ) : (
                 <Table>
                   <TableHeader>
@@ -678,7 +656,7 @@ export default function TaxConfigPage() {
                         <TableCell>
                           <Badge variant="outline" className="font-mono">
                             {Array.isArray(assn.tax_rates)
-                              ? `${assn.tax_rates.reduce((s: number, r: any) => s + r.percentage, 0)}%`
+                              ? `${assn.tax_rates.reduce((s: number, r) => s + r.percentage, 0)}%`
                               : '—'}
                           </Badge>
                         </TableCell>
@@ -854,7 +832,7 @@ export default function TaxConfigPage() {
                     <label key={rate.id} className="flex items-center gap-3 p-2 rounded hover:bg-muted/50 cursor-pointer">
                       <input
                         type="checkbox"
-                        className="h-4 w-4 rounded border-gray-300"
+                        className="h-4 w-4 rounded border"
                         checked={groupForm.rate_ids.includes(rate.id)}
                         onChange={(e) => {
                           if (e.target.checked) {
@@ -903,7 +881,9 @@ export default function TaxConfigPage() {
               <Select value={assignForm.category_id} onValueChange={(v) => setAssignForm(p => ({ ...p, category_id: v }))}>
                 <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
                 <SelectContent>
-                  {categories.map(cat => (
+                  {categories.length === 0 ? (
+                    <SelectItem value="__none__" disabled>No categories found</SelectItem>
+                  ) : categories.map(cat => (
                     <SelectItem
                       key={cat.id}
                       value={cat.id}
@@ -920,7 +900,9 @@ export default function TaxConfigPage() {
               <Select value={assignForm.tax_group_id} onValueChange={(v) => setAssignForm(p => ({ ...p, tax_group_id: v }))}>
                 <SelectTrigger><SelectValue placeholder="Select tax group" /></SelectTrigger>
                 <SelectContent>
-                  {groups.filter(g => g.is_active).map(group => (
+                  {groups.filter(g => g.is_active).length === 0 ? (
+                    <SelectItem value="__none__" disabled>No active tax groups</SelectItem>
+                  ) : groups.filter(g => g.is_active).map(group => (
                     <SelectItem key={group.group_id} value={group.group_id}>
                       {group.group_name} ({group.combined_percentage}%)
                     </SelectItem>

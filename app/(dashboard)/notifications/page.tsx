@@ -1,7 +1,8 @@
 "use client"
 
 import { logger } from '@/lib/logger';
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { startTransition, useCallback, useEffect, useMemo, useState } from "react"
+import { EmptyState } from "@/components/ui/empty-state"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -31,7 +32,7 @@ import {
   markAsRead,
   markAllAsRead,
   getNotificationRules,
-} from "@/lib/notification-actions"
+} from "@/lib/modules/system"
 
 interface Notification {
   id: string
@@ -108,7 +109,7 @@ export default function NotificationsPage() {
     setRulesLoading(true)
     try {
       const data = await getNotificationRules(profile.branch_id)
-      setRules(data as NotificationRule[])
+      setRules(data as unknown as NotificationRule[])
     } catch (error) {
       logger.error("Failed to load notification rules:", error)
     } finally {
@@ -117,15 +118,19 @@ export default function NotificationsPage() {
   }, [profile])
 
   useEffect(() => {
-    if (authState === "authenticated") {
-      void loadData()
-    }
+    startTransition(() => {
+      if (authState === "authenticated") {
+        void loadData()
+      }
+    })
   }, [authState, loadData])
 
   useEffect(() => {
-    if (authState === "authenticated") {
-      void loadRules()
-    }
+    startTransition(() => {
+      if (authState === "authenticated") {
+        void loadRules()
+      }
+    })
   }, [authState, loadRules])
 
   const handleMarkAsRead = async (notificationId: string) => {
@@ -239,16 +244,12 @@ export default function NotificationsPage() {
             </div>
           ) : filteredNotifications.length === 0 ? (
             <Card>
-              <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-                <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
-                  <Bell className="h-6 w-6 text-muted-foreground" />
-                </div>
-                <p className="text-lg font-medium">No notifications</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {severityFilter !== "all"
-                    ? "No notifications match the selected severity."
-                    : "You're all caught up!"}
-                </p>
+              <CardContent>
+                <EmptyState
+                  icon={Bell}
+                  title="No notifications"
+                  description={severityFilter !== "all" ? "No notifications match the selected severity." : "You're all caught up!"}
+                />
               </CardContent>
             </Card>
           ) : (
@@ -333,15 +334,11 @@ export default function NotificationsPage() {
                   ))}
                 </div>
               ) : rules.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
-                    <BellRing className="h-6 w-6 text-muted-foreground" />
-                  </div>
-                  <p className="text-lg font-medium">No notification rules</p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Rules determine how you receive notifications.
-                  </p>
-                </div>
+                <EmptyState
+                  icon={BellRing}
+                  title="No notification rules"
+                  description="Rules determine how you receive notifications."
+                />
               ) : (
                 <Table>
                   <TableHeader>

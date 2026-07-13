@@ -52,11 +52,14 @@ export async function createStockCount(
       .select()
       .single()
 
-    if (error) throw new Error(error.message)
-    return { success: true, data }
+    if (error) {
+      if (error) logger.error('Operation failed', { error: error })
+      throw new Error('Operation failed')
+    }
+    return { success: true, data: data as StockCount }
   } catch (error) {
     logger.error('Error creating stock count', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to create stock count' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -81,7 +84,7 @@ export async function getStockCounts(
 
     const { data, error } = await query
     if (error) throw error
-    return data || []
+    return (data || []) as StockCount[]
   } catch (error) {
     logger.error('Error fetching stock counts', error)
     return []
@@ -102,7 +105,10 @@ export async function getStockCountWithItems(
       .eq('id', stockCountId)
       .single()
 
-    if (countError) throw new Error(countError.message)
+    if (countError) {
+        if (countError) logger.error('Operation failed', { error: countError })
+        throw new Error('Operation failed')
+      }
 
     const { data: itemsData, error: itemsError } = await supabaseAdmin
       .from('stock_count_items')
@@ -113,12 +119,15 @@ export async function getStockCountWithItems(
       .eq('stock_count_id', stockCountId)
       .order('created_at', { ascending: true })
 
-    if (itemsError) throw new Error(itemsError.message)
+    if (itemsError) {
+        if (itemsError) logger.error('Operation failed', { error: itemsError })
+        throw new Error('Operation failed')
+      }
 
-    return { count: countData, items: itemsData || [] }
+    return { count: countData as StockCount, items: (itemsData || []) as StockCountItem[] }
   } catch (error) {
     logger.error('Error fetching stock count', error)
-    return { error: error instanceof Error ? error.message : 'Failed to fetch stock count' }
+    return { error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -142,7 +151,10 @@ export async function populateStockCount(
       .eq('branch_id', branchId)
       .gt('quantity', 0)
 
-    if (invError) throw new Error(invError.message)
+    if (invError) {
+      logger.error('Operation failed', { error: invError })
+      throw new Error('Operation failed')
+    }
     if (!inventory || inventory.length === 0) {
       return { success: false, error: 'No inventory found for this branch' }
     }
@@ -160,7 +172,10 @@ export async function populateStockCount(
       .from('stock_count_items')
       .insert(items)
 
-    if (insertError) throw new Error(insertError.message)
+    if (insertError) {
+        if (insertError) logger.error('Operation failed', { error: insertError })
+        throw new Error('Operation failed')
+      }
 
     // Update count header
     const { error: updateError } = await supabaseAdmin
@@ -172,12 +187,15 @@ export async function populateStockCount(
       })
       .eq('id', stockCountId)
 
-    if (updateError) throw new Error(updateError.message)
+    if (updateError) {
+      if (updateError) logger.error('Operation failed', { error: updateError })
+      throw new Error('Operation failed')
+    }
 
     return { success: true }
   } catch (error) {
     logger.error('Error populating stock count', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to populate stock count' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -209,16 +227,19 @@ export async function updateStockCountItem(
       })
       .eq('id', itemId)
 
-    if (updateError) throw new Error(updateError.message)
+    if (updateError) {
+      if (updateError) logger.error('Operation failed', { error: updateError })
+      throw new Error('Operation failed')
+    }
 
     return { success: true }
   } catch (error) {
     logger.error('Error updating stock count item', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to update count' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
-/** Complete a stock count: compute totals and flag discrepancies */
+/** Complete a stock count: compute totals, flag discrepancies, calculate shrinkage */
 export async function completeStockCount(
   stockCountId: string
 ): Promise<{ success: boolean; error?: string }> {
@@ -226,17 +247,32 @@ export async function completeStockCount(
     const auth = await authenticateServerAction()
     if (!auth.success || !auth.profile) return { success: false, error: 'Not authenticated' }
 
-    // Get all items
+    // Get all items with product cost info
     const { data: items, error: itemsError } = await supabaseAdmin
       .from('stock_count_items')
-      .select('*')
+      .select('*, product:products(purchase_price)')
       .eq('stock_count_id', stockCountId)
 
-    if (itemsError) throw new Error(itemsError.message)
+    if (itemsError) {
+      logger.error('Operation failed', { error: itemsError })
+      throw new Error('Operation failed')
+    }
     if (!items || items.length === 0) throw new Error('No items in stock count')
 
-    const totalDiscrepancies = items.filter((i) => i.variance !== 0).length
-    const netVariance = items.reduce((sum, i) => sum + (i.variance || 0), 0)
+    const totalDiscrepancies = items.filter((i: { variance: number }) => i.variance !== 0).length
+    const netVariance = items.reduce((sum: number, i: { variance: number }) => sum + (i.variance || 0), 0)
+
+    // Compute shrinkage: only negative variances (stock loss), sum amounts + values
+    let shrinkageAmount = 0
+    let shrinkageValue = 0
+    for (const item of items as { variance: number; product?: { purchase_price: number } }[]) {
+      if (item.variance < 0) {
+        const loss = Math.abs(item.variance)
+        shrinkageAmount += loss
+        const unitCost = item.product?.purchase_price || 0
+        shrinkageValue += loss * unitCost
+      }
+    }
 
     const { error: updateError } = await supabaseAdmin
       .from('stock_counts')
@@ -244,16 +280,21 @@ export async function completeStockCount(
         status: 'completed',
         total_discrepancies: totalDiscrepancies,
         net_variance: netVariance,
+        shrinkage_amount: shrinkageAmount,
+        shrinkage_value: shrinkageValue,
         updated_at: new Date().toISOString(),
       })
       .eq('id', stockCountId)
 
-    if (updateError) throw new Error(updateError.message)
+    if (updateError) {
+      if (updateError) logger.error('Operation failed', { error: updateError })
+      throw new Error('Operation failed')
+    }
 
     return { success: true }
   } catch (error) {
     logger.error('Error completing stock count', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to complete stock count' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -322,12 +363,15 @@ export async function approveStockCount(
       })
       .eq('id', stockCountId)
 
-    if (updateError) throw new Error(updateError.message)
+    if (updateError) {
+      if (updateError) logger.error('Operation failed', { error: updateError })
+      throw new Error('Operation failed')
+    }
 
     return { success: true }
   } catch (error) {
     logger.error('Error approving stock count', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to approve stock count' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -348,11 +392,14 @@ export async function cancelStockCount(
       .eq('id', stockCountId)
       .in('status', ['draft', 'in_progress'])
 
-    if (error) throw new Error(error.message)
+    if (error) {
+      if (error) logger.error('Operation failed', { error: error })
+      throw new Error('Operation failed')
+    }
 
     return { success: true }
   } catch (error) {
     logger.error('Error cancelling stock count', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to cancel stock count' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }

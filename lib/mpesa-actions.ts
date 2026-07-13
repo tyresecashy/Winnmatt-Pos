@@ -64,7 +64,7 @@ export async function createMpesaTransaction(
     logger.error('[M-Pesa] Failed to create transaction', error)
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: 'Operation failed. Please try again.',
     }
   }
 }
@@ -94,7 +94,7 @@ export async function updateMpesaTransactionCallback(
       .from('mpesa_transactions')
       .update({
         status,
-        callback_payload: callbackPayload,
+        callback_payload: callbackPayload as any,
         callback_received_at: new Date().toISOString(),
         mpesa_receipt_number: mpesaReceiptNumber || null,
         error_message: resultDesc,
@@ -115,7 +115,7 @@ export async function updateMpesaTransactionCallback(
     logger.error('[M-Pesa] Failed to update callback', error)
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: 'Operation failed. Please try again.',
     }
   }
 }
@@ -143,7 +143,7 @@ export async function getMpesaTransactionByCheckoutId(
     logger.error('[M-Pesa] Failed to get transaction', error)
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Not found',
+      error: 'Operation failed. Please try again.',
     }
   }
 }
@@ -169,7 +169,7 @@ export async function getMpesaTransactionBySaleId(saleId: string) {
     logger.error('[M-Pesa] Failed to get transaction by sale', error)
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Error',
+      error: 'Operation failed. Please try again.',
     }
   }
 }
@@ -209,7 +209,7 @@ export async function finalizeMpesaSale(saleId: string) {
     logger.error('[M-Pesa] Failed to finalize sale', error)
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: 'Operation failed. Please try again.',
     }
   }
 }
@@ -239,7 +239,7 @@ export async function failMpesaSale(
     logger.error('[M-Pesa] Failed to mark sale as failed', error)
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: 'Operation failed. Please try again.',
     }
   }
 }
@@ -276,7 +276,7 @@ export async function getPendingMpesaTransactions(
     logger.error('[M-Pesa] Failed to get pending transactions', error)
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: 'Operation failed. Please try again.',
       transactions: [],
     }
   }
@@ -329,7 +329,7 @@ export async function getMpesaTransactionsByDateRange(
     logger.error('[M-Pesa] Failed to get transactions by date range', error)
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: 'Operation failed. Please try again.',
       transactions: [],
     }
   }
@@ -397,7 +397,7 @@ export async function getMpesaTransactionSummary(
     logger.error('[M-Pesa] Failed to get summary', error)
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: 'Operation failed. Please try again.',
     }
   }
 }

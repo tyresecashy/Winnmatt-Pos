@@ -8,6 +8,8 @@ import { Label } from "@/components/ui/label"
 import { forwardRef, useCallback, useState, useEffect, useRef } from "react"
 import { formatKSh } from "@/lib/currency"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { cn } from "@/lib/utils"
+import { EmptyState } from "@/components/ui/empty-state"
 
 interface Product {
   id: string
@@ -51,7 +53,13 @@ export const ProductSearchBar = forwardRef<HTMLInputElement, ProductSearchBarPro
   ) => {
     const [showCategories, setShowCategories] = useState(false)
     const [showResults, setShowResults] = useState(false)
+    const [selectedIndex, setSelectedIndex] = useState(-1)
     const containerRef = useRef<HTMLDivElement>(null)
+    const resultItemRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+
+    // Cap results for keyboard nav
+    const visibleProducts = filteredProducts.slice(0, 100)
+    const hasResults = visibleProducts.length > 0
 
     const displayPrice = (product: Product): number =>
       isWholesale ? Math.round((product.selling_price ?? 0) * 0.85) : (product.selling_price ?? 0)
@@ -65,6 +73,11 @@ export const ProductSearchBar = forwardRef<HTMLInputElement, ProductSearchBarPro
       }
     }, [searchTerm])
 
+    // Reset selection when results change
+    useEffect(() => {
+      setSelectedIndex(-1)
+    }, [searchTerm, filteredProducts.length])
+
     // Close popup on outside click
     useEffect(() => {
       function handleClickOutside(e: MouseEvent) {
@@ -76,19 +89,63 @@ export const ProductSearchBar = forwardRef<HTMLInputElement, ProductSearchBarPro
       return () => document.removeEventListener("mousedown", handleClickOutside)
     }, [])
 
+    const handleSelectProduct = useCallback((productId: string) => {
+      onAddToCart?.(productId)
+      setShowResults(false)
+      setSelectedIndex(-1)
+    }, [onAddToCart])
+
     const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key === "Escape") {
         e.preventDefault()
         setShowResults(false)
         onSearchChange("")
+        setSelectedIndex(-1)
         return
       }
-    }, [onSearchChange])
 
-    const handleSelectProduct = useCallback((productId: string) => {
-      onAddToCart?.(productId)
-      setShowResults(false)
-    }, [onAddToCart])
+      if (!hasResults) return
+
+      if (e.key === "ArrowDown") {
+        e.preventDefault()
+        setSelectedIndex((prev) => {
+          const next = prev < visibleProducts.length - 1 ? prev + 1 : 0
+          // Scroll the item into view
+          const product = visibleProducts[next]
+          if (product) {
+            const el = resultItemRefs.current.get(product.id)
+            el?.scrollIntoView({ block: "nearest" })
+          }
+          return next
+        })
+        return
+      }
+
+      if (e.key === "ArrowUp") {
+        e.preventDefault()
+        setSelectedIndex((prev) => {
+          const next = prev > 0 ? prev - 1 : visibleProducts.length - 1
+          // Scroll the item into view
+          const product = visibleProducts[next]
+          if (product) {
+            const el = resultItemRefs.current.get(product.id)
+            el?.scrollIntoView({ block: "nearest" })
+          }
+          return next
+        })
+        return
+      }
+
+      if (e.key === "Enter" && selectedIndex >= 0 && selectedIndex < visibleProducts.length) {
+        e.preventDefault()
+        const product = visibleProducts[selectedIndex]
+        const isOutOfStock = product.quantity <= 0
+        if (!isOutOfStock) {
+          handleSelectProduct(product.id)
+        }
+        return
+      }
+    }, [onSearchChange, hasResults, visibleProducts, selectedIndex, handleSelectProduct])
 
     return (
       <div ref={containerRef} className="relative w-full max-w-2xl mx-auto">
@@ -193,10 +250,10 @@ export const ProductSearchBar = forwardRef<HTMLInputElement, ProductSearchBarPro
         {/* Product results dropdown */}
         {showResults && (
           <div className="absolute left-0 right-0 top-full mt-2 z-50 bg-card border rounded-lg shadow-xl max-h-[50vh] overflow-hidden flex flex-col">
-            {filteredProducts.length === 0 && searchTerm ? (
+            {!hasResults && searchTerm ? (
               <div className="p-6 text-center">
                 <Package className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
-                <p className="text-sm text-muted-foreground mb-3">No products found for &ldquo;{searchTerm}&rdquo;</p>
+                <EmptyState title={`No products found for "${searchTerm}"`} compact />
                 {onQuickCreate && (
                   <button
                     type="button"
@@ -208,21 +265,32 @@ export const ProductSearchBar = forwardRef<HTMLInputElement, ProductSearchBarPro
                   </button>
                 )}
               </div>
-            ) : (
+            ) : hasResults ? (
               <ScrollArea className="max-h-[50vh]">
                 <div className="divide-y">
-                  {filteredProducts.map((product) => {
+                  {visibleProducts.map((product, index) => {
                     const isOutOfStock = product.quantity <= 0
+                    const isSelected = index === selectedIndex
                     const displayPriceFormatted = formatKSh(displayPrice(product))
                     return (
                       <div
                         key={product.id}
+                        ref={(el) => {
+                          if (el) {
+                            resultItemRefs.current.set(product.id, el)
+                          } else {
+                            resultItemRefs.current.delete(product.id)
+                          }
+                        }}
                         onClick={() => !isOutOfStock && handleSelectProduct(product.id)}
-                        className={`flex items-center justify-between px-4 py-3 cursor-pointer transition-all ${
-                          isOutOfStock
-                            ? 'opacity-50 cursor-not-allowed bg-muted/10'
-                            : 'hover:bg-primary/5 active:scale-[0.99]'
-                        }`}
+                        className={cn(
+                          "flex items-center justify-between px-4 py-3 cursor-pointer transition-all",
+                          isOutOfStock && "opacity-50 cursor-not-allowed bg-muted/10",
+                          !isOutOfStock && "active:scale-[0.99]",
+                          isSelected && !isOutOfStock
+                            ? "bg-primary/10 border-l-2 border-primary"
+                            : !isOutOfStock && "hover:bg-primary/5"
+                        )}
                       >
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium truncate">{product.name}</p>
@@ -246,7 +314,7 @@ export const ProductSearchBar = forwardRef<HTMLInputElement, ProductSearchBarPro
                   })}
                 </div>
               </ScrollArea>
-            )}
+            ) : null}
           </div>
         )}
       </div>

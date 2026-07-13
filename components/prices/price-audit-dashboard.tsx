@@ -23,6 +23,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { AlertCircle, CheckCircle, AlertTriangle, RefreshCw } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 import { useToast } from '@/hooks/use-toast'
 import { formatKSh } from '@/lib/currency'
 
@@ -189,7 +190,7 @@ export function PriceAuditDashboard() {
       <div role="region" aria-label="No anomalies detected" className="p-8 text-center">
         <CheckCircle className="mx-auto h-12 w-12 text-green-500 mb-4" />
         <p className="text-lg font-semibold">All prices approved ✓</p>
-        <p className="text-gray-500 mt-2">No anomalies detected</p>
+        <EmptyState title="No anomalies detected" compact />
       </div>
     )
   }
@@ -205,7 +206,7 @@ export function PriceAuditDashboard() {
       {/* Summary */}
       <div role="region" aria-label="Price anomaly summary" className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
         <div className="p-4 border rounded-lg">
-          <p className="text-sm text-gray-500">Total Anomalies</p>
+          <p className="text-sm text-muted-foreground">Total Anomalies</p>
           <p className="text-2xl font-bold">{anomalies.length}</p>
         </div>
         <div className="p-4 border rounded-lg border-red-200 bg-red-50">
@@ -226,7 +227,7 @@ export function PriceAuditDashboard() {
       <div className="border rounded-lg">
         <Table aria-label="Price anomalies requiring review">
           <TableHeader>
-            <TableRow className="bg-gray-50">
+            <TableRow className="bg-muted/50">
               <TableHead>Product</TableHead>
               <TableHead>Anomaly Type</TableHead>
               <TableHead>Severity</TableHead>
@@ -237,17 +238,17 @@ export function PriceAuditDashboard() {
           </TableHeader>
           <TableBody>
             {paginatedAnomalies.map((anomaly) => (
-              <TableRow key={anomaly.id} className="hover:bg-gray-50">
+              <TableRow key={anomaly.id} className="hover:bg-muted">
                 <TableCell>
                   <div>
                     <p className="font-semibold">{anomaly.products.name}</p>
-                    <p className="text-xs text-gray-500">{anomaly.products.sku}</p>
+                    <p className="text-xs text-muted-foreground">{anomaly.products.sku}</p>
                   </div>
                 </TableCell>
                 <TableCell>
                   <div className="text-sm">
                     <p className="font-medium">{formatAnomalyType(anomaly.anomaly_type)}</p>
-                    <p className="text-xs text-gray-500 max-w-xs">{anomaly.description}</p>
+                    <p className="text-xs text-muted-foreground max-w-xs">{anomaly.description}</p>
                   </div>
                 </TableCell>
                 <TableCell>
@@ -287,10 +288,10 @@ export function PriceAuditDashboard() {
                             Cost: <span className="text-green-600 font-semibold">{formatKSh(anomaly.suggested_purchase_price)}</span>
                           </p>
                         ) : null}
-                        <p className="text-xs text-gray-500 mt-1">{anomaly.suggestion_reason}</p>
+                        <p className="text-xs text-muted-foreground mt-1">{anomaly.suggestion_reason}</p>
                       </>
                     ) : (
-                      <p className="text-gray-400">—</p>
+                      <p className="text-muted-foreground">—</p>
                     )}
                   </div>
                 </TableCell>
@@ -381,7 +382,7 @@ export function PriceAuditDashboard() {
 
           <div className="space-y-4">
             {/* Current prices */}
-            <div className="p-3 bg-gray-50 rounded-lg text-sm">
+            <div className="p-3 bg-muted/50 rounded-lg text-sm">
               <p className="font-semibold mb-2">Current Prices:</p>
               <p>
                 Selling: <span className="font-mono">{formatKSh(selectedAnomaly?.current_selling_price ?? 0)}</span>

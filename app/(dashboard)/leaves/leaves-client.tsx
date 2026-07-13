@@ -24,8 +24,9 @@ import {
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { applyForLeave, updateLeaveStatus, cancelLeave } from '@/lib/leave-actions'
+import { applyForLeave, updateLeaveStatus, cancelLeave } from '@/lib/modules/workforce'
 import { useToast } from '@/components/ui/use-toast'
 
 interface LeaveRequest {
@@ -59,8 +60,8 @@ interface EmployeeProfile {
   photo_url: string | null
 }
 
-const statusConfig: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' | 'warning' }> = {
-  pending: { label: 'Pending', variant: 'warning' },
+const statusConfig: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' | 'ghost' }> = {
+  pending: { label: 'Pending', variant: 'ghost' },
   approved: { label: 'Approved', variant: 'default' },
   rejected: { label: 'Rejected', variant: 'destructive' },
   cancelled: { label: 'Cancelled', variant: 'outline' },
@@ -127,8 +128,8 @@ export function LeavesClient({
         setShowApplyDialog(false)
         setLeaveType('annual'); setStartDate(''); setEndDate(''); setReason('')
       }
-    } catch (err: any) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' })
+    } catch (err: unknown) {
+      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Unknown error', variant: 'destructive' })
     } finally { setSubmitting(false) }
   }
 
@@ -273,7 +274,7 @@ export function LeavesClient({
           <TableBody>
             {displayed.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center text-muted-foreground py-8">No leave requests found</TableCell>
+                <TableCell colSpan={8} className="text-center py-8"><EmptyState title="No leave requests found" compact /></TableCell>
               </TableRow>
             ) : displayed.map((lr) => {
               const cfg = statusConfig[lr.status] || { label: lr.status, variant: 'secondary' as const }
@@ -293,7 +294,7 @@ export function LeavesClient({
                     {lr.reason || '-'}
                   </TableCell>
                   <TableCell>
-                    <Badge variant={cfg.variant as any}>{cfg.label}</Badge>
+                    <Badge variant={cfg.variant as 'default' | 'secondary' | 'destructive' | 'outline' | 'ghost'}>{cfg.label}</Badge>
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">
                     {lr.approved_by_name || '-'}

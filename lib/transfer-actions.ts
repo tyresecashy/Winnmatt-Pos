@@ -70,8 +70,11 @@ export async function getStockTransfers(branchId?: string, status?: string): Pro
   }
 
   const { data, error } = await query
-  if (error) throw new Error(error.message)
-  return (data || []) as StockTransfer[]
+  if (error) {
+    if (error) logger.error('Operation failed', { error: error })
+    throw new Error('Operation failed')
+  }
+  return (data || []) as unknown as StockTransfer[]
 }
 
 export async function getStockTransfer(transferId: string): Promise<StockTransfer | null> {
@@ -83,8 +86,11 @@ export async function getStockTransfer(transferId: string): Promise<StockTransfe
     .eq('id', transferId)
     .single()
 
-  if (error) throw new Error(error.message)
-  return data as StockTransfer
+  if (error) {
+    if (error) logger.error('Operation failed', { error: error })
+    throw new Error('Operation failed')
+  }
+  return data as unknown as StockTransfer
 }
 
 export async function createStockTransfer(data: {
@@ -130,12 +136,13 @@ export async function createStockTransfer(data: {
         quantity_received: 0,
         notes: item.notes || null,
       }))
-      await supabaseAdmin.from('stock_transfer_items').insert(items)
+      await supabaseAdmin.from('stock_transfer_items').insert(items as never)
     }
 
     return { success: true, id: transfer.id }
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to create transfer' }
+    logger.error('Operation failed', { error: error })
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -157,7 +164,8 @@ export async function approveStockTransfer(transferId: string): Promise<{ succes
     if (error) throw error
     return { success: true }
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to approve' }
+    logger.error('Operation failed', { error: error })
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -172,41 +180,66 @@ export async function markInTransit(transferId: string): Promise<{ success: bool
     if (error) throw error
     return { success: true }
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to update' }
+    logger.error('Operation failed', { error: error })
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
 export async function receiveStockTransfer(
   transferId: string,
-  receivedItems: Array<{ item_id: string; quantity_received: number }>
+  receivedItems: Array<{ item_id: string; product_id?: string; quantity_received: number }>
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const { profile } = await authenticateServerAction()
     if (!profile) throw new Error('Unauthorized')
 
-    // Update received quantities
-    for (const item of receivedItems) {
-      await supabaseAdmin
-        .from('stock_transfer_items')
-        .update({ quantity_received: item.quantity_received })
-        .eq('id', item.item_id)
+    // Fetch transfer details to get product_id for each item
+    const { data: transfer, error: transferError } = await supabaseAdmin
+      .from('stock_transfers')
+      .select('status, from_branch_id, to_branch_id, items:stock_transfer_items(id, product_id)')
+      .eq('id', transferId)
+      .single()
+
+    if (transferError || !transfer) throw new Error('Transfer not found')
+    if (transfer.status !== 'in_transit') throw new Error('Transfer is not in transit')
+
+    // Build product-level items map from received items
+    const itemProductMap = new Map<string, string>()
+    for (const item of transfer.items ?? []) {
+      itemProductMap.set(item.id, item.product_id)
     }
 
-    // Update transfer status
-    const { error } = await supabaseAdmin
-      .from('stock_transfers')
-      .update({
-        status: 'received',
-        received_by: profile.id,
-        received_at: new Date().toISOString(),
-      })
-      .eq('id', transferId)
-      .eq('status', 'in_transit')
+    const productItems: Array<{ product_id: string; quantity: number }> = []
+    for (const ri of receivedItems) {
+      const productId = ri.product_id || itemProductMap.get(ri.item_id)
+      if (!productId) throw new Error(`Unknown product for item ${ri.item_id}`)
+      productItems.push({ product_id: productId, quantity: ri.quantity_received })
+    }
 
-    if (error) throw error
+    // Call the atomic RPC — inventory debit/credit, status update,
+    // stock movements, and quantity_received all in one DB transaction.
+    const { data: result, error: rpcError } = await supabaseAdmin
+      .rpc('receive_stock_transfer', {
+        p_transfer_id: transferId,
+        p_items: JSON.parse(JSON.stringify(productItems)),
+        p_received_by: profile.id,
+        p_received_at: new Date().toISOString(),
+      })
+
+    if (rpcError) {
+      if (rpcError) logger.error('Operation failed', { error: rpcError })
+      throw new Error('Operation failed')
+    }
+
+    const parsed = (result as { success: boolean; error?: string; itemErrors?: unknown[] }) || {}
+    if (!parsed.success) {
+      throw new Error(parsed.error || 'RPC returned failure')
+    }
+
     return { success: true }
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to receive' }
+    logger.error('Operation failed', { error: error })
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -221,7 +254,8 @@ export async function cancelStockTransfer(transferId: string): Promise<{ success
     if (error) throw error
     return { success: true }
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to cancel' }
+    logger.error('Operation failed', { error: error })
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -230,7 +264,10 @@ export async function getAllBranches() {
     .from('branches')
     .select('*')
     .order('name')
-  if (error) throw new Error(error.message)
+  if (error) {
+    if (error) logger.error('Operation failed', { error: error })
+    throw new Error('Operation failed')
+  }
   return data || []
 }
 
@@ -238,8 +275,11 @@ export async function getProductsAtBranch(branchId: string) {
   const { data, error } = await supabaseAdmin
     .from('products')
     .select('*, stock:inventory(*)')
-    .eq('branch_id', branchId)
+    .eq('branch_id' as never, branchId as never)
     .order('name')
-  if (error) throw new Error(error.message)
+  if (error) {
+    if (error) logger.error('Operation failed', { error: error })
+    throw new Error('Operation failed')
+  }
   return data || []
 }

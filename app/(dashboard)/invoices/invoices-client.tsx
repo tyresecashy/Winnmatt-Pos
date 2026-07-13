@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { formatKSh } from '@/lib/currency'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Badge } from '@/components/ui/badge'
 import {
   Dialog,
@@ -26,7 +27,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { createInvoiceFromSale, updateInvoiceStatus, recordInvoicePayment, deleteInvoice, getInvoiceStats } from '@/lib/invoice-actions'
+import { createInvoiceFromSale, updateInvoiceStatus, recordInvoicePayment, deleteInvoice, getInvoiceStats } from '@/lib/modules/expenses'
 import { useToast } from '@/components/ui/use-toast'
 
 interface Invoice {
@@ -63,19 +64,19 @@ interface BranchOption {
 
 interface CreditSale {
   id: string
-  sale_number: string
+  receipt_number: string
   customer_id: string
   total_amount: number
   created_at: string
 }
 
-const statusConfig: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' | 'warning' }> = {
+const statusConfig: Record<string, { label: string;   variant: 'default' | 'secondary' | 'destructive' | 'outline' | 'ghost' }> = {
   draft: { label: 'Draft', variant: 'secondary' },
   sent: { label: 'Sent', variant: 'default' },
   paid: { label: 'Paid', variant: 'default' },
   overdue: { label: 'Overdue', variant: 'destructive' },
   cancelled: { label: 'Cancelled', variant: 'outline' },
-  partially_paid: { label: 'Partially Paid', variant: 'warning' },
+  partially_paid: { label: 'Partially Paid', variant: 'ghost' },
 }
 
 export function InvoicesClient({
@@ -135,12 +136,12 @@ export function InvoicesClient({
       if (result.error) {
         toast({ title: 'Error', description: result.error, variant: 'destructive' })
       } else {
-        toast({ title: 'Success', description: `Invoice ${result.invoice?.invoice_number || ''} created` })
+        toast({ title: 'Success', description: `Invoice created (ID: ${result.id || ''})` })
         setShowCreateDialog(false)
         setSelectedSale('')
       }
-    } catch (err: any) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' })
+    } catch (err: unknown) {
+      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Unknown error', variant: 'destructive' })
     } finally {
       setSubmitting(false)
     }
@@ -302,7 +303,9 @@ export function InvoicesClient({
           <TableBody>
             {displayed.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center text-muted-foreground py-8">No invoices found</TableCell>
+                <TableCell colSpan={8} className="py-8">
+                  <EmptyState title="No invoices found" compact />
+                </TableCell>
               </TableRow>
             ) : displayed.map((inv) => {
               const cfg = statusConfig[inv.status] || { label: inv.status, variant: 'secondary' as const }
@@ -318,7 +321,7 @@ export function InvoicesClient({
                   <TableCell className="text-right font-mono">{formatKSh(inv.paid_amount_cents)}</TableCell>
                   <TableCell className="text-right font-mono font-semibold">{formatKSh(balance)}</TableCell>
                   <TableCell>
-                    <Badge variant={cfg.variant as any}>{cfg.label}</Badge>
+                    <Badge variant={cfg.variant as 'default' | 'secondary' | 'destructive' | 'outline' | 'ghost'}>{cfg.label}</Badge>
                   </TableCell>
                   <TableCell className="text-xs">
                     {new Date(inv.due_date).toLocaleDateString()}
@@ -382,7 +385,7 @@ export function InvoicesClient({
                     const cust = customers.find(c => c.id === s.customer_id)
                     return (
                       <SelectItem key={s.id} value={s.id}>
-                        {s.sale_number || s.id.slice(0, 8)} - {cust?.name || 'Unknown'} ({formatKSh(Math.round(s.total_amount))})
+                        {s.receipt_number || s.id.slice(0, 8)} - {cust?.name || 'Unknown'} ({formatKSh(Math.round(s.total_amount))})
                       </SelectItem>
                     )
                   })}
@@ -436,7 +439,7 @@ export function InvoicesClient({
           </DialogHeader>
           {showDetailDialog && (() => {
             const inv = invoices.find(i => i.id === showDetailDialog)
-            if (!inv) return <p>Invoice not found</p>
+            if (!inv) return <EmptyState title="Invoice not found" compact />
             const cfg = statusConfig[inv.status] || { label: inv.status, variant: 'secondary' as const }
             return (
               <div className="space-y-4">
@@ -446,7 +449,7 @@ export function InvoicesClient({
                     <p className="text-sm text-muted-foreground">{inv.customer_name}</p>
                     {inv.customer_phone && <p className="text-sm text-muted-foreground">{inv.customer_phone}</p>}
                   </div>
-                  <Badge variant={cfg.variant as any} className="text-sm">{cfg.label}</Badge>
+                  <Badge variant={cfg.variant as 'default' | 'secondary' | 'destructive' | 'outline' | 'ghost'} className="text-sm">{cfg.label}</Badge>
                 </div>
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div><span className="text-muted-foreground">Branch:</span> {inv.branch_name}</div>

@@ -217,7 +217,7 @@ export async function createWorkerRole(
     return { success: true, data: data as WorkerRole }
   } catch (error) {
     logger.error('[TaskManagement] Failed to create worker role:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -327,7 +327,7 @@ export async function createTaskFromTemplate(
     return { success: true, data: task as Task }
   } catch (error) {
     logger.error('[TaskManagement] Failed to create task from template:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -372,7 +372,7 @@ export async function getTasks(filters: {
       .range(offset, offset + limit - 1)
 
     if (error) throw error
-    return { tasks: (data || []) as Task[], total: count || 0 }
+    return { tasks: (data || []) as unknown as Task[], total: count || 0 }
   } catch (error) {
     logger.error('[TaskManagement] Failed to get tasks:', error)
     return { tasks: [], total: 0 }
@@ -390,13 +390,13 @@ export async function getWorkerTasks(
     const targetDate = date || new Date().toISOString().split('T')[0]
 
     const { data, error } = await supabaseAdmin
-      .rpc('get_worker_tasks', {
+      .rpc('get_worker_tasks' as never, {
         p_employee_id: employeeId,
         p_date: targetDate,
-      })
+      } as never)
 
     if (error) throw error
-    return (data || []) as Task[]
+    return (data || []) as unknown as Task[]
   } catch (error) {
     logger.error('[TaskManagement] Failed to get worker tasks:', error)
     return []
@@ -449,7 +449,7 @@ export async function createTask(
     return { success: true, data: data as Task }
   } catch (error) {
     logger.error('[TaskManagement] Failed to create task:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -487,7 +487,7 @@ export async function updateTaskStatus(
     return { success: true }
   } catch (error) {
     logger.error('[TaskManagement] Failed to update task status:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -508,7 +508,7 @@ export async function assignTask(
     return { success: true }
   } catch (error) {
     logger.error('[TaskManagement] Failed to assign task:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -521,16 +521,16 @@ export async function autoAssignTask(
 ): Promise<{ success: boolean; assignedTo?: string; error?: string }> {
   try {
     const { data, error } = await supabaseAdmin
-      .rpc('auto_assign_task', {
+      .rpc('auto_assign_task' as never, {
         p_task_id: taskId,
         p_branch_id: branchId,
-      })
+      } as never)
 
     if (error) throw error
-    return { success: true, assignedTo: data }
+    return { success: true, assignedTo: String(data) }
   } catch (error) {
     logger.error('[TaskManagement] Failed to auto-assign task:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -588,7 +588,7 @@ export async function toggleChecklistItem(
     return { success: true }
   } catch (error) {
     logger.error('[TaskManagement] Failed to toggle checklist item:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -617,7 +617,7 @@ export async function logTaskTime(
 
     // Calculate duration if resuming or ending
     if (lastLog && (action === 'resume' || action === 'end' || action === 'break_end')) {
-      const startTime = new Date(lastLog.timestamp)
+      const startTime = new Date(lastLog.timestamp ?? new Date().toISOString())
       const endTime = new Date()
       durationMinutes = Math.round((endTime.getTime() - startTime.getTime()) / 60000)
     }
@@ -664,7 +664,7 @@ export async function logTaskTime(
     return { success: true }
   } catch (error) {
     logger.error('[TaskManagement] Failed to log task time:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -697,7 +697,7 @@ export async function assignWorkerRole(
     return { success: true, data: data as WorkerAssignment }
   } catch (error) {
     logger.error('[TaskManagement] Failed to assign worker role:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -733,28 +733,112 @@ export async function getWorkerAssignments(branchId?: string): Promise<WorkerAss
     if (error) throw error
 
     // Map employee_profiles to WorkerAssignment format
-    const assignments: WorkerAssignment[] = (data || []).map((emp: any) => ({
-      id: emp.id,
-      employee_id: emp.id,
+    const assignments = ((data || []) as Record<string, unknown>[]).map((emp: Record<string, unknown>) => ({
+      id: emp.id as string,
+      employee_id: emp.id as string,
       role_id: '',
-      branch_id: branchId || emp.user?.branch_id || '',
-      start_date: emp.created_at || new Date().toISOString(),
+      branch_id: branchId || ((emp.user as Record<string, unknown>)?.branch_id as string) || '',
+      start_date: (emp.created_at as string) || new Date().toISOString(),
       end_date: null,
       is_active: true,
-      created_at: emp.created_at || new Date().toISOString(),
-      updated_at: emp.updated_at || new Date().toISOString(),
+      created_at: (emp.created_at as string) || new Date().toISOString(),
+      updated_at: (emp.updated_at as string) || new Date().toISOString(),
       role: null,
       employee: {
-        first_name: emp.user?.full_name?.split(' ')[0] || emp.user?.email?.split('@')[0] || 'Unknown',
-        last_name: emp.user?.full_name?.split(' ').slice(1).join(' ') || '',
-        staff_number: emp.staff_number || '',
+        first_name: ((emp.user as Record<string, unknown>)?.full_name as string)?.split(' ')[0] || ((emp.user as Record<string, unknown>)?.email as string)?.split('@')[0] || 'Unknown',
+        last_name: ((emp.user as Record<string, unknown>)?.full_name as string)?.split(' ').slice(1).join(' ') || '',
+        staff_number: (emp.staff_number as string) || '',
       },
-    }))
+    })) as unknown as WorkerAssignment[]
 
     return assignments
   } catch (error) {
     logger.error('[TaskManagement] Failed to get worker assignments:', error)
     return []
+  }
+}
+
+// ─── Worker Shift Service ───────────────────────────────────────────────────
+
+/**
+ * Get worker shifts within a date range for a branch.
+ */
+export async function getWorkerShifts(
+  branchId: string,
+  startDate: string,
+  endDate: string
+): Promise<any[]> {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('worker_shifts')
+      .select(`
+        *,
+        employee:employee_profiles(first_name, last_name, staff_number),
+        role:worker_roles(*)
+      `)
+      .eq('branch_id', branchId)
+      .gte('shift_date', startDate)
+      .lte('shift_date', endDate)
+      .order('shift_date')
+
+    if (error) throw error
+    return data || []
+  } catch (error) {
+    logger.error('[TaskManagement] Failed to get worker shifts:', error)
+    return []
+  }
+}
+
+/**
+ * Create a worker shift.
+ */
+export async function createWorkerShift(data: {
+  employee_id: string
+  branch_id: string
+  shift_date: string
+  start_time: string
+  end_time: string
+  role_id?: string | null
+  area?: string | null
+  notes?: string | null
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabaseAdmin
+      .from('worker_shifts')
+      .insert({
+        employee_id: data.employee_id,
+        branch_id: data.branch_id,
+        shift_date: data.shift_date,
+        start_time: data.start_time,
+        end_time: data.end_time,
+        role_id: data.role_id || null,
+        area: data.area || null,
+        notes: data.notes || null,
+      })
+
+    if (error) throw error
+    return { success: true }
+  } catch (error) {
+    logger.error('[TaskManagement] Failed to create worker shift:', error)
+    return { success: false, error: 'Operation failed. Please try again.' }
+  }
+}
+
+/**
+ * Delete a worker shift.
+ */
+export async function deleteWorkerShift(shiftId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabaseAdmin
+      .from('worker_shifts')
+      .delete()
+      .eq('id', shiftId)
+
+    if (error) throw error
+    return { success: true }
+  } catch (error) {
+    logger.error('[TaskManagement] Failed to delete worker shift:', error)
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -773,14 +857,14 @@ export async function getWorkerPerformance(
     const end = endDate || new Date().toISOString().split('T')[0]
 
     const { data, error } = await supabaseAdmin
-      .rpc('get_worker_performance', {
+      .rpc('get_worker_performance' as never, {
         p_employee_id: employeeId,
         p_start_date: start,
         p_end_date: end,
-      })
+      } as never)
 
     if (error) throw error
-    return data?.[0] || null
+    return (data as unknown as WorkerPerformance[])?.[0] || null
   } catch (error) {
     logger.error('[TaskManagement] Failed to get worker performance:', error)
     return null

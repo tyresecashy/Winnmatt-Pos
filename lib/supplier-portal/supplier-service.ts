@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { logger } from '@/lib/logger';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -105,7 +106,7 @@ export class SupplierPortalService {
     return user;
   }
 
-  async registerSupplier(supplierData: any): Promise<SupplierUser | null> {
+  async registerSupplier(supplierData: Record<string, unknown>): Promise<SupplierUser | null> {
     // Create supplier user
     const { data: user, error } = await supabase
       .from('supplier_users')
@@ -118,7 +119,7 @@ export class SupplierPortalService {
       .single();
 
     if (error) {
-      console.error('Error registering supplier:', error);
+      logger.error('Error registering supplier:', error);
       return null;
     }
 
@@ -126,7 +127,7 @@ export class SupplierPortalService {
   }
 
   // Dashboard
-  async getSupplierDashboard(supplierId: string): Promise<any> {
+  async getSupplierDashboard(supplierId: string): Promise<Record<string, unknown>> {
     const [
       orders,
       invoices,
@@ -174,7 +175,7 @@ export class SupplierPortalService {
     const { data, error } = await query;
 
     if (error) {
-      console.error('Error fetching orders:', error);
+      logger.error('Error fetching orders:', error);
       return [];
     }
 
@@ -186,15 +187,15 @@ export class SupplierPortalService {
       total_amount: order.total_amount || 0,
       expected_delivery_date: order.expected_delivery_date,
       actual_delivery_date: order.actual_delivery_date,
-      items: (order.items || []).map((item: any) => ({
-        product_id: item.product_id,
-        product_name: item.products?.name || 'Unknown',
-        sku: item.products?.sku || '',
-        quantity: item.quantity,
-        unit_price: item.unit_price || 0,
-        total_price: item.line_total || 0,
+      items: ((order.items || []) as Record<string, unknown>[]).map((item) => ({
+        product_id: item.product_id as string,
+        product_name: ((item.products as Record<string, unknown>)?.name as string) || 'Unknown',
+        sku: ((item.products as Record<string, unknown>)?.sku as string) || '',
+        quantity: item.quantity as number,
+        unit_price: (item.unit_price as number) || 0,
+        total_price: (item.line_total as number) || 0,
       })),
-      notes: order.notes || '',
+      notes: (order.notes as string) || '',
       created_at: order.created_at,
       updated_at: order.updated_at || order.created_at,
     }));
@@ -217,7 +218,7 @@ export class SupplierPortalService {
       .single();
 
     if (error) {
-      console.error('Error fetching order:', error);
+      logger.error('Error fetching order:', error);
       return null;
     }
 
@@ -229,22 +230,22 @@ export class SupplierPortalService {
       total_amount: data.total_amount || 0,
       expected_delivery_date: data.expected_delivery_date,
       actual_delivery_date: data.actual_delivery_date,
-      items: (data.items || []).map((item: any) => ({
-        product_id: item.product_id,
-        product_name: item.products?.name || 'Unknown',
-        sku: item.products?.sku || '',
-        quantity: item.quantity,
-        unit_price: item.unit_price || 0,
-        total_price: item.line_total || 0,
+      items: ((data.items || []) as Record<string, unknown>[]).map((item) => ({
+        product_id: item.product_id as string,
+        product_name: ((item.products as Record<string, unknown>)?.name as string) || 'Unknown',
+        sku: ((item.products as Record<string, unknown>)?.sku as string) || '',
+        quantity: item.quantity as number,
+        unit_price: (item.unit_price as number) || 0,
+        total_price: (item.line_total as number) || 0,
       })),
-      notes: data.notes || '',
+      notes: (data.notes as string) || '',
       created_at: data.created_at,
       updated_at: data.updated_at || data.created_at,
     };
   }
 
   async updateOrderStatus(orderId: string, status: string, notes?: string): Promise<boolean> {
-    const updates: any = { status };
+    const updates: Record<string, unknown> = { status };
     if (notes) updates.notes = notes;
     if (status === 'shipped') updates.shipped_at = new Date().toISOString();
     if (status === 'delivered') updates.actual_delivery_date = new Date().toISOString();
@@ -272,7 +273,7 @@ export class SupplierPortalService {
     const { data, error } = await query;
 
     if (error) {
-      console.error('Error fetching invoices:', error);
+      logger.error('Error fetching invoices:', error);
       return [];
     }
 
@@ -304,7 +305,7 @@ export class SupplierPortalService {
       .single();
 
     if (error) {
-      console.error('Error creating invoice:', error);
+      logger.error('Error creating invoice:', error);
       return null;
     }
 
@@ -333,7 +334,7 @@ export class SupplierPortalService {
       .order('product_name');
 
     if (error) {
-      console.error('Error fetching products:', error);
+      logger.error('Error fetching products:', error);
       return [];
     }
 
@@ -364,7 +365,7 @@ export class SupplierPortalService {
       .single();
 
     if (error) {
-      console.error('Error creating product:', error);
+      logger.error('Error creating product:', error);
       return null;
     }
 
@@ -423,7 +424,7 @@ export class SupplierPortalService {
   }
 
   // Notifications
-  async getSupplierNotifications(supplierId: string): Promise<any[]> {
+  async getSupplierNotifications(supplierId: string): Promise<Record<string, unknown>[]> {
     const { data, error } = await supabase
       .from('supplier_notifications')
       .select('*')
@@ -432,7 +433,7 @@ export class SupplierPortalService {
       .limit(50);
 
     if (error) {
-      console.error('Error fetching notifications:', error);
+      logger.error('Error fetching notifications:', error);
       return [];
     }
 

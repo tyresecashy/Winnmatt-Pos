@@ -24,7 +24,7 @@ export interface SecurityEvent {
   user_agent: string;
   user_id?: string;
   description: string;
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
   timestamp: string;
   investigated: boolean;
   resolved: boolean;
@@ -300,7 +300,7 @@ export class SecurityCenterService {
     return this.events.filter(e => e.type === 'suspicious_device');
   }
 
-  async getSecuritySummary(): Promise<any> {
+  async getSecuritySummary(): Promise<Record<string, unknown>> {
     const analysis = await this.getThreatAnalysis();
     const recentEvents = await this.getSecurityEvents({ since: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString() });
 

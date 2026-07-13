@@ -111,19 +111,11 @@ export class InventoryAnalyticsService {
   }
 
   async getStockTurnover(startDate: string, endDate: string, limit: number = 20): Promise<StockTurnover[]> {
-    const { data: salesItems } = await supabaseAdmin
-      .from('sale_items')
-      .select('product_id, quantity')
-      .gte('created_at', startDate)
-      .lte('created_at', endDate);
-
-    const { data: products } = await supabaseAdmin
-      .from('products')
-      .select('id, name, category_id');
-
-    const { data: inventory } = await supabaseAdmin
-      .from('inventory')
-      .select('product_id, quantity');
+    const [{ data: salesItems }, { data: products }, { data: inventory }] = await Promise.all([
+      supabaseAdmin.from('sale_items').select('product_id, quantity').gte('created_at', startDate).lte('created_at', endDate),
+      supabaseAdmin.from('products').select('id, name, category_id'),
+      supabaseAdmin.from('inventory').select('product_id, quantity'),
+    ]);
 
     if (!salesItems || !products) return [];
 
@@ -162,55 +154,58 @@ export class InventoryAnalyticsService {
   }
 
   async getShrinkageReport(startDate: string, endDate: string): Promise<ShrinkageReport[]> {
-    const { data: purchases } = await supabaseAdmin
-      .from('purchase_order_items')
-      .select('product_id, quantity')
-      .gte('created_at', startDate)
-      .lte('created_at', endDate);
+    // All 5 queries are independent — run in parallel
+    const [
+      { data: openingStock },
+      { data: purchases },
+      { data: salesItems },
+      { data: products },
+      { data: inventory },
+    ] = await Promise.all([
+      supabaseAdmin.rpc('get_opening_stock', { p_snapshot_date: startDate.split('T')[0] }),
+      supabaseAdmin.from('purchase_order_items').select('product_id, quantity').gte('created_at', startDate).lte('created_at', endDate),
+      supabaseAdmin.from('sale_items').select('product_id, quantity').gte('created_at', startDate).lte('created_at', endDate),
+      supabaseAdmin.from('products').select('id, name, purchase_price'),
+      supabaseAdmin.from('inventory').select('product_id, quantity'),
+    ]);
 
-    const { data: salesItems } = await supabaseAdmin
-      .from('sale_items')
-      .select('product_id, quantity')
-      .gte('created_at', startDate)
-      .lte('created_at', endDate);
-
-    const { data: products } = await supabaseAdmin
-      .from('products')
-      .select('id, name, purchase_price');
-
-    const { data: inventory } = await supabaseAdmin
-      .from('inventory')
-      .select('product_id, quantity');
+    const openingMap = new Map<string, number>();
+    if (openingStock) {
+      for (const row of openingStock as Array<{ product_id: string; branch_id: string; quantity: number }>) {
+        const current = openingMap.get(row.product_id) || 0
+        openingMap.set(row.product_id, current + row.quantity)
+      }
+    }
 
     if (!products) return [];
 
-    const inventoryMap = new Map<string, number>();
+    const currentMap = new Map<string, number>();
     inventory?.forEach(inv => {
-      inventoryMap.set(inv.product_id, inv.quantity || 0);
+      currentMap.set(inv.product_id, inv.quantity || 0);
     });
 
-    const stockMap = new Map<string, number>();
-    products.forEach((product) => {
-      stockMap.set(product.id, inventoryMap.get(product.id) || 0);
+    // 5. Build purchases and sales maps
+    const purchaseMap = new Map<string, number>();
+    purchases?.forEach(p => {
+      purchaseMap.set(p.product_id, (purchaseMap.get(p.product_id) || 0) + p.quantity);
     });
 
-    purchases?.forEach((purchase) => {
-      const current = stockMap.get(purchase.product_id) || 0;
-      stockMap.set(purchase.product_id, current + purchase.quantity);
+    const salesMap = new Map<string, number>();
+    salesItems?.forEach(s => {
+      salesMap.set(s.product_id, (salesMap.get(s.product_id) || 0) + s.quantity);
     });
 
-    salesItems?.forEach((sale) => {
-      const current = stockMap.get(sale.product_id) || 0;
-      stockMap.set(sale.product_id, current - sale.quantity);
-    });
-
+    // 6. Compute: expected = opening + purchases - sales, shrinkage = expected - current
     const shrinkageData: ShrinkageReport[] = [];
-    
+
     products.forEach((product) => {
-      const expectedStock = stockMap.get(product.id) || 0;
-      const actualStock = inventoryMap.get(product.id) || 0;
-      const shrinkage = expectedStock - actualStock;
-      
+      const openingQty = openingMap.get(product.id) || 0
+      const purchaseQty = purchaseMap.get(product.id) || 0
+      const saleQty = salesMap.get(product.id) || 0
+      const expectedStock = openingQty + purchaseQty - saleQty
+      const actualStock = currentMap.get(product.id) || 0
+      const shrinkage = expectedStock - actualStock
+
       if (shrinkage > 0) {
         shrinkageData.push({
           productId: product.id,
@@ -235,22 +230,16 @@ export class InventoryAnalyticsService {
 
     if (!products) return [];
 
-    const { data: inventory } = await supabaseAdmin
-      .from('inventory')
-      .select('product_id, quantity');
+    // inventory and salesItems are independent — run in parallel
+    const [{ data: inventory }, { data: salesItems }] = await Promise.all([
+      supabaseAdmin.from('inventory').select('product_id, quantity'),
+      supabaseAdmin.from('sale_items').select('product_id, quantity').gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()),
+    ]);
 
     const inventoryMap = new Map<string, number>();
     inventory?.forEach(inv => {
       inventoryMap.set(inv.product_id, inv.quantity || 0);
     });
-
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-    const { data: salesItems } = await supabaseAdmin
-      .from('sale_items')
-      .select('product_id, quantity')
-      .gte('created_at', thirtyDaysAgo.toISOString());
 
     const salesMap = new Map<string, number>();
     salesItems?.forEach((item) => {
@@ -285,16 +274,11 @@ export class InventoryAnalyticsService {
   }
 
   async getDeadStock(daysSinceLastSale: number = 30): Promise<DeadStockItem[]> {
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - daysSinceLastSale);
-
-    const { data: products } = await supabaseAdmin
-      .from('products')
-      .select('id, name, category_id, last_sold_at, purchase_price');
-
-    const { data: inventory } = await supabaseAdmin
-      .from('inventory')
-      .select('product_id, quantity');
+    // products and inventory are independent — run in parallel
+    const [{ data: products }, { data: inventory }] = await Promise.all([
+      supabaseAdmin.from('products').select('id, name, category_id, purchase_price'),
+      supabaseAdmin.from('inventory').select('product_id, quantity'),
+    ]);
 
     if (!products) return [];
 
@@ -304,8 +288,9 @@ export class InventoryAnalyticsService {
     });
 
     const deadStock: DeadStockItem[] = [];
+    const typedProducts = (products || []) as unknown as Array<{ id: string; name: string; category_id: string | null; last_sold_at: string | null; purchase_price: number | null }>;
 
-    products.forEach((product) => {
+    typedProducts.forEach((product) => {
       const currentStock = inventoryMap.get(product.id) || 0;
       if (currentStock > 0) {
         const lastSoldAt = product.last_sold_at ? new Date(product.last_sold_at) : null;
@@ -363,7 +348,7 @@ export class InventoryAnalyticsService {
       if (!supplierId) return;
 
       const existing = supplierMap.get(supplierId) || {
-        supplierName: (order.suppliers as any)?.name || 'Unknown',
+        supplierName: ((order.suppliers as { name?: string })?.name) || 'Unknown',
         totalOrders: 0,
         onTimeDelivery: 0,
         totalLeadTime: 0,

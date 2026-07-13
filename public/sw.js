@@ -8,6 +8,7 @@
  * - Background sync for pending transactions
  */
 
+/* eslint-disable no-console */
 const CACHE_NAME = 'winnmatt-v1'
 const STATIC_CACHE = 'winnmatt-static-v1'
 const API_CACHE = 'winnmatt-api-v1'

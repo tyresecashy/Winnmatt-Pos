@@ -1,17 +1,17 @@
 export interface SystemConfig {
   id: string;
   key: string;
-  value: any;
+  value: unknown;
   type: 'string' | 'number' | 'boolean' | 'json' | 'encrypted';
   category: string;
   description: string;
-  default_value: any;
+  default_value: unknown;
   is_required: boolean;
   is_env_specific: boolean;
   validation_regex?: string;
   min_value?: number;
   max_value?: number;
-  allowed_values?: any[];
+  allowed_values?: unknown[];
   last_modified: string;
   modified_by: string;
   version: number;
@@ -27,8 +27,8 @@ export interface ConfigCategory {
 export interface ConfigChange {
   id: string;
   config_key: string;
-  old_value: any;
-  new_value: any;
+  old_value: unknown;
+  new_value: unknown;
   changed_by: string;
   changed_at: string;
   reason?: string;
@@ -317,12 +317,12 @@ export class ConfigManagementService {
     return this.configs.get(key) || null;
   }
 
-  async getConfigValue(key: string): Promise<any> {
+  async getConfigValue(key: string): Promise<unknown> {
     const config = this.configs.get(key);
     return config?.value ?? config?.default_value;
   }
 
-  async setConfig(key: string, value: any, modifiedBy: string, reason?: string): Promise<boolean> {
+  async setConfig(key: string, value: unknown, modifiedBy: string, reason?: string): Promise<boolean> {
     const config = this.configs.get(key);
     if (!config) return false;
 
@@ -351,7 +351,7 @@ export class ConfigManagementService {
     return true;
   }
 
-  private validateConfigValue(config: SystemConfig, value: any): boolean {
+  private validateConfigValue(config: SystemConfig, value: unknown): boolean {
     // Type validation
     switch (config.type) {
       case 'number':
@@ -416,8 +416,8 @@ export class ConfigManagementService {
       .sort((a, b) => new Date(b.changed_at).getTime() - new Date(a.changed_at).getTime());
   }
 
-  async exportConfig(category?: string): Promise<Record<string, any>> {
-    const configObj: Record<string, any> = {};
+  async exportConfig(category?: string): Promise<Record<string, unknown>> {
+    const configObj: Record<string, unknown> = {};
     
     this.configs.forEach((config, key) => {
       if (!category || config.category === category) {
@@ -428,7 +428,7 @@ export class ConfigManagementService {
     return configObj;
   }
 
-  async importConfig(configs: Record<string, any>, importedBy: string): Promise<number> {
+  async importConfig(configs: Record<string, unknown>, importedBy: string): Promise<number> {
     let imported = 0;
 
     for (const [key, value] of Object.entries(configs)) {
@@ -457,7 +457,7 @@ export class ConfigManagementService {
     return reset;
   }
 
-  async getConfigSummary(): Promise<any> {
+  async getConfigSummary(): Promise<Record<string, unknown>> {
     const categories = await this.getCategories();
     
     return {

@@ -56,9 +56,10 @@ export async function getSystemHealth() {
 
     let avgCheckoutTime = 0
     if (recentSales && recentSales.length > 0) {
-      const times = recentSales.map(s =>
-        (new Date(s.updated_at).getTime() - new Date(s.created_at).getTime()) / 1000
-      ).filter(t => t > 0 && t < 3600) // filter outliers
+      const times = recentSales.map(s => {
+        if (!s.updated_at || !s.created_at) return NaN
+        return (new Date(s.updated_at).getTime() - new Date(s.created_at).getTime()) / 1000
+      }).filter(t => t > 0 && t < 3600) // filter outliers
       avgCheckoutTime = times.length > 0
         ? Math.round(times.reduce((a, b) => a + b, 0) / times.length)
         : 0
@@ -166,7 +167,7 @@ export async function updateLaunchChecklistItem(
     const existing = await getLaunchReadiness(branchId)
     if (!existing) return { success: false, error: 'Not found' }
 
-    const items = { ...(existing as any).items, [itemKey]: value }
+    const items = { ...(existing as { items: Record<string, boolean> }).items, [itemKey]: value }
     const allPassed = Object.values(items).every(Boolean)
     const status = allPassed ? 'passed' : 'in_progress'
 
@@ -177,9 +178,13 @@ export async function updateLaunchChecklistItem(
       last_checked_at: new Date().toISOString(),
     })
 
-    if (error) throw new Error(error.message)
+    if (error) {
+      if (error) logger.error('Operation failed', { error: error })
+      throw new Error('Operation failed')
+    }
     return { success: true, status }
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to update checklist' }
+    logger.error('Operation failed', { error: error })
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }

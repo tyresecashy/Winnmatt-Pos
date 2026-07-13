@@ -28,7 +28,7 @@ const uuidv4 = () => crypto.randomUUID()
  * Simple Levenshtein distance for fuzzy matching
  * Returns similarity score 0-100
  */
-export function levenshteinSimilarity(str1: string, str2: string): number {
+function levenshteinSimilarity(str1: string, str2: string): number {
   const len1 = str1.length
   const len2 = str2.length
   const matrix: number[][] = []
@@ -62,7 +62,7 @@ export function levenshteinSimilarity(str1: string, str2: string): number {
  * Exact match: same source + same source_product_id
  * Same normalized name + brand + unit
  */
-export function isDeterministicMatch(
+function isDeterministicMatch(
   product1: ProductMatchData,
   product2: ProductMatchData,
   existingProduct?: ProductMatchData
@@ -103,7 +103,7 @@ export function isDeterministicMatch(
  * Check if two products might be a fuzzy match
  * Similar names + same brand + same unit = possible duplicate
  */
-export function isFuzzyMatch(
+function isFuzzyMatch(
   product1: ProductMatchData,
   product2: ProductMatchData,
   threshold = 85
@@ -150,7 +150,7 @@ export function isFuzzyMatch(
 /**
  * Find potential duplicates for a staging product
  */
-export async function findPotentialDuplicates(
+async function findPotentialDuplicates(
   stagingProduct: ProductMatchData,
   batchId: string
 ): Promise<
@@ -232,7 +232,7 @@ export async function findPotentialDuplicates(
 /**
  * Record deduplication event (for audit trail)
  */
-export async function recordDeduplication(
+async function recordDeduplication(
   batchId: string,
   stagingProductId: string,
   matchedProductId: string,
@@ -256,7 +256,8 @@ export async function recordDeduplication(
   })
 
   if (error) {
-    throw new Error(`Failed to record deduplication: ${error.message}`)
+    logger.error('Operation failed', { error: error })
+    throw new Error('Operation failed')
   }
 }
 
@@ -278,7 +279,8 @@ export async function dedupImportBatch(batchId: string): Promise<{
     .eq('batch_id', batchId)
 
   if (fetchError) {
-    throw new Error(`Failed to fetch staging products: ${fetchError.message}`)
+    logger.error('Operation failed', { error: fetchError })
+    throw new Error('Operation failed')
   }
 
   if (!stagingProducts || stagingProducts.length === 0) {
@@ -334,21 +336,4 @@ export async function dedupImportBatch(batchId: string): Promise<{
   }
 }
 
-/**
- * Get deduplication matches for a staging product
- */
-export async function getDeduplicationMatches(stagingProductId: string) {
-  const supabase = await createClient()
 
-  const { data, error } = await supabase
-    .from('product_deduplications')
-    .select('*')
-    .eq('staging_product_id', stagingProductId)
-    .order('confidence', { ascending: false })
-
-  if (error) {
-    throw new Error(`Failed to get duplicates: ${error.message}`)
-  }
-
-  return data || []
-}

@@ -27,7 +27,7 @@ export default async function PriceAuditPage() {
     <div className="p-6 space-y-6 fade-in">
       <div>
         <h1 className="text-3xl font-bold">Price Audit & Protection</h1>
-        <p className="text-gray-500 mt-2">
+        <p className="text-muted-foreground mt-2">
           Review and protect live product prices before large-scale imports. Anomalies are
           automatically detected and flagged for admin review.
         </p>

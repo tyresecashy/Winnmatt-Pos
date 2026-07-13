@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { startTransition, useCallback, useEffect, useMemo, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -29,12 +29,13 @@ import {
   getAccounts, getAccountsByType, createAccount, updateAccount, deleteAccount,
   getAccountBalances, getFinanceStats,
   type Account,
-} from '@/lib/finance-actions'
+} from '@/lib/modules/finance'
 import {
   BookOpen, Plus, MoreHorizontal, Search, Loader2, Edit3, Trash2,
   Landmark, CreditCard, Wallet, TrendingUp, TrendingDown, ArrowUpDown,
   Eye, RefreshCw, DollarSign, Building2,
 } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -72,9 +73,25 @@ export default function ChartOfAccountsPage() {
 
   // ── Data State ──
   const [accounts, setAccounts] = useState<Account[]>([])
-  const [balances, setBalances] = useState<any[]>([])
+  const [balances, setBalances] = useState<{
+    account_id: string
+    account_number: string
+    name: string
+    account_type: string
+    normal_balance: string
+    balance: number
+  }[]>([])
   const [loading, setLoading] = useState(true)
-  const [stats, setStats] = useState<any>(null)
+  const [stats, setStats] = useState<{
+    totalRevenue: number
+    totalExpenses: number
+    netProfit: number
+    cashPosition: number
+    accountsReceivable: number
+    accountsPayable: number
+    inventoryValue: number
+    monthlyEntries: number
+  } | null>(null)
   const [activeTab, setActiveTab] = useState('all')
 
   // ── UI State ──
@@ -97,22 +114,40 @@ export default function ChartOfAccountsPage() {
   const loadData = useCallback(async () => {
     try {
       setLoading(true)
+      const end = new Date().toISOString()
+      const start = new Date(Date.now() - 90 * 86400000).toISOString()
       const [accountsData, balancesData, statsData] = await Promise.all([
         getAccounts(),
         getAccountBalances(),
-        getFinanceStats(),
+        getFinanceStats(start, end),
       ])
       setAccounts(accountsData)
-      setBalances(balancesData)
-      setStats(statsData)
-    } catch (err: any) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' })
+      setBalances(balancesData.map(b => ({
+        account_id: b.id,
+        account_number: b.code,
+        name: b.name,
+        account_type: b.account_type,
+        normal_balance: 'debit',
+        balance: b.balance,
+      })))
+      setStats({
+        totalRevenue: statsData.totalRevenue,
+        totalExpenses: statsData.totalExpenses,
+        netProfit: statsData.netIncome,
+        cashPosition: statsData.cashBalance,
+        accountsReceivable: statsData.accountReceivable,
+        accountsPayable: statsData.accountPayable,
+        inventoryValue: 0,
+        monthlyEntries: 0,
+      })
+    } catch (err: unknown) {
+      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Unknown error', variant: 'destructive' })
     } finally {
       setLoading(false)
     }
   }, [toast])
 
-  useEffect(() => { loadData() }, [loadData])
+  useEffect(() => { startTransition(() => { loadData() }) }, [loadData])
 
   // ── Filtered Accounts ──
   const filteredAccounts = useMemo(() => {
@@ -122,11 +157,14 @@ export default function ChartOfAccountsPage() {
     }
     if (searchTerm) {
       const term = searchTerm.toLowerCase()
-      result = result.filter(a =>
-        a.account_number.toLowerCase().includes(term) ||
-        a.name.toLowerCase().includes(term) ||
-        (a.description || '').toLowerCase().includes(term)
-      )
+      result = result.filter(a => {
+        const acct = a as any
+        return (
+          (acct.account_number || acct.code || '').toLowerCase().includes(term) ||
+          a.name.toLowerCase().includes(term) ||
+          (a.description || '').toLowerCase().includes(term)
+        )
+      })
     }
     return result
   }, [accounts, activeTab, searchTerm])
@@ -163,14 +201,15 @@ export default function ChartOfAccountsPage() {
 
   // ── Open Edit Dialog ──
   const openEdit = (account: Account) => {
+    const acct = account as any
     setEditing(account)
     setForm({
-      account_number: account.account_number,
+      account_number: acct.account_number || acct.code || '',
       name: account.name,
       description: account.description || '',
       account_type: account.account_type,
-      account_subtype: account.account_subtype || '',
-      normal_balance: account.normal_balance || 'debit',
+      account_subtype: acct.account_subtype || '',
+      normal_balance: acct.normal_balance || 'debit',
     })
     setShowDialog(true)
   }
@@ -193,19 +232,17 @@ export default function ChartOfAccountsPage() {
         toast({ title: 'Account updated' })
       } else {
         await createAccount({
-          account_number: form.account_number,
+          code: form.account_number,
           name: form.name,
           description: form.description || undefined,
           account_type: form.account_type,
-          account_subtype: form.account_subtype || undefined,
-          normal_balance: form.normal_balance,
         })
         toast({ title: 'Account created' })
       }
       setShowDialog(false)
       loadData()
-    } catch (err: any) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' })
+    } catch (err: unknown) {
+      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Unknown error', variant: 'destructive' })
     } finally {
       setSaving(false)
     }
@@ -213,7 +250,7 @@ export default function ChartOfAccountsPage() {
 
   // ── Delete Account ──
   const handleDelete = async (account: Account) => {
-    if (!confirm(`Delete account ${account.account_number} - ${account.name}?`)) return
+    if (!confirm(`Delete account ${(account as any).account_number || account.code} - ${account.name}?`)) return
 
     try {
       const result = await deleteAccount(account.id)
@@ -223,8 +260,8 @@ export default function ChartOfAccountsPage() {
       } else {
         toast({ title: 'Cannot delete', description: result.error, variant: 'destructive' })
       }
-    } catch (err: any) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' })
+    } catch (err: unknown) {
+      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Unknown error', variant: 'destructive' })
     }
   }
 
@@ -349,7 +386,7 @@ export default function ChartOfAccountsPage() {
               {filteredAccounts.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                    No accounts found
+                    <EmptyState icon={BookOpen} title="No accounts found" compact />
                   </TableCell>
                 </TableRow>
               ) : (
@@ -357,7 +394,7 @@ export default function ChartOfAccountsPage() {
                   const balance = getBalance(account.id)
                   return (
                     <TableRow key={account.id} className="group">
-                      <TableCell className="font-mono font-medium">{account.account_number}</TableCell>
+                      <TableCell className="font-mono font-medium">{(account as any).account_number || account.code}</TableCell>
                       <TableCell>
                         <div>
                           <p className="font-medium">{account.name}</p>
@@ -375,13 +412,13 @@ export default function ChartOfAccountsPage() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground capitalize">
-                        {(account.account_subtype || '').replace(/_/g, ' ')}
+                        {((account as any).account_subtype || '').replace(/_/g, ' ')}
                       </TableCell>
                       <TableCell className={`text-right font-medium ${balance >= 0 ? '' : 'text-red-600'}`}>
                         {formatKSh(Math.abs(balance))}
                       </TableCell>
                       <TableCell>
-                        {account.is_system ? (
+                        {(account as any).is_system ? (
                           <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
                             System
                           </Badge>
@@ -407,7 +444,7 @@ export default function ChartOfAccountsPage() {
                               <Edit3 className="h-4 w-4 mr-2" />
                               Edit
                             </DropdownMenuItem>
-                            {!account.is_system && (
+                            {!((account as any).is_system) && (
                               <>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem

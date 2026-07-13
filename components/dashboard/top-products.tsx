@@ -1,12 +1,14 @@
 'use client'
-import { logger } from '@/lib/logger';
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback } from 'react'
+import { useDashboardQuery } from '@/hooks/use-dashboard-query'
 import { useAuth } from '@/contexts/auth-context'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import { AlertCircle, RefreshCw } from 'lucide-react'
-import { getTopProductsToday } from '@/lib/dashboard-actions'
+import { EmptyState } from '@/components/ui/empty-state'
+import { getTopProductsToday } from '@/lib/modules/dashboard'
 import { formatKSh } from '@/lib/currency'
 
 interface TopProduct {
@@ -17,89 +19,18 @@ interface TopProduct {
 
 export function TopProducts() {
   const { profile } = useAuth()
-  const [products, setProducts] = useState<TopProduct[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [retryCount, setRetryCount] = useState(0)
-  const fetchPromiseRef = useRef<Promise<void> | null>(null)
-  const lastFetchAtRef = useRef(0)
-  const hasLoadedRef = useRef(false)
+  const branchId = profile?.branch_id
 
-  useEffect(() => {
-    let cancelled = false
+  const fetcher = useCallback(
+    () => branchId ? getTopProductsToday(branchId, 5) : Promise.resolve([]),
+    [branchId]
+  )
 
-    async function loadProducts(options?: { force?: boolean; minIntervalMs?: number }) {
-      const branchId = profile?.branch_id
-      if (!branchId) {
-        if (!cancelled) {
-          setProducts([])
-          setLoading(false)
-        }
-        return
-      }
-
-      const now = Date.now()
-      if (!options?.force && fetchPromiseRef.current) {
-        return fetchPromiseRef.current
-      }
-
-      if (!options?.force && now - lastFetchAtRef.current < (options?.minIntervalMs ?? 0)) {
-        return
-      }
-
-      const shouldShowLoading = !hasLoadedRef.current
-      if (shouldShowLoading) {
-        setLoading(true)
-      }
-
-      const fetchPromise = (async () => {
-        try {
-          const topProds = await getTopProductsToday(branchId, 5)
-          if (!cancelled) {
-            setError(null)
-            setProducts(topProds)
-            hasLoadedRef.current = true
-            lastFetchAtRef.current = Date.now()
-          }
-        } catch (error) {
-          logger.error('Error loading top products:', error)
-          if (!cancelled) setError('Failed to load top products')
-        } finally {
-          if (!cancelled && shouldShowLoading) {
-            setLoading(false)
-          }
-        }
-      })()
-
-      fetchPromiseRef.current = fetchPromise
-
-      try {
-        await fetchPromise
-      } finally {
-        if (fetchPromiseRef.current === fetchPromise) {
-          fetchPromiseRef.current = null
-        }
-      }
-    }
-
-    void loadProducts({ force: true })
-
-    const intervalId = window.setInterval(() => {
-      void loadProducts({ minIntervalMs: 30000 })
-    }, 60000)
-
-    const handleFocus = () => {
-      void loadProducts({ minIntervalMs: 15000 })
-    }
-
-    window.addEventListener('focus', handleFocus)
-
-    return () => {
-      cancelled = true
-      window.clearInterval(intervalId)
-      window.removeEventListener('focus', handleFocus)
-    }
-  }, [profile?.branch_id, retryCount])
+  const { data: products, loading, error, retry } = useDashboardQuery<TopProduct[]>(
+    fetcher,
+    [],
+    { deps: [branchId], pollIntervalMs: 60000, minIntervalMs: 30000 }
+  )
 
   return (
     <Card>
@@ -112,7 +43,7 @@ export function TopProducts() {
           {loading ? (
             <div className="space-y-3">
               {[1, 2, 3].map((i) => (
-                <div key={i} className="h-12 bg-muted rounded animate-pulse"></div>
+                <Skeleton key={i} className="h-12 w-full rounded-lg" />
               ))}
             </div>
           ) : products.length > 0 ? (
@@ -131,14 +62,14 @@ export function TopProducts() {
               </div>
             ))
           ) : (
-            <p className="text-muted-foreground text-sm">No sales data</p>
+            <EmptyState title="No sales data" compact />
           )}
         </div>
         {error && (
           <div className="flex items-center gap-2 p-3 mt-3 text-sm text-destructive bg-destructive/10 rounded-md">
             <AlertCircle className="h-4 w-4 shrink-0" />
             <span>{error}</span>
-            <Button variant="outline" size="sm" onClick={() => setRetryCount(c => c + 1)} className="ml-auto">
+            <Button variant="outline" size="sm" onClick={retry} className="ml-auto">
               <RefreshCw className="h-3 w-3 mr-1" />
               Retry
             </Button>

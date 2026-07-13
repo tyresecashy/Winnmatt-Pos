@@ -15,7 +15,7 @@ import { supabaseAdmin } from '@/lib/supabase-server'
 import { logger } from '@/lib/logger'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2024-12-18.acacia' as any,
+  apiVersion: '2026-06-24.dahlia' as const,
 })
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET
@@ -116,7 +116,7 @@ export async function POST(req: NextRequest) {
             }),
           })
         } catch (logError) {
-          logger.warn('[Stripe Webhook] Failed to log payment (table may not exist)', logError)
+          logger.warn('[Stripe Webhook] Failed to log payment (table may not exist)', logError as Record<string, unknown>)
         }
 
         logger.info('[Stripe Webhook] Sale confirmed', { saleId, paymentIntentId: paymentIntent.id })
@@ -154,7 +154,7 @@ export async function POST(req: NextRequest) {
             }),
           })
         } catch (logError) {
-          logger.warn('[Stripe Webhook] Failed to log payment failure', logError)
+          logger.warn('[Stripe Webhook] Failed to log payment failure', logError as Record<string, unknown>)
         }
 
         logger.info('[Stripe Webhook] Sale marked as failed', { saleId })

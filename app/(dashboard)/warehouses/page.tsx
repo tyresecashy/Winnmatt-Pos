@@ -1,7 +1,7 @@
 "use client"
 import { logger } from '@/lib/logger';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Input } from "@/components/ui/input"
@@ -33,8 +33,9 @@ import {
 } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { Warehouse, Plus, MapPin, Building2, Search, Loader2, Edit2, ToggleLeft, ToggleRight } from "lucide-react"
+import { EmptyState } from "@/components/ui/empty-state"
 import { useAuth } from "@/contexts/auth-context"
-import { getWarehouses, createWarehouse, updateWarehouse, deleteWarehouse } from "@/lib/warehouse-actions"
+import { getWarehouses, createWarehouse, updateWarehouse, deleteWarehouse } from "@/lib/modules/warehouse"
 
 type WarehouseRow = {
   id: string
@@ -86,7 +87,7 @@ export default function WarehousesPage() {
     setIsLoading(true)
     try {
       const data = await getWarehouses()
-      setWarehouses(data || [])
+      setWarehouses((data || []) as unknown as WarehouseRow[])
       hasLoadedRef.current = true
     } catch (error) {
       logger.error("Failed to load warehouses:", error)
@@ -110,8 +111,7 @@ export default function WarehousesPage() {
   }, [])
 
   useEffect(() => {
-    void loadWarehouses()
-    void loadBranches()
+    startTransition(() => { void loadWarehouses(); void loadBranches() })
   }, [loadWarehouses, loadBranches])
 
   const openCreateDialog = () => {
@@ -365,19 +365,12 @@ export default function WarehousesPage() {
               ))}
             </div>
           ) : filteredWarehouses.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
-                <Warehouse className="h-6 w-6 text-muted-foreground" />
-              </div>
-              <p className="text-lg font-medium">
-                {searchTerm ? "No warehouses found" : "No warehouses yet"}
-              </p>
-              <p className="text-sm text-muted-foreground mt-1">
-                {searchTerm
-                  ? "Try a different search term."
-                  : "Add your first warehouse to start managing locations."}
-              </p>
-            </div>
+            <EmptyState
+              icon={Warehouse}
+              title={searchTerm ? "No warehouses found" : "No warehouses yet"}
+              description={searchTerm ? "Try a different search term." : "Add your first warehouse to start managing locations."}
+              compact
+            />
           ) : (
             <Table>
               <TableHeader>

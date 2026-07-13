@@ -6,7 +6,7 @@
  * Error: { error: { code, message, details? } }
  */
 
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 
 // ─── Success Responses ──────────────────────────────────────────────────────
 

@@ -1,7 +1,7 @@
 'use client'
 import { logger } from '@/lib/logger'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, startTransition } from 'react'
 import { useAuth } from '@/contexts/auth-context'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -30,7 +30,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useToast } from '@/components/ui/use-toast'
 import { formatKSh } from '@/lib/currency'
-import { getSales, returnSale, getSaleById, type SaleItem } from '@/lib/sales-actions'
+import { getSales, returnSale, getSaleById, type SaleItem } from '@/lib/modules/sales'
 import { Search, RotateCcw, ArrowLeft, Package, Store, User, Calendar, FileText } from 'lucide-react'
 
 // Extended sale type with items and customer info
@@ -52,6 +52,32 @@ interface SaleRecord {
   returned_qty?: number | null
 }
 
+interface SaleDetail {
+  id: string
+  receipt_number: string
+  total_amount: number
+  subtotal: number
+  discount_amount: number
+  payment_method: string
+  sale_status: string | null
+  return_reason: string | null
+  returned_at: string | null
+  returned_amount: number | null
+  created_at: string
+  branch?: { id: string; name: string; code: string } | null
+  cashier?: { id: string; full_name: string } | null
+  customer?: { id: string; name: string; phone: string } | null
+  items?: Array<{
+    id: string
+    product_id: string
+    quantity: number
+    unit_price: number
+    discount_percent: number
+    line_total: number
+    product?: { id: string; sku: string; name: string } | null
+  }>
+}
+
 export default function ReturnsPage() {
   const { profile } = useAuth()
   const { toast } = useToast()
@@ -60,7 +86,7 @@ export default function ReturnsPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [selectedSale, setSelectedSale] = useState<SaleRecord | null>(null)
-  const [saleDetail, setSaleDetail] = useState<any>(null)
+  const [saleDetail, setSaleDetail] = useState<SaleDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [showReturnDialog, setShowReturnDialog] = useState(false)
   const [returnReason, setReturnReason] = useState('')
@@ -77,8 +103,8 @@ export default function ReturnsPage() {
     }
     setLoading(true)
     try {
-      const fetchedSales = await getSales(branchId, 100)
-      setSales(fetchedSales as SaleRecord[])
+      const fetchedSales = await getSales({ branch_id: branchId, limit: 100 })
+      setSales(fetchedSales.data as unknown as SaleRecord[])
     } catch (error) {
       logger.error('Failed to load sales:', error)
     } finally {
@@ -87,7 +113,7 @@ export default function ReturnsPage() {
   }, [profile?.branch_id])
 
   useEffect(() => {
-    void loadSales()
+    startTransition(() => { void loadSales() })
   }, [loadSales])
 
   // Compute summary KPIs
@@ -120,7 +146,7 @@ export default function ReturnsPage() {
     setDetailLoading(true)
     try {
       const detail = await getSaleById(sale.id)
-      setSaleDetail(detail)
+      setSaleDetail(detail as SaleDetail | null)
     } catch (error) {
       logger.error('Failed to load sale detail:', error)
     } finally {
@@ -151,21 +177,46 @@ export default function ReturnsPage() {
 
     setProcessingReturn(true)
     try {
-      const result = await returnSale(
-        selectedSale.id,
-        profile.branch_id,
-        returnReason.trim(),
-        profile.id
-      )
-
-      if (result.success) {
-        toast({ title: 'Return Processed', description: result.message })
-        setShowReturnDialog(false)
-        setSelectedSale(null)
-        setSaleDetail(null)
-        void loadSales()
+      if (returnOption === 'partial') {
+        // Partial return: process each selected item individually
+        const selectedItemIds = Object.keys(partialReturnItems).filter(id => partialReturnItems[id])
+        if (selectedItemIds.length === 0) {
+          toast({ title: 'Error', description: 'Select at least one item to return', variant: 'destructive' })
+          setProcessingReturn(false)
+          return
+        }
+        let allSucceeded = true
+        for (const itemId of selectedItemIds) {
+          const result = await returnSale(
+            selectedSale.id, profile.branch_id, returnReason.trim(), profile.id,
+            { itemId, isFullReturn: false },
+          )
+          if (!result.success) {
+            allSucceeded = false
+            toast({ title: 'Partial Return Failed', description: result.error || `Failed for item ${itemId}`, variant: 'destructive' })
+          }
+        }
+        if (allSucceeded) {
+          toast({ title: 'Partial Return Processed', description: `${selectedItemIds.length} item(s) returned` })
+          setShowReturnDialog(false)
+          setSelectedSale(null)
+          setSaleDetail(null)
+          void loadSales()
+        }
       } else {
-        toast({ title: 'Return Failed', description: result.error || 'Unknown error', variant: 'destructive' })
+        // Full return: process entire sale
+        const result = await returnSale(
+          selectedSale.id, profile.branch_id, returnReason.trim(), profile.id,
+        )
+        if (result.success) {
+          toast({ title: 'Return Processed', description: result.message })
+          setShowReturnDialog(false)
+          setSelectedSale(null)
+          setSaleDetail(null)
+          void loadSales()
+        } else {
+          toast({ title: 'Return Failed', description: result.error || 'Unknown error', variant: 'destructive' })
+        }
       }
     } catch (error) {
       toast({ title: 'Error', description: 'An unexpected error occurred', variant: 'destructive' })
@@ -415,7 +466,7 @@ export default function ReturnsPage() {
                   <div>
                     <h4 className="mb-2 text-sm font-medium">Items ({saleDetail.items?.length || 0})</h4>
                     <div className="space-y-2">
-                      {(saleDetail.items || []).map((item: any) => (
+                      {(saleDetail.items || []).map((item) => (
                         <div
                           key={item.id}
                           className="flex items-center justify-between rounded-md border p-2.5"
@@ -452,10 +503,10 @@ export default function ReturnsPage() {
                       <span>Total</span>
                       <span className="font-mono">{formatKSh(saleDetail.total_amount)}</span>
                     </div>
-                    {saleDetail.returned_amount > 0 && (
+                    {(saleDetail.returned_amount ?? 0) > 0 && (
                       <div className="mt-1 flex items-center justify-between text-sm text-destructive">
                         <span>Returned</span>
-                        <span className="font-mono">-{formatKSh(saleDetail.returned_amount)}</span>
+                        <span className="font-mono">-{formatKSh(saleDetail.returned_amount ?? 0)}</span>
                       </div>
                     )}
                   </div>
@@ -527,14 +578,14 @@ export default function ReturnsPage() {
               <div className="space-y-2">
                 <Label className="text-sm">Select Items to Return</Label>
                 <div className="space-y-1.5 max-h-48 overflow-y-auto rounded-lg border p-2">
-                  {(saleDetail.items as any[]).map((item: any) => (
+                  {saleDetail.items.map((item) => (
                     <label
                       key={item.id}
                       className="flex items-center gap-3 rounded-md p-2 hover:bg-muted/50 cursor-pointer text-sm"
                     >
                       <input
                         type="checkbox"
-                        className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                        className="h-4 w-4 rounded border text-primary focus:ring-primary"
                         checked={!!partialReturnItems[item.id]}
                         onChange={(e) => {
                           setPartialReturnItems(prev => ({
@@ -562,7 +613,7 @@ export default function ReturnsPage() {
                         className="hover:text-foreground"
                         onClick={() => {
                           const all: Record<string, boolean> = {}
-                          ;(saleDetail.items as any[]).forEach((i: any) => { all[i.id] = true })
+                          ;saleDetail.items?.forEach((i) => { all[i.id] = true })
                           setPartialReturnItems(all)
                         }}
                       >

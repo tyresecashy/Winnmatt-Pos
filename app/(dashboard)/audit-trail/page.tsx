@@ -1,9 +1,9 @@
 'use client'
 import { logger } from '@/lib/logger'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useCallback, startTransition } from 'react'
 import { useAuth } from '@/contexts/auth-context'
-import { getSystemAuditLog } from '@/lib/system-health-actions'
+import { getSystemAuditLog } from '@/lib/modules/system'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -38,6 +38,7 @@ import {
   LogOut,
   LogIn,
 } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 
 type Severity = 'info' | 'warning' | 'error' | 'critical'
 type EventType =
@@ -67,288 +68,48 @@ interface AuditEntry {
   details: Record<string, unknown> | null
 }
 
-const MOCK_USERS = ['John Kamau', 'Mary Wanjiku', 'Peter Ochieng', 'System']
+/** Map a system_audit_log row to the client-side AuditEntry shape. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapAuditRow(row: any): AuditEntry {
+  return {
+    id: row.id as string,
+    timestamp: new Date(row.created_at),
+    user: (row.user?.full_name as string) || 'System',
+    action: row.action as string,
+    entityType: (row.entity_type as string) || '',
+    entityBadge: badgeFromEntityType((row.entity_type as string) || ''),
+    severity: (row.severity as Severity) || 'info',
+    ipAddress: (row.ip_address as string) || '',
+    details: (row.details as Record<string, unknown>) || null,
+  }
+}
 
-const now = new Date()
-const dayMs = 86400000
-
-const MOCK_AUDIT_LOG: AuditEntry[] = [
-  {
-    id: 'aud_001',
-    timestamp: new Date(now.getTime() - 0.5 * 3600000),
-    user: 'John Kamau',
-    action: 'Completed sale transaction',
-    entityType: 'Sale',
-    entityBadge: 'Sales',
-    severity: 'info',
-    ipAddress: '192.168.1.100',
-    details: { sale_id: 'SAL-2026-0713', total: 2450, items: 5, payment_method: 'M-Pesa' },
-  },
-  {
-    id: 'aud_002',
-    timestamp: new Date(now.getTime() - 1.2 * 3600000),
-    user: 'Mary Wanjiku',
-    action: 'Updated product price',
-    entityType: 'Product',
-    entityBadge: 'Inventory',
-    severity: 'warning',
-    ipAddress: '192.168.1.101',
-    details: { product_id: 'P001', product_name: 'Cooking Oil 2L', old_price: 380, new_price: 420 },
-  },
-  {
-    id: 'aud_003',
-    timestamp: new Date(now.getTime() - 2.5 * 3600000),
-    user: 'System',
-    action: 'Automatic stock reorder triggered',
-    entityType: 'Stock',
-    entityBadge: 'Inventory',
-    severity: 'info',
-    ipAddress: '10.0.0.1',
-    details: { product_ids: ['P045', 'P078', 'P112'], threshold: 20, quantities: [50, 30, 25] },
-  },
-  {
-    id: 'aud_004',
-    timestamp: new Date(now.getTime() - 3 * 3600000),
-    user: 'Peter Ochieng',
-    action: 'Created purchase order',
-    entityType: 'Purchase Order',
-    entityBadge: 'Purchases',
-    severity: 'info',
-    ipAddress: '192.168.1.102',
-    details: { po_id: 'PO-2026-0842', supplier: 'Bidco Ltd', total: 125000, items: 12 },
-  },
-  {
-    id: 'aud_005',
-    timestamp: new Date(now.getTime() - 4 * 3600000),
-    user: 'John Kamau',
-    action: 'Processed cash float request',
-    entityType: 'Cash Float',
-    entityBadge: 'Cash',
-    severity: 'info',
-    ipAddress: '192.168.1.100',
-    details: { float_id: 'FL-001', amount: 15000, register: 'REG-02', type: 'opening' },
-  },
-  {
-    id: 'aud_006',
-    timestamp: new Date(now.getTime() - 5.5 * 3600000),
-    user: 'Mary Wanjiku',
-    action: 'Customer refund processed',
-    entityType: 'Refund',
-    entityBadge: 'Sales',
-    severity: 'warning',
-    ipAddress: '192.168.1.101',
-    details: { refund_id: 'REF-003', sale_id: 'SAL-2026-0708', amount: 1250, reason: 'Damaged goods' },
-  },
-  {
-    id: 'aud_007',
-    timestamp: new Date(now.getTime() - 7 * 3600000),
-    user: 'System',
-    action: 'Database backup completed',
-    entityType: 'System',
-    entityBadge: 'Admin',
-    severity: 'info',
-    ipAddress: '10.0.0.1',
-    details: { backup_id: 'BAK-20260703', size_mb: 342, duration_sec: 47, status: 'success' },
-  },
-  {
-    id: 'aud_008',
-    timestamp: new Date(now.getTime() - 8 * 3600000),
-    user: 'Peter Ochieng',
-    action: 'Created new user account',
-    entityType: 'User',
-    entityBadge: 'Employees',
-    severity: 'info',
-    ipAddress: '192.168.1.102',
-    details: { new_user_id: 'USR-042', name: 'Faith Nyambura', role: 'cashier', branch: 'Westlands' },
-  },
-  {
-    id: 'aud_009',
-    timestamp: new Date(now.getTime() - 10 * 3600000),
-    user: 'John Kamau',
-    action: 'Voided sale transaction',
-    entityType: 'Sale',
-    entityBadge: 'Sales',
-    severity: 'error',
-    ipAddress: '192.168.1.100',
-    details: { sale_id: 'SAL-2026-0705', void_reason: 'Customer dispute', amount: 3800, authorized_by: 'Manager' },
-  },
-  {
-    id: 'aud_010',
-    timestamp: new Date(now.getTime() - 12 * 3600000),
-    user: 'Mary Wanjiku',
-    action: 'Applied promotion to products',
-    entityType: 'Promotion',
-    entityBadge: 'Promotions',
-    severity: 'info',
-    ipAddress: '192.168.1.101',
-    details: { promo_id: 'PROMO-007', discount_percent: 15, products_affected: 23, valid_until: '2026-07-10' },
-  },
-  {
-    id: 'aud_011',
-    timestamp: new Date(now.getTime() - 14 * 3600000),
-    user: 'System',
-    action: 'Register connection lost',
-    entityType: 'Hardware',
-    entityBadge: 'Hardware',
-    severity: 'error',
-    ipAddress: '10.0.0.1',
-    details: { register_id: 'REG-05', branch: 'Eastlands', last_seen: new Date(now.getTime() - 14 * 3600000).toISOString(), error: 'Connection timeout' },
-  },
-  {
-    id: 'aud_012',
-    timestamp: new Date(now.getTime() - 16 * 3600000),
-    user: 'Peter Ochieng',
-    action: 'Stock adjustment - inventory count',
-    entityType: 'Inventory',
-    entityBadge: 'Inventory',
-    severity: 'warning',
-    ipAddress: '192.168.1.102',
-    details: { product_id: 'P201', expected: 150, counted: 142, variance: -8, reason: 'Theft suspected' },
-  },
-  {
-    id: 'aud_013',
-    timestamp: new Date(now.getTime() - 18 * 3600000),
-    user: 'John Kamau',
-    action: 'Logged into system',
-    entityType: 'Session',
-    entityBadge: 'Authentication',
-    severity: 'info',
-    ipAddress: '192.168.1.100',
-    details: null,
-  },
-  {
-    id: 'aud_014',
-    timestamp: new Date(now.getTime() - 20 * 3600000),
-    user: 'Mary Wanjiku',
-    action: 'Changed system settings',
-    entityType: 'Settings',
-    entityBadge: 'Admin',
-    severity: 'info',
-    ipAddress: '192.168.1.101',
-    details: { setting: 'receipt_footer', old_value: 'Thank you', new_value: 'Thank you - Winmatt POS' },
-  },
-  {
-    id: 'aud_015',
-    timestamp: new Date(now.getTime() - 22 * 3600000),
-    user: 'System',
-    action: 'Failed email notification delivery',
-    entityType: 'Notification',
-    entityBadge: 'Notifications',
-    severity: 'error',
-    ipAddress: '10.0.0.1',
-    details: { recipient: 'admin@winmatt.co.ke', smtp_code: 550, error: 'Mailbox unavailable', retry_count: 3 },
-  },
-  {
-    id: 'aud_016',
-    timestamp: new Date(now.getTime() - 26 * 3600000),
-    user: 'Peter Ochieng',
-    action: 'Approved purchase order',
-    entityType: 'Purchase Order',
-    entityBadge: 'Purchases',
-    severity: 'info',
-    ipAddress: '192.168.1.102',
-    details: { po_id: 'PO-2026-0839', supplier: 'Coca-Cola KE', amount: 89000, approved_by: 'Peter Ochieng' },
-  },
-  {
-    id: 'aud_017',
-    timestamp: new Date(now.getTime() - 30 * 3600000),
-    user: 'John Kamau',
-    action: 'Performed end-of-day cashup',
-    entityType: 'Cashup',
-    entityBadge: 'Cash',
-    severity: 'info',
-    ipAddress: '192.168.1.100',
-    details: { register: 'REG-02', expected: 45200, counted: 45180, variance: -20, status: 'approved' },
-  },
-  {
-    id: 'aud_018',
-    timestamp: new Date(now.getTime() - 34 * 3600000),
-    user: 'Mary Wanjiku',
-    action: 'Login failed - invalid password',
-    entityType: 'Session',
-    entityBadge: 'Authentication',
-    severity: 'warning',
-    ipAddress: '203.0.113.45',
-    details: { username: 'mwanjiku', attempt_count: 3, lockout_risk: true },
-  },
-  {
-    id: 'aud_019',
-    timestamp: new Date(now.getTime() - 40 * 3600000),
-    user: 'System',
-    action: 'System health check warning',
-    entityType: 'Monitor',
-    entityBadge: 'Admin',
-    severity: 'warning',
-    ipAddress: '10.0.0.1',
-    details: { component: 'disk_usage', value: '87%', threshold: '85%', host: 'pos-server-01' },
-  },
-  {
-    id: 'aud_020',
-    timestamp: new Date(now.getTime() - 48 * 3600000),
-    user: 'System',
-    action: 'Printer firmware update installed',
-    entityType: 'Hardware',
-    entityBadge: 'Hardware',
-    severity: 'info',
-    ipAddress: '10.0.0.1',
-    details: { printer_id: 'RPP-003', branch: 'CBD', old_version: '2.1.4', new_version: '2.2.0' },
-  },
-  {
-    id: 'aud_021',
-    timestamp: new Date(now.getTime() - 52 * 3600000),
-    user: 'Peter Ochieng',
-    action: 'Created supplier record',
-    entityType: 'Supplier',
-    entityBadge: 'Purchases',
-    severity: 'info',
-    ipAddress: '192.168.1.102',
-    details: { supplier_id: 'SUP-015', name: 'Kenya Breweries Ltd', payment_terms: 'Net 30' },
-  },
-  {
-    id: 'aud_022',
-    timestamp: new Date(now.getTime() - 56 * 3600000),
-    user: 'John Kamau',
-    action: 'Applied customer loyalty points',
-    entityType: 'Loyalty',
-    entityBadge: 'Customers',
-    severity: 'info',
-    ipAddress: '192.168.1.100',
-    details: { customer_id: 'CUST-089', points_awarded: 250, total_points: 1850, sale_id: 'SAL-2026-0701' },
-  },
-  {
-    id: 'aud_023',
-    timestamp: new Date(now.getTime() - 60 * 3600000),
-    user: 'Mary Wanjiku',
-    action: 'Deleted expired promotion',
-    entityType: 'Promotion',
-    entityBadge: 'Promotions',
-    severity: 'info',
-    ipAddress: '192.168.1.101',
-    details: { promo_id: 'PROMO-003', name: 'Mama Mboga Special', deleted_products: 8 },
-  },
-  {
-    id: 'aud_024',
-    timestamp: new Date(now.getTime() - 66 * 3600000),
-    user: 'System',
-    action: 'Critical disk space alert',
-    entityType: 'Monitor',
-    entityBadge: 'Admin',
-    severity: 'critical',
-    ipAddress: '10.0.0.1',
-    details: { host: 'pos-server-02', disk: '/dev/sda1', usage_percent: 94, message: 'Immediate action required' },
-  },
-  {
-    id: 'aud_025',
-    timestamp: new Date(now.getTime() - 72 * 3600000),
-    user: 'Peter Ochieng',
-    action: 'Launched shift for register',
-    entityType: 'Shift',
-    entityBadge: 'Launch',
-    severity: 'info',
-    ipAddress: '192.168.1.102',
-    details: { register_id: 'REG-01', shift_id: 'SFT-20260701', cashier: 'Faith Nyambura', starting_float: 10000 },
-  },
-]
+function badgeFromEntityType(entityType: string): EventType {
+  const map: Record<string, EventType> = {
+    sale: 'Sales',
+    product: 'Inventory',
+    inventory: 'Inventory',
+    employee_profile: 'Employees',
+    purchase_order: 'Purchases',
+    customer: 'Customers',
+    promotion: 'Promotions',
+    user: 'Admin',
+    system: 'Admin',
+    report: 'Admin',
+    cash_management: 'Cash',
+    cash: 'Cash',
+    notification: 'Notifications',
+    hardware: 'Hardware',
+    launch: 'Launch',
+    authentication: 'Authentication',
+    auth: 'Authentication',
+    tax: 'Admin',
+    payroll: 'Admin',
+    refund: 'Sales',
+    stock_alert: 'Inventory',
+  }
+  return map[entityType.toLowerCase()] || 'Admin'
+}
 
 const SEVERITY_STYLES: Record<Severity, string> = {
   info: 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-400',
@@ -546,7 +307,28 @@ export default function AuditTrailPage() {
   const [selectedEntry, setSelectedEntry] = useState<AuditEntry | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
 
-  const entries = MOCK_AUDIT_LOG
+  // Real audit data from DB
+  const [allEntries, setAllEntries] = useState<AuditEntry[]>([])
+
+  const loadAuditLog = useCallback(async () => {
+    setIsLoading(true)
+    setIsError(false)
+    try {
+      const rows = await getSystemAuditLog(200)
+      setAllEntries((rows || []).map(mapAuditRow))
+    } catch {
+      setIsError(true)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    startTransition(() => { loadAuditLog() })
+  }, [loadAuditLog])
+
+  const entries = allEntries
+  const uniqueUsers = useMemo(() => Array.from(new Set(entries.map(e => e.user))), [entries])
 
   const filteredEntries = useMemo(() => {
     let result = [...entries]
@@ -599,6 +381,7 @@ export default function AuditTrailPage() {
 
   const stats = useMemo(() => {
     const total = entries.length
+    const now = new Date()
     const today = entries.filter((e) => e.timestamp.toDateString() === now.toDateString()).length
     const errors = entries.filter((e) => e.severity === 'error' || e.severity === 'critical').length
     const warnings = entries.filter((e) => e.severity === 'warning').length
@@ -616,12 +399,7 @@ export default function AuditTrailPage() {
   }
 
   const handleRefresh = () => {
-    setIsLoading(true)
-    setIsError(false)
-    setTimeout(() => {
-      setIsLoading(false)
-      logger.info('Audit log refreshed')
-    }, 800)
+    loadAuditLog()
   }
 
   const handleExport = () => {
@@ -824,7 +602,7 @@ export default function AuditTrailPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Users</SelectItem>
-                {MOCK_USERS.map((u) => (
+                {(uniqueUsers.length > 0 ? uniqueUsers : []).map((u) => (
                   <SelectItem key={u} value={u} className="text-xs">
                     <span className="flex items-center gap-2">
                       <User className="h-3 w-3" />
@@ -879,20 +657,12 @@ export default function AuditTrailPage() {
               </TableBody>
             </Table>
           ) : filteredEntries.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center">
-              <Search className="h-12 w-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-semibold">No events found</h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                {isFiltered
-                  ? 'No events match the current filter criteria. Try adjusting your filters.'
-                  : 'The audit log is empty. Events will appear here as system activity occurs.'}
-              </p>
-              {isFiltered && (
-                <Button variant="outline" size="sm" onClick={handleClearFilters}>
-                  Clear Filters
-                </Button>
-              )}
-            </div>
+            <EmptyState
+              icon={Search}
+              title="No events found"
+              description={isFiltered ? 'No events match the current filter criteria. Try adjusting your filters.' : 'The audit log is empty. Events will appear here as system activity occurs.'}
+              actions={isFiltered ? [{ label: 'Clear Filters', onClick: handleClearFilters, variant: 'outline' }] : undefined}
+            />
           ) : (
             <>
               <Table>

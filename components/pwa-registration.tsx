@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
+import { logger } from '@/lib/logger'
 import { useToast } from '@/hooks/use-toast'
 
 /**
@@ -10,9 +11,46 @@ import { useToast } from '@/hooks/use-toast'
  */
 export function PWARegistration() {
   const { toast } = useToast()
-  const [isOnline, setIsOnline] = useState(true)
+  const [isOnline, setIsOnline] = useState(() => navigator.onLine)
   const [updateAvailable, setUpdateAvailable] = useState(false)
   const [registration, setRegistration] = useState<ServiceWorkerRegistration | null>(null)
+
+  const syncPendingSales = useCallback(async () => {
+    if (!registration) return
+
+    try {
+      // Get pending sales from IndexedDB
+      const { getPendingSales, updatePendingSaleStatus } = await import('@/lib/offline-storage')
+      const pending = await getPendingSales()
+
+      for (const sale of pending) {
+        if (sale.status === 'pending') {
+          try {
+            // Attempt to sync via server action
+            const response = await fetch('/api/sync/pending-sale', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(sale),
+            })
+
+            if (response.ok) {
+              await updatePendingSaleStatus(sale.id, 'synced')
+            } else {
+              await updatePendingSaleStatus(sale.id, 'failed', 'Sync failed')
+            }
+          } catch (syncError) {
+            await updatePendingSaleStatus(
+              sale.id,
+              'failed',
+              syncError instanceof Error ? syncError.message : 'Unknown error'
+            )
+          }
+        }
+      }
+    } catch (error) {
+      logger.error('[PWA] Sync failed:', error)
+    }
+  }, [registration])
 
   useEffect(() => {
     // Register service worker
@@ -20,7 +58,7 @@ export function PWARegistration() {
       navigator.serviceWorker
         .register('/sw.js')
         .then((reg) => {
-          console.log('[PWA] Service worker registered:', reg.scope)
+          logger.info('[PWA] Service worker registered', { scope: reg.scope })
           setRegistration(reg)
 
           // Check for updates
@@ -46,7 +84,7 @@ export function PWARegistration() {
 
       // Handle controller change (new service worker activated)
       navigator.serviceWorker.addEventListener('controllerchange', () => {
-        console.log('[PWA] New service worker activated')
+        logger.info('[PWA] New service worker activated')
         window.location.reload()
       })
     }
@@ -75,14 +113,11 @@ export function PWARegistration() {
     window.addEventListener('online', handleOnline)
     window.addEventListener('offline', handleOffline)
 
-    // Set initial state
-    setIsOnline(navigator.onLine)
-
     return () => {
       window.removeEventListener('online', handleOnline)
       window.removeEventListener('offline', handleOffline)
     }
-  }, [])
+  }, [syncPendingSales, toast])
 
   // Handle messages from service worker
   useEffect(() => {
@@ -93,10 +128,10 @@ export function PWARegistration() {
 
       switch (type) {
         case 'OFFLINE_QUEUED':
-          console.log('[PWA] Request queued for sync:', data)
+          logger.info('[PWA] Request queued for sync', { data })
           break
         case 'SYNC_COMPLETE':
-          console.log('[PWA] Sync complete')
+          logger.info('[PWA] Sync complete')
           toast({
             title: 'Sync Complete',
             description: 'Offline sales have been synced.',
@@ -116,44 +151,7 @@ export function PWARegistration() {
     return () => {
       navigator.serviceWorker.removeEventListener('message', handleMessage)
     }
-  }, [])
-
-  async function syncPendingSales() {
-    if (!registration) return
-
-    try {
-      // Get pending sales from IndexedDB
-      const { getPendingSales, updatePendingSaleStatus } = await import('@/lib/offline-storage')
-      const pending = await getPendingSales()
-
-      for (const sale of pending) {
-        if (sale.status === 'pending') {
-          try {
-            // Attempt to sync via server action
-            const response = await fetch('/api/sync/pending-sale', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(sale),
-            })
-
-            if (response.ok) {
-              await updatePendingSaleStatus(sale.id, 'synced')
-            } else {
-              await updatePendingSaleStatus(sale.id, 'failed', 'Sync failed')
-            }
-          } catch (error) {
-            await updatePendingSaleStatus(
-              sale.id,
-              'failed',
-              error instanceof Error ? error.message : 'Unknown error'
-            )
-          }
-        }
-      }
-    } catch (error) {
-      console.error('[PWA] Sync failed:', error)
-    }
-  }
+  }, [toast])
 
   async function handleUpdate() {
     if (!registration?.waiting) return

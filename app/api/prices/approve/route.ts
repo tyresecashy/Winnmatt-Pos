@@ -70,8 +70,8 @@ export async function POST(request: Request) {
           .eq('id', productId)
 
         if (productError) {
-          logger.error('Error updating product:', productError)
-          return NextResponse.json({ error: productError.message }, { status: 500 })
+          logger.error('[Prices Approve] Product update failed', { productId, error: productError })
+          return NextResponse.json({ error: 'Failed to update product' }, { status: 500 })
         }
 
         // Mark anomaly as resolved
@@ -91,8 +91,8 @@ export async function POST(request: Request) {
           .eq('status', 'flagged')
 
         if (anomalyError) {
-          logger.error('Error updating anomaly:', anomalyError)
-          return NextResponse.json({ error: anomalyError.message }, { status: 500 })
+          logger.error('[Prices Approve] Anomaly update failed', { productId, error: anomalyError })
+          return NextResponse.json({ error: 'Failed to update anomaly record' }, { status: 500 })
         }
 
         return NextResponse.json({
@@ -113,8 +113,8 @@ export async function POST(request: Request) {
           .eq('id', productId)
 
         if (productError) {
-          logger.error('Error protecting product:', productError)
-          return NextResponse.json({ error: productError.message }, { status: 500 })
+          logger.error('[Prices Approve] Product protection failed', { productId, error: productError })
+          return NextResponse.json({ error: 'Failed to protect product' }, { status: 500 })
         }
 
         // Mark anomalies as resolved with protection note
@@ -132,8 +132,8 @@ export async function POST(request: Request) {
           .eq('status', 'flagged')
 
         if (anomalyError) {
-          logger.error('Error updating anomaly:', anomalyError)
-          return NextResponse.json({ error: anomalyError.message }, { status: 500 })
+          logger.error('[Prices Approve] Anomaly update failed', { productId, error: anomalyError })
+          return NextResponse.json({ error: 'Failed to update anomaly record' }, { status: 500 })
         }
 
         return NextResponse.json({
@@ -147,8 +147,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
     }
   } catch (error: unknown) {
-    logger.error('Price approval error:', error)
-    const errorMessage = error instanceof Error ? error.message : 'Internal server error'
-    return NextResponse.json({ error: errorMessage }, { status: 500 })
+    logger.error('[Prices Approve] Unexpected error', { error })
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

@@ -2,7 +2,7 @@
 
 import { logger } from '@/lib/logger'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, startTransition } from 'react'
 import { useAuth } from '@/contexts/auth-context'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -35,12 +35,13 @@ import {
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/components/ui/use-toast'
+import { getEmployees } from '@/lib/employee-actions'
 import {
   getAttendanceReport,
   getShiftTemplates,
   getEmployeeSchedules,
-} from '@/lib/attendance-actions'
-import { getEmployees } from '@/lib/employee-actions'
+  addEmployeeSchedule,
+} from '@/lib/modules/workforce'
 import { Calendar, Plus, ChevronLeft, ChevronRight } from 'lucide-react'
 
 function getWeekDates(date: Date): Date[] {
@@ -157,11 +158,11 @@ export default function AttendancePage() {
   }, [branchId, weekDates])
 
   useEffect(() => {
-    void loadAttendance()
+    startTransition(() => { void loadAttendance() })
   }, [loadAttendance])
 
   useEffect(() => {
-    void loadSchedule()
+    startTransition(() => { void loadSchedule() })
   }, [loadSchedule])
 
   const handleAddSchedule = async () => {
@@ -169,9 +170,20 @@ export default function AttendancePage() {
       toast({ title: 'Error', description: 'Please fill all fields', variant: 'destructive' })
       return
     }
+    const result = await addEmployeeSchedule({
+      employee_profile_id: scheduleEmployee,
+      branch_id: branchId,
+      date: scheduleDate,
+      start_time: scheduleStart,
+      end_time: scheduleEnd,
+    })
     setShowScheduleDialog(false)
-    toast({ title: 'Schedule Added', description: 'Employee schedule has been created' })
-    void loadSchedule()
+    if (result.success) {
+      toast({ title: 'Schedule Added', description: 'Employee schedule has been created' })
+      void loadSchedule()
+    } else {
+      toast({ title: 'Error', description: result.error || 'Failed to add schedule', variant: 'destructive' })
+    }
   }
 
   const statusBadge = (status: string) => {
@@ -203,7 +215,7 @@ export default function AttendancePage() {
 
       <Tabs defaultValue="attendance">
         <TabsList>
-          <TabsTrigger value="attendance">Today's Attendance</TabsTrigger>
+          <TabsTrigger value="attendance">Today&apos;s Attendance</TabsTrigger>
           <TabsTrigger value="schedule">Schedule</TabsTrigger>
         </TabsList>
 
@@ -402,8 +414,10 @@ export default function AttendancePage() {
                   <SelectValue placeholder="Select employee" />
                 </SelectTrigger>
                 <SelectContent>
-                  {employees.map((emp) => (
-                    <SelectItem key={emp.id} value={emp.user_id}>
+                  {employees.length === 0 ? (
+                    <SelectItem value="__none__" disabled>No employees found for this branch</SelectItem>
+                  ) : employees.map((emp) => (
+                    <SelectItem key={emp.user_id} value={emp.id}>
                       {emp.user?.full_name || 'Unknown'}
                     </SelectItem>
                   ))}

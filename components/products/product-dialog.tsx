@@ -148,7 +148,9 @@ export function ProductForm({
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {categories.map((cat) => (
+                      {(!categories || categories.length === 0) ? (
+                        <SelectItem value="__none__" disabled>No categories — create one first</SelectItem>
+                      ) : categories.map((cat) => (
                         <SelectItem key={cat.id} value={cat.id}>
                           {cat.name}
                         </SelectItem>

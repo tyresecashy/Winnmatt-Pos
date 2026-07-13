@@ -172,7 +172,7 @@ export async function createTransferWizard(data: {
 }) {
   try {
     // Get the next transfer number
-    const { data: seqData } = await supabaseAdmin.rpc('next_transfer_number').maybeSingle()
+    const { data: seqData } = await supabaseAdmin.rpc('next_transfer_number' as never).maybeSingle()
     const transferNumber = seqData || `TRF-${Date.now().toString(36).toUpperCase()}`
 
     // Insert the transfer
@@ -188,7 +188,7 @@ export async function createTransferWizard(data: {
         vehicle_number: data.vehicleNumber || null,
         expected_arrival: data.expectedArrival || null,
         notes: data.notes || null,
-      })
+      } as never)
       .select()
       .single()
 
@@ -205,7 +205,7 @@ export async function createTransferWizard(data: {
             quantity_requested: item.quantityRequested,
             batch_number: item.batchNumber || null,
             expiry_date: item.expiryDate || null,
-          }))
+          })) as never
         )
 
       if (itemsError) throw itemsError
@@ -216,7 +216,7 @@ export async function createTransferWizard(data: {
     logger.error('Error creating transfer:', error)
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to create transfer',
+      error: 'Operation failed. Please try again.',
     }
   }
 }
@@ -246,7 +246,7 @@ export async function updateTransferStatus(
     logger.error('Error updating transfer status:', error)
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to update transfer status',
+      error: 'Operation failed. Please try again.',
     }
   }
 }

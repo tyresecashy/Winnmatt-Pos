@@ -2,9 +2,6 @@ import { withSentryConfig } from '@sentry/nextjs'
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  typescript: {
-    ignoreBuildErrors: true,
-  },
   images: {
     unoptimized: true,
   },
@@ -33,14 +30,20 @@ const nextConfig = {
             key: 'Content-Security-Policy',
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+              // unsafe-eval removed for production security.
+              // unsafe-inline required by Next.js for inline scripts.
+              // TODO: Migrate to 'strict-dynamic' or nonce-based CSP.
+              process.env.NODE_ENV === 'development'
+                ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
+                : "script-src 'self' 'unsafe-inline'",
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob:",
               "font-src 'self' data:",
-              "connect-src 'self' https://*.supabase.co https://api.safaricom.co.ke",
+              "connect-src 'self' https://*.supabase.co https://api.safaricom.co.ke https://*.sentry.io",
               "frame-src 'none'",
               "object-src 'none'",
               "base-uri 'self'",
+              "form-action 'self'",
             ].join('; '),
           },
         ],

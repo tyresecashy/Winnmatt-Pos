@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, startTransition } from 'react'
 import { CreditCard, DollarSign, AlertTriangle, Users, TrendingUp, Calendar, Search, Plus } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -25,7 +25,8 @@ import {
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { recordCreditPayment, updateCreditLimit } from '@/lib/credit-actions'
+import { recordCreditPayment, updateCreditLimit } from '@/lib/modules/crm'
+import { EmptyState } from '@/components/ui/empty-state'
 import { useToast } from '@/components/ui/use-toast'
 
 interface CustomerSummary {
@@ -63,10 +64,10 @@ interface CustomerOption {
   credit_balance: number
 }
 
-function getStatusColor(status: string) {
+function getStatusColor(status: string): 'default' | 'secondary' | 'destructive' | 'ghost' | 'outline' {
   switch (status) {
     case 'maxed': return 'destructive'
-    case 'high': return 'warning'
+    case 'high': return 'ghost'
     case 'active': return 'default'
     default: return 'secondary'
   }
@@ -117,6 +118,8 @@ export function CreditTransactionsClient({
   const [showLimitDialog, setShowLimitDialog] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [now, setNow] = useState(0)
+  useEffect(() => { startTransition(() => { setNow(Date.now()) }) }, [])
 
   // Payment form
   const [payCustomerId, setPayCustomerId] = useState('')
@@ -147,14 +150,14 @@ export function CreditTransactionsClient({
     if (!payCustomerId || !payAmount) return
     setSubmitting(true)
     try {
-      const fd = new FormData()
-      fd.set('customer_id', payCustomerId)
-      fd.set('amount_cents', String(Math.round(parseFloat(payAmount))))
-      fd.set('payment_date', payDate)
-      fd.set('payment_method', payMethod)
-      fd.set('reference_number', payRef || '')
-      fd.set('notes', payNotes || '')
-      const result = await recordCreditPayment(fd)
+      const result = await recordCreditPayment({
+        customer_id: payCustomerId,
+        amount_cents: String(Math.round(parseFloat(payAmount))),
+        payment_date: payDate,
+        payment_method: payMethod,
+        reference_number: payRef || '',
+        notes: payNotes || '',
+      })
       if (result.error) {
         toast({ title: 'Error', description: result.error, variant: 'destructive' })
       } else {
@@ -162,8 +165,8 @@ export function CreditTransactionsClient({
         setShowPaymentDialog(false)
         setPayCustomerId(''); setPayAmount(''); setPayRef(''); setPayNotes('')
       }
-    } catch (err: any) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' })
+    } catch (err: unknown) {
+      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Unknown error', variant: 'destructive' })
     } finally {
       setSubmitting(false)
     }
@@ -180,8 +183,8 @@ export function CreditTransactionsClient({
         toast({ title: 'Success', description: 'Credit limit updated' })
         setShowLimitDialog(null)
       }
-    } catch (err: any) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' })
+    } catch (err: unknown) {
+      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Unknown error', variant: 'destructive' })
     } finally {
       setSubmitting(false)
     }
@@ -282,7 +285,7 @@ export function CreditTransactionsClient({
               <TableBody>
                 {filtered.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center text-muted-foreground py-8">No customers with credit</TableCell>
+                    <TableCell colSpan={8} className="text-center text-muted-foreground py-8"><EmptyState title="No customers with credit" compact /></TableCell>
                   </TableRow>
                 ) : filtered.map((s) => (
                   <TableRow key={s.customer_id}>
@@ -292,7 +295,7 @@ export function CreditTransactionsClient({
                     <TableCell className="text-right font-mono">{formatKSh(s.credit_limit)}</TableCell>
                     <TableCell className="text-right">{s.credit_usage_pct !== null ? `${s.credit_usage_pct}%` : '-'}</TableCell>
                     <TableCell>
-                      <Badge variant={getStatusColor(s.credit_status) as any}>
+                      <Badge variant={getStatusColor(s.credit_status)}>
                         {getStatusLabel(s.credit_status)}
                       </Badge>
                     </TableCell>
@@ -374,16 +377,16 @@ export function CreditTransactionsClient({
                     .filter(s => s.credit_balance > 0)
                     .sort((a, b) => {
                       const aDays = a.last_credit_sale_date
-                        ? Math.floor((Date.now() - new Date(a.last_credit_sale_date).getTime()) / (1000 * 60 * 60 * 24))
+                        ? Math.floor((now - new Date(a.last_credit_sale_date).getTime()) / (1000 * 60 * 60 * 24))
                         : 999
                       const bDays = b.last_credit_sale_date
-                        ? Math.floor((Date.now() - new Date(b.last_credit_sale_date).getTime()) / (1000 * 60 * 60 * 24))
+                        ? Math.floor((now - new Date(b.last_credit_sale_date).getTime()) / (1000 * 60 * 60 * 24))
                         : 999
                       return bDays - aDays
                     })
                     .map(s => {
                       const days = s.last_credit_sale_date
-                        ? Math.floor((Date.now() - new Date(s.last_credit_sale_date).getTime()) / (1000 * 60 * 60 * 24))
+                        ? Math.floor((now - new Date(s.last_credit_sale_date).getTime()) / (1000 * 60 * 60 * 24))
                         : 999
                       const bucketLabel = days <= 30 ? 'Current' : days <= 60 ? '31-60 days' : days <= 90 ? '61-90 days' : '90+ days'
                       const bucketColor = days <= 30 ? 'bg-blue-100 text-blue-800' : days <= 60 ? 'bg-yellow-100 text-yellow-800' : days <= 90 ? 'bg-orange-100 text-orange-800' : 'bg-red-100 text-red-800'
@@ -423,7 +426,7 @@ export function CreditTransactionsClient({
               <TableBody>
                 {payments.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-muted-foreground py-8">No payments recorded yet</TableCell>
+                    <TableCell colSpan={7} className="text-center text-muted-foreground py-8"><EmptyState title="No payments recorded yet" compact /></TableCell>
                   </TableRow>
                 ) : payments.map((p) => (
                   <TableRow key={p.id}>

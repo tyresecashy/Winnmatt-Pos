@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /monitoring
+
+Sitemap: https://winnmatt.com/sitemap.xml

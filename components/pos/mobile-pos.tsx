@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -109,7 +110,7 @@ export function MobilePOS({ products, onCheckout }: MobilePOSProps) {
       description: `${product.name} added`,
       duration: 1000,
     })
-  }, [])
+  }, [toast])
 
   // Update quantity
   const updateQuantity = useCallback((itemId: string, delta: number) => {
@@ -233,11 +234,14 @@ export function MobilePOS({ products, onCheckout }: MobilePOSProps) {
                   className="aspect-square flex flex-col items-center justify-center p-3 rounded-lg border bg-card hover:bg-accent hover:text-accent-foreground transition-colors touch-manipulation"
                 >
                   {product.image_url ? (
-                    <img
-                      src={product.image_url}
-                      alt={product.name}
-                      className="w-full h-16 object-contain mb-2"
-                    />
+                    <div className="relative w-full h-16 mb-2">
+                      <Image
+                        src={product.image_url}
+                        alt={product.name}
+                        fill
+                        className="object-contain"
+                      />
+                    </div>
                   ) : (
                     <Package className="w-12 h-12 text-muted-foreground mb-2" />
                   )}

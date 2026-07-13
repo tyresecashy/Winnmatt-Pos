@@ -1,7 +1,7 @@
 'use client'
 import { logger } from '@/lib/logger'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, startTransition } from 'react'
 import { useAuth } from '@/contexts/auth-context'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -39,8 +39,9 @@ import {
   cancelStockCount,
   type StockCount,
   type StockCountItem,
-} from '@/lib/stock-count-actions'
+} from '@/lib/modules/inventory'
 import { Plus, ClipboardList, CheckCircle2, XCircle, AlertTriangle, Save, Play, Eye, Search } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 
 const STATUS_BADGE: Record<string, 'secondary' | 'default' | 'destructive' | 'outline'> = {
   draft: 'secondary',
@@ -94,7 +95,7 @@ export default function StockCountPage() {
   }, [profile?.branch_id, filterStatus])
 
   useEffect(() => {
-    void loadCounts()
+    startTransition(() => { void loadCounts() })
   }, [loadCounts])
 
   const handleCreate = async () => {
@@ -123,7 +124,7 @@ export default function StockCountPage() {
     try {
       const result = await getStockCountWithItems(count.id)
       if (result.count && result.items) {
-        setCountItems(result.items as any[])
+        setCountItems(result.items as (StockCountItem & { product?: { id: string; sku: string; name: string; selling_price: number; purchase_price: number } | null })[])
         // Initialize edit values
         const values: Record<string, string> = {}
         result.items.forEach((item) => {
@@ -280,13 +281,7 @@ export default function StockCountPage() {
                   ))}
                 </div>
               ) : stockCounts.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
-                  <ClipboardList className="mb-3 h-12 w-12 opacity-20" />
-                  <p className="text-sm">No stock counts yet</p>
-                  <Button variant="outline" size="sm" className="mt-3" onClick={handleCreate}>
-                    Create your first count
-                  </Button>
-                </div>
+                <EmptyState icon={ClipboardList} title="No stock counts yet" actions={[{ label: 'Create your first count', onClick: handleCreate, variant: 'outline' }]} compact />
               ) : (
                 <ScrollArea className="h-[500px]">
                   <Table>
@@ -375,10 +370,7 @@ export default function StockCountPage() {
             </CardHeader>
             <CardContent>
               {!selectedCount ? (
-                <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
-                  <ClipboardList className="mb-3 h-12 w-12 opacity-20" />
-                  <p className="text-sm">Select a stock count</p>
-                </div>
+                <EmptyState icon={ClipboardList} title="Select a stock count" compact />
               ) : detailLoading ? (
                 <div className="space-y-3">
                   {Array.from({ length: 5 }).map((_, i) => (
@@ -484,9 +476,7 @@ export default function StockCountPage() {
                       <ScrollArea className="h-[350px]">
                         <div className="space-y-1.5">
                           {filteredItems.length === 0 ? (
-                            <p className="py-4 text-center text-sm text-muted-foreground">
-                              No items loaded. Click &quot;Start Count&quot; to load products.
-                            </p>
+                            <EmptyState title="No items loaded. Click &quot;Start Count&quot; to load products." compact />
                           ) : (
                             filteredItems.map((item) => (
                               <div

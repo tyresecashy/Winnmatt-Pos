@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { logger } from "@/lib/logger"
+import { useEffect, useState, startTransition } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -24,18 +25,9 @@ import {
 } from "@/components/ui/select"
 import { Terminal, Flag, Database, History, Beaker, Loader2, CheckCircle, XCircle, Code, RefreshCw, Activity } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
-import { getDatabaseTableCounts, getSystemHealth } from "@/lib/developer-actions"
-
-const mockFeatureFlags = [
-  { key: "new_pos_checkout", label: "New POS Checkout Flow", enabled: true, description: "Enhanced checkout with split payments" },
-  { key: "inventory_forecast", label: "AI Inventory Forecasting", enabled: false, description: "Predict stock levels using ML" },
-  { key: "customer_loyalty_v2", label: "Customer Loyalty v2", enabled: true, description: "Updated loyalty rewards engine" },
-  { key: "dark_mode", label: "Dark Mode", enabled: true, description: "System-wide dark theme" },
-  { key: "barcode_scanner", label: "Barcode Scanner API", enabled: false, description: "Native barcode scanning support" },
-  { key: "multi_currency", label: "Multi-Currency Support", enabled: false, description: "Display prices in multiple currencies" },
-  { key: "real_time_sync", label: "Real-Time Sync", enabled: true, description: "Live data sync across branches" },
-  { key: "advanced_reporting", label: "Advanced Reporting", enabled: false, description: "Custom report builder and dashboards" },
-]
+import { getDatabaseTableCounts, getSystemHealth } from "@/lib/modules/system"
+import { getAllFeatureFlags, toggleFeatureFlag } from "@/lib/feature-flags"
+import type { FeatureFlag } from "@/lib/feature-flags"
 
 interface SystemHealth {
   totalProducts: number
@@ -52,7 +44,8 @@ interface TableCount {
 
 export default function DeveloperPage() {
   const { profile, authState } = useAuth()
-  const [featureFlags, setFeatureFlags] = useState(mockFeatureFlags)
+  const [featureFlags, setFeatureFlags] = useState<FeatureFlag[]>([])
+  const [featureFlagsLoading, setFeatureFlagsLoading] = useState(true)
   const [apiMethod, setApiMethod] = useState<string>("GET")
   const [apiUrl, setApiUrl] = useState("")
   const [apiBody, setApiBody] = useState("")
@@ -65,25 +58,29 @@ export default function DeveloperPage() {
   const [loadingData, setLoadingData] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
 
-  useEffect(() => {
-    loadData()
-  }, [])
-
   async function loadData() {
     setLoadingData(true)
+    setFeatureFlagsLoading(true)
     try {
-      const [counts, health] = await Promise.all([
+      const [counts, health, flags] = await Promise.all([
         getDatabaseTableCounts(),
         getSystemHealth(),
+        getAllFeatureFlags(),
       ])
       setDbCounts(counts)
       setSystemHealth(health)
+      setFeatureFlags(flags)
     } catch (error) {
-      console.error('Failed to load developer data:', error)
+      logger.error('Failed to load developer data:', error)
     } finally {
       setLoadingData(false)
+      setFeatureFlagsLoading(false)
     }
   }
+
+  useEffect(() => {
+    startTransition(() => { loadData() })
+  }, [])
 
   async function handleRefresh() {
     setRefreshing(true)
@@ -91,10 +88,13 @@ export default function DeveloperPage() {
     setRefreshing(false)
   }
 
-  const toggleFlag = (key: string) => {
-    setFeatureFlags((prev) =>
-      prev.map((f) => (f.key === key ? { ...f, enabled: !f.enabled } : f))
-    )
+  const toggleFlag = async (flag: FeatureFlag) => {
+    const result = await toggleFeatureFlag(flag.id)
+    if (result.success) {
+      setFeatureFlags((prev) =>
+        prev.map((f) => (f.id === flag.id ? { ...f, enabled: !f.enabled } : f))
+      )
+    }
   }
 
   const handleApiTest = async () => {
@@ -271,28 +271,34 @@ export default function DeveloperPage() {
             <CardDescription>Toggle system features on and off</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {featureFlags.map((flag) => (
-                <div key={flag.key} className="flex items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium">{flag.label}</p>
-                      <Badge
-                        variant={flag.enabled ? "default" : "secondary"}
-                        className="text-[10px] h-4 px-1"
-                      >
-                        {flag.enabled ? "ON" : "OFF"}
-                      </Badge>
+            {featureFlagsLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {featureFlags.map((flag) => (
+                  <div key={flag.key} className="flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium">{flag.name}</p>
+                        <Badge
+                          variant={flag.enabled ? "default" : "secondary"}
+                          className="text-[10px] h-4 px-1"
+                        >
+                          {flag.enabled ? "ON" : "OFF"}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">{flag.description}</p>
+                      <code className="text-[10px] text-muted-foreground mt-0.5 block">
+                        {flag.key}
+                      </code>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">{flag.description}</p>
-                    <code className="text-[10px] text-muted-foreground mt-0.5 block">
-                      {flag.key}
-                    </code>
+                    <Switch checked={flag.enabled} onCheckedChange={() => toggleFlag(flag)} />
                   </div>
-                  <Switch checked={flag.enabled} onCheckedChange={() => toggleFlag(flag.key)} />
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 

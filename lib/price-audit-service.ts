@@ -2,7 +2,7 @@
 // Detects anomalies, flags suspicious prices, manages review workflow
 
 import { supabase } from '@/lib/supabase'
-import type { Database } from '@/lib/db.types'
+import type { Database } from '@/lib/types/database'
 
 const createClient = () => supabase
 

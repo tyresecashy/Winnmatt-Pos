@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback, startTransition } from 'react'
+import { logger } from '@/lib/logger'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -24,11 +25,13 @@ import {
 import { Calendar, Plus, RefreshCw, User, Clock, ChevronLeft, ChevronRight, Copy, Trash2 } from 'lucide-react'
 import { 
   getWorkerRoles, 
-  getWorkerAssignments, 
+  getWorkerAssignments,
+  getWorkerShifts,
+  createWorkerShift,
+  deleteWorkerShift,
   type WorkerRole, 
   type WorkerAssignment 
 } from '@/lib/task-management'
-import { supabaseAdmin } from '@/lib/supabase-server'
 import { useBranch } from '@/contexts/branch-context'
 
 interface Shift {
@@ -72,9 +75,36 @@ export default function SchedulePage() {
   const [newArea, setNewArea] = useState('')
   const [newNotes, setNewNotes] = useState('')
 
-  useEffect(() => {
-    loadData()
+  const loadData = useCallback(async () => {
+    setLoading(true)
+    try {
+      const weekDays = Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(currentWeekStart)
+        d.setDate(d.getDate() + i)
+        return d
+      })
+      const startDate = weekDays[0].toISOString().split('T')[0]
+      const endDate = weekDays[6].toISOString().split('T')[0]
+
+      const [shiftsData, rolesData, assignmentsData] = await Promise.all([
+        getWorkerShifts(branchId || '', startDate, endDate),
+        getWorkerRoles(),
+        getWorkerAssignments(branchId || undefined),
+      ])
+
+      setShifts(shiftsData)
+      setRoles(rolesData)
+      setAssignments(assignmentsData)
+    } catch (error) {
+      logger.error('Failed to load schedule data:', error)
+    } finally {
+      setLoading(false)
+    }
   }, [branchId, currentWeekStart])
+
+  useEffect(() => {
+    startTransition(() => { loadData() })
+  }, [branchId, currentWeekStart, loadData])
 
   function getWeekStart(date: Date): Date {
     const d = new Date(date)
@@ -90,56 +120,21 @@ export default function SchedulePage() {
     })
   }
 
-  async function loadData() {
-    setLoading(true)
-    try {
-      const weekDays = getWeekDays()
-      const startDate = weekDays[0].toISOString().split('T')[0]
-      const endDate = weekDays[6].toISOString().split('T')[0]
-
-      const [shiftsResult, rolesData, assignmentsData] = await Promise.all([
-        supabaseAdmin
-          .from('worker_shifts')
-          .select(`
-            *,
-            employee:employee_profiles(first_name, last_name, staff_number),
-            role:worker_roles(*)
-          `)
-          .eq('branch_id', branchId || '')
-          .gte('shift_date', startDate)
-          .lte('shift_date', endDate)
-          .order('shift_date'),
-        getWorkerRoles(),
-        getWorkerAssignments(branchId || undefined),
-      ])
-
-      setShifts(shiftsResult.data || [])
-      setRoles(rolesData)
-      setAssignments(assignmentsData)
-    } catch (error) {
-      console.error('Failed to load schedule data:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
   async function handleCreateShift() {
     if (!newEmployeeId || !selectedDate || !branchId) return
 
-    const { error } = await supabaseAdmin
-      .from('worker_shifts')
-      .insert({
-        employee_id: newEmployeeId,
-        branch_id: branchId,
-        shift_date: selectedDate,
-        start_time: newStartTime,
-        end_time: newEndTime,
-        role_id: newRoleId || null,
-        area: newArea || null,
-        notes: newNotes || null,
-      })
+    const result = await createWorkerShift({
+      employee_id: newEmployeeId,
+      branch_id: branchId,
+      shift_date: selectedDate,
+      start_time: newStartTime,
+      end_time: newEndTime,
+      role_id: newRoleId || null,
+      area: newArea || null,
+      notes: newNotes || null,
+    })
 
-    if (!error) {
+    if (result.success) {
       setShowCreateDialog(false)
       resetForm()
       await loadData()
@@ -149,12 +144,8 @@ export default function SchedulePage() {
   async function handleDeleteShift(shiftId: string) {
     if (!confirm('Delete this shift?')) return
 
-    const { error } = await supabaseAdmin
-      .from('worker_shifts')
-      .delete()
-      .eq('id', shiftId)
-
-    if (!error) {
+    const result = await deleteWorkerShift(shiftId)
+    if (result.success) {
       await loadData()
     }
   }
@@ -225,9 +216,12 @@ export default function SchedulePage() {
                       <SelectValue placeholder="Select worker" />
                     </SelectTrigger>
                     <SelectContent>
-                      {assignments.map((a) => (
+                      {assignments.length === 0 ? (
+                        <SelectItem value="__none__" disabled>No workers assigned</SelectItem>
+                      ) : assignments.map((a) => (
                         <SelectItem key={a.employee_id} value={a.employee_id}>
-                          {a.employee?.first_name} {a.employee?.last_name} ({a.role?.name})
+                          {a.employee ? `${a.employee.first_name} ${a.employee.last_name}` : 'Unknown Worker'}
+                          {a.role?.name ? ` (${a.role.name})` : ''}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -240,7 +234,9 @@ export default function SchedulePage() {
                       <SelectValue placeholder="Select role" />
                     </SelectTrigger>
                     <SelectContent>
-                      {roles.map((role) => (
+                      {roles.length === 0 ? (
+                        <SelectItem value="__none__" disabled>No roles available</SelectItem>
+                      ) : roles.map((role) => (
                         <SelectItem key={role.id} value={role.id}>
                           {role.name}
                         </SelectItem>

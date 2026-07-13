@@ -109,9 +109,9 @@ async function buildCategoryMap(productIds: string[]): Promise<Record<string, st
     .in('id', productIds)
 
   const map: Record<string, string> = {}
-  products?.forEach((p: any) => {
-    map[p.id] = p.categories?.name || 'Other'
-  })
+  for (const p of (products as Record<string, unknown>[] || [])) {
+    map[p.id as string] = ((p.categories as Record<string, unknown>)?.name as string) || 'Other'
+  }
   return map
 }
 
@@ -128,12 +128,12 @@ async function buildProductMetaMap(
     .in('id', productIds)
 
   const map: Record<string, { name: string; category: string }> = {}
-  products?.forEach((p: any) => {
-    map[p.id] = {
-      name: p.name || 'Unknown',
-      category: p.categories?.name || 'Other',
+  for (const p of (products as Record<string, unknown>[] || [])) {
+    map[p.id as string] = {
+      name: (p.name as string) || 'Unknown',
+      category: ((p.categories as Record<string, unknown>)?.name as string) || 'Other',
     }
-  })
+  }
   return map
 }
 
@@ -436,7 +436,8 @@ export async function getCashierLeaderboard(
 
     const userNameMap: Record<string, string> = {}
     users?.forEach((u) => {
-      userNameMap[u.id] = u.name || 'Unknown'
+      const userRow = u as unknown as { id: string; name?: string | null }
+      userNameMap[userRow.id] = userRow.name || 'Unknown'
     })
 
     // Get sale item counts

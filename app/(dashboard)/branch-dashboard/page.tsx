@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { logger } from '@/lib/logger';
+import { useState, useEffect, useCallback, startTransition } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
@@ -44,32 +45,7 @@ export default function BranchDashboard() {
   const [selectedBranch, setSelectedBranch] = useState<string>('all');
   const [dateRange, setDateRange] = useState('30d');
 
-  useEffect(() => {
-    loadDashboardData();
-  }, [dateRange]);
-
-  const loadDashboardData = async () => {
-    setLoading(true);
-    try {
-      const { startDate, endDate } = getDateRange(dateRange);
-      
-      const [branchList, branchMetrics, transferList] = await Promise.all([
-        branchService.getBranches(),
-        branchService.getBranchMetrics(startDate, endDate),
-        branchService.getInterBranchTransfers(),
-      ]);
-
-      setBranches(branchList);
-      setMetrics(branchMetrics);
-      setTransfers(transferList);
-    } catch (error) {
-      console.error('Error loading dashboard data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const getDateRange = (range: string) => {
+  const getDateRange = useCallback((range: string) => {
     const end = new Date();
     const start = new Date();
     
@@ -89,7 +65,32 @@ export default function BranchDashboard() {
       startDate: start.toISOString(),
       endDate: end.toISOString(),
     };
-  };
+  }, []);
+
+  const loadDashboardData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { startDate, endDate } = getDateRange(dateRange);
+      
+      const [branchList, branchMetrics, transferList] = await Promise.all([
+        branchService.getBranches(),
+        branchService.getBranchMetrics(startDate, endDate),
+        branchService.getInterBranchTransfers(),
+      ]);
+
+      setBranches(branchList);
+      setMetrics(branchMetrics);
+      setTransfers(transferList);
+    } catch (error) {
+      logger.error('Error loading dashboard data:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [dateRange, getDateRange]);
+
+  useEffect(() => {
+    startTransition(() => { loadDashboardData() });
+  }, [dateRange, loadDashboardData]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-KE', {
@@ -115,7 +116,7 @@ export default function BranchDashboard() {
       case 'cancelled':
         return 'bg-red-100 text-red-800';
       default:
-        return 'bg-gray-100 text-gray-800';
+        return 'bg-muted text-muted-foreground';
     }
   };
 
@@ -326,8 +327,8 @@ export default function BranchDashboard() {
                   {transfers.slice(0, 10).map((transfer) => (
                     <tr key={transfer.id} className="border-b hover:bg-muted/50">
                       <td className="p-4 font-mono text-sm">{transfer.id.slice(0, 8)}...</td>
-                      <td className="p-4">{(transfer.from_branch as any)?.name || 'N/A'}</td>
-                      <td className="p-4">{(transfer.to_branch as any)?.name || 'N/A'}</td>
+                      <td className="p-4">{(transfer as InterBranchTransfer & { from_branch?: { name: string } }).from_branch?.name || 'N/A'}</td>
+                      <td className="p-4">{(transfer as InterBranchTransfer & { to_branch?: { name: string } }).to_branch?.name || 'N/A'}</td>
                       <td className="p-4">
                         <Badge className={getStatusColor(transfer.status)}>
                           {transfer.status.replace('_', ' ')}

@@ -2,7 +2,7 @@
 import { logger } from '@/lib/logger';
 
 import { supabaseAdmin } from '@/lib/supabase-server'
-import type { UserProfile } from '@/lib/db.types'
+import type { UserProfile } from '@/contexts/auth-context'
 
 /** Shape returned by the users + branches Supabase query */
 interface UserRow {
@@ -46,7 +46,8 @@ export async function getBranches(): Promise<Array<{
 
   if (error) {
     logger.error('[USER-MANAGEMENT] Failed to fetch branches:', error)
-    throw new Error(`Failed to fetch branches: ${error.message}`)
+    logger.error('Operation failed', { error: error })
+    throw new Error('Operation failed')
   }
 
   return data as Array<{ id: string; name: string; code: string }>
@@ -75,7 +76,8 @@ export async function getUsers(userRole: string): Promise<UserProfile[]> {
 
   if (error) {
     logger.error('[USER-MANAGEMENT] Failed to fetch users:', error)
-    throw new Error(`Failed to fetch users: ${error.message}`)
+    logger.error('Operation failed', { error: error })
+    throw new Error('Operation failed')
   }
 
   return (data as unknown as UserRow[]).map(row => {
@@ -127,7 +129,8 @@ export async function getUserById(userId: string, userRole: string): Promise<Use
       return null // Not found
     }
     logger.error('[USER-MANAGEMENT] Failed to fetch user:', error)
-    throw new Error(`Failed to fetch user: ${error.message}`)
+    logger.error('Operation failed', { error: error })
+    throw new Error('Operation failed')
   }
 
   const userRow = data as unknown as UserRow
@@ -225,7 +228,8 @@ export async function createUser(
 
     if (authError) {
       logger.error('[USER-MANAGEMENT] Auth creation error:', authError)
-      throw new Error(`Failed to create auth account: ${authError.message}`)
+      logger.error('Operation failed', { error: authError })
+    throw new Error('Operation failed')
     }
 
     const newUserId = authData.user.id
@@ -265,7 +269,8 @@ export async function createUser(
       } catch (deleteError) {
         logger.error('[USER-MANAGEMENT] Could not delete orphaned auth user:', deleteError)
       }
-      throw new Error(`Failed to create user profile: ${profileError.message}`)
+      logger.error('Operation failed', { error: profileError })
+    throw new Error('Operation failed')
     }
 
     const branch = (profileData as unknown as UserRow).branch
@@ -276,11 +281,11 @@ export async function createUser(
         id: profileData.id,
         email: profileData.email,
         full_name: profileData.full_name,
-        role: profileData.role,
-        status: profileData.status,
-        branch_id: profileData.branch_id,
-        created_at: profileData.created_at,
-        updated_at: profileData.updated_at,
+        role: profileData.role as UserProfile['role'],
+        status: profileData.status as UserProfile['status'],
+        branch_id: profileData.branch_id ?? null,
+        created_at: profileData.created_at ?? '',
+        updated_at: profileData.updated_at ?? '',
         branch: branch ? {
           id: branch.id,
           name: branch.name,
@@ -369,7 +374,8 @@ export async function updateUser(
 
   if (error) {
     logger.error('[USER-MANAGEMENT] Update user error:', error)
-    throw new Error(`Failed to update user: ${error.message}`)
+    logger.error('Operation failed', { error: error })
+    throw new Error('Operation failed')
   }
 
   const userRow = data as unknown as UserRow
@@ -436,7 +442,8 @@ export async function deactivateUser(
 
   if (error) {
     logger.error('[USER-MANAGEMENT] Deactivate user error:', error)
-    throw new Error(`Failed to deactivate user: ${error.message}`)
+    logger.error('Operation failed', { error: error })
+    throw new Error('Operation failed')
   }
 
   logger.info('[USER-MANAGEMENT] Deactivated user:', { userId })
@@ -471,7 +478,8 @@ export async function resetUserPassword(
     .single()
 
   if (userError) {
-    throw new Error(`User not found: ${userError.message}`)
+    logger.error('Operation failed', { error: userError })
+    throw new Error('Operation failed')
   }
 
   // Generate new password
@@ -484,7 +492,8 @@ export async function resetUserPassword(
 
   if (updateError) {
     logger.error('[USER-MANAGEMENT] Password reset error:', updateError)
-    throw new Error(`Failed to reset password: ${updateError.message}`)
+    logger.error('Operation failed', { error: updateError })
+    throw new Error('Operation failed')
   }
 
   return {
@@ -529,7 +538,8 @@ export async function deleteUser(
 
   if (error) {
     logger.error('[USER-MANAGEMENT] Delete user error:', error)
-    throw new Error(`Failed to delete user: ${error.message}`)
+    logger.error('Operation failed', { error: error })
+    throw new Error('Operation failed')
   }
 
   return {
@@ -545,14 +555,15 @@ export async function reactivateUser(userId: string, userRole: string) {
 
   const { data, error } = await supabaseAdmin
     .from('users')
-    .update({ status: 'active', updated_at: new Date() })
+    .update({ status: 'active', updated_at: new Date().toISOString() })
     .eq('id', userId)
     .select()
     .single()
 
   if (error) {
     logger.error('[USER-MANAGEMENT] Reactivate error:', error)
-    throw new Error(`Failed to reactivate user: ${error.message}`)
+    logger.error('Operation failed', { error: error })
+    throw new Error('Operation failed')
   }
 
   return {

@@ -31,7 +31,8 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Plus, Search, SearchX, Truck, Phone, Mail, MoreHorizontal, Pencil, Trash2, AlertCircle, Filter, DollarSign, ExternalLink } from 'lucide-react'
-import { getSuppliers, createSupplier, updateSupplier, deleteSupplier, type Supplier } from '@/lib/suppliers-actions'
+import { EmptyState } from '@/components/ui/empty-state'
+import { getSuppliers, createSupplier, updateSupplier, deleteSupplier, type Supplier } from '@/lib/modules/suppliers'
 import { formatKSh } from '@/lib/currency'
 import {
   AlertDialog,
@@ -92,21 +93,21 @@ export default function SuppliersPage() {
     const searchLower = deferredSearchTerm.toLowerCase()
     const matchesSearch =
       supplier.name.toLowerCase().includes(searchLower) ||
-      supplier.contact_person.toLowerCase().includes(searchLower) ||
-      supplier.phone.includes(deferredSearchTerm) ||
-      (supplier.email?.toLowerCase() || '').includes(searchLower)
+      (supplier.contact_person ?? '').toLowerCase().includes(searchLower) ||
+      (supplier.phone ?? '').includes(deferredSearchTerm) ||
+      (supplier.email?.toLowerCase() ?? '').includes(searchLower)
 
     const matchesBalance =
       balanceFilter === 'all' ||
-      (balanceFilter === 'owed' && supplier.balance > 0) ||
-      (balanceFilter === 'paid' && supplier.balance === 0)
+      (balanceFilter === 'owed' && (supplier.balance ?? 0) > 0) ||
+      (balanceFilter === 'paid' && (supplier.balance ?? 0) === 0)
 
     return matchesSearch && matchesBalance
   })
 
   const HIGH_BALANCE_THRESHOLD = 50000 // KES
 
-  const totalOwed = suppliers.reduce((sum, s) => sum + s.balance, 0)
+  const totalOwed = suppliers.reduce((sum, s) => sum + (s.balance ?? 0), 0)
 
   const handleAddSupplier = async () => {
     if (!formData.name.trim() || !formData.contact_person.trim() || !formData.phone.trim()) {
@@ -120,16 +121,16 @@ export default function SuppliersPage() {
 
     setIsSaving(true)
     try {
-      const result = await createSupplier(
-        formData.name,
-        formData.contact_person,
-        formData.phone,
-        formData.email,
-        formData.payment_terms
-      )
+      const result = await createSupplier({
+        name: formData.name,
+        contact_person: formData.contact_person,
+        phone: formData.phone,
+        email: formData.email || undefined,
+        payment_terms: formData.payment_terms || undefined,
+      })
 
       if (result.success) {
-        setSuppliers([...suppliers, result.supplier as Supplier])
+        setSuppliers([...suppliers, { id: result.id, ...formData, balance: 0 } as Supplier])
         setShowAddDialog(false)
         setFormData({
           name: '',
@@ -140,7 +141,7 @@ export default function SuppliersPage() {
         })
         toast({
           title: 'Success',
-          description: result.message,
+          description: 'Supplier created successfully',
         })
       } else {
         toast({
@@ -183,7 +184,7 @@ export default function SuppliersPage() {
 
       if (result.success) {
         setSuppliers(
-          suppliers.map((s) => (s.id === editingSupplier.id ? (result.supplier as Supplier) : s))
+          suppliers.map((s) => (s.id === editingSupplier.id ? { ...s, ...formData } as Supplier : s))
         )
         setShowEditDialog(false)
         setEditingSupplier(null)
@@ -196,7 +197,7 @@ export default function SuppliersPage() {
         })
         toast({
           title: 'Success',
-          description: result.message,
+          description: 'Supplier updated successfully',
         })
       } else {
         toast({
@@ -220,10 +221,10 @@ export default function SuppliersPage() {
     setEditingSupplier(supplier)
     setFormData({
       name: supplier.name,
-      contact_person: supplier.contact_person,
-      phone: supplier.phone,
+      contact_person: supplier.contact_person ?? '',
+      phone: supplier.phone ?? '',
       email: supplier.email || '',
-      payment_terms: supplier.payment_terms,
+      payment_terms: supplier.payment_terms ?? '',
     })
     setShowEditDialog(true)
   }
@@ -305,7 +306,7 @@ export default function SuppliersPage() {
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>With Balance Owed</CardDescription>
-            <CardTitle className="text-3xl">{suppliers.filter((s) => s.balance > 0).length}</CardTitle>
+            <CardTitle className="text-3xl">{suppliers.filter((s) => (s.balance ?? 0) > 0).length}</CardTitle>
           </CardHeader>
         </Card>
       </div>
@@ -358,22 +359,12 @@ export default function SuppliersPage() {
         </CardHeader>
         <CardContent>
           {filteredSuppliers.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
-                {suppliers.length === 0
-                  ? <Truck className="h-6 w-6 text-muted-foreground" />
-                  : <SearchX className="h-6 w-6 text-muted-foreground" />
-                }
-              </div>
-              <p className="text-lg font-medium">
-                {suppliers.length === 0 ? 'No suppliers yet' : 'No suppliers match your search'}
-              </p>
-              <p className="text-sm text-muted-foreground mt-1">
-                {suppliers.length === 0
-                  ? 'Add your first supplier to start managing purchases.'
-                  : 'Try different search terms or clear your filters.'}
-              </p>
-            </div>
+            <EmptyState
+              icon={suppliers.length === 0 ? Truck : SearchX}
+              title={suppliers.length === 0 ? 'No suppliers yet' : 'No suppliers match your search'}
+              description={suppliers.length === 0 ? 'Add your first supplier to start managing purchases.' : 'Try different search terms or clear your filters.'}
+              compact
+            />
           ) : (
             <Table>
               <TableHeader>
@@ -388,8 +379,8 @@ export default function SuppliersPage() {
               </TableHeader>
               <TableBody>
                 {filteredSuppliers.map((supplier) => {
-                  const isHighBalance = supplier.balance >= HIGH_BALANCE_THRESHOLD
-                  const hasBalance = supplier.balance > 0
+                  const isHighBalance = (supplier.balance ?? 0) >= HIGH_BALANCE_THRESHOLD
+                  const hasBalance = (supplier.balance ?? 0) > 0
                   return (
                     <TableRow
                       key={supplier.id}
@@ -436,7 +427,7 @@ export default function SuppliersPage() {
                                 : 'text-green-600'
                             }
                           >
-                            {formatKSh(supplier.balance)}
+                            {formatKSh(supplier.balance ?? 0)}
                           </span>
                           {hasBalance && (
                             <div className="w-20 h-1.5 bg-muted rounded-full overflow-hidden">
@@ -447,7 +438,7 @@ export default function SuppliersPage() {
                                 style={{
                                   width: `${Math.min(
                                     100,
-                                    (supplier.balance / HIGH_BALANCE_THRESHOLD) * 100
+                                    ((supplier.balance ?? 0) / HIGH_BALANCE_THRESHOLD) * 100
                                   )}%`,
                                 }}
                               />

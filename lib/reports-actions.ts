@@ -90,11 +90,11 @@ export async function getTopSellingProducts(branchId: string, startDate: string,
     const productIds = [...new Set(itemList.map((i) => i.product_id))]
     const { data: products } = await supabaseAdmin
       .from('products')
-      .select('id, name, category')
+      .select('id, name, category_id')
       .in('id', productIds)
 
-    const productMap: Record<string, any> = {}
-    products?.forEach((p) => {
+    const productMap: Record<string, { id: string; name: string; category_id: string | null }> = {}
+    products?.forEach((p: { id: string; name: string; category_id: string | null }) => {
       productMap[p.id] = p
     })
 
@@ -110,7 +110,7 @@ export async function getTopSellingProducts(branchId: string, startDate: string,
         topMap[item.product_id] = {
           product_id: item.product_id,
           name: product?.name || 'Unknown',
-          category: product?.category || 'Other',
+          category: product?.category_id || 'Other',
           units_sold: 0,
           revenue: 0,
         }
@@ -182,7 +182,7 @@ export async function getSlowMovingProducts(branchId: string, daysSinceSale: num
         .limit(1)
         .single()
 
-      const daysWithoutSale = lastSale
+      const daysWithoutSale = lastSale?.created_at
         ? Math.floor((new Date().getTime() - new Date(lastSale.created_at).getTime()) / (1000 * 60 * 60 * 24))
         : 999
 
@@ -224,16 +224,16 @@ export async function getInventoryValueByCategory(branchId: string) {
       .select('id, name, category_id, purchase_price')
       .in('id', productIds)
 
-    const productMap: Record<string, any> = {}
+    const productMap: Record<string, { id: string; name: string; category_id: string | null; purchase_price: number }> = {}
     products?.forEach((p) => {
-      productMap[p.id] = p
+      productMap[p.id as string] = p as { id: string; name: string; category_id: string | null; purchase_price: number }
     })
 
     const categoryMap: Record<string, { value: number; count: number }> = {}
 
     items.forEach((item) => {
       const product = productMap[item.product_id]
-      const category = product?.category || 'Other'
+      const category = product?.category_id || 'Other'
       const itemValue = (item.quantity * (product?.purchase_price || 0)) || 0
 
       if (!categoryMap[category]) {
@@ -383,7 +383,7 @@ export async function getDailySalesTrend(branchId: string, startDate: string, en
     const dailyMap: Record<string, number> = {}
 
     sales.forEach((sale) => {
-      const date = new Date(sale.created_at).toISOString().split('T')[0]
+      const date = new Date(sale.created_at!).toISOString().split('T')[0]
       dailyMap[date] = (dailyMap[date] || 0) + sale.total_amount
     })
 
@@ -462,7 +462,7 @@ export async function getLowStockProducts(branchId: string, limit: number = 10) 
       .select('id, name, reorder_level')
       .in('id', productIds)
 
-    const productMap: Record<string, any> = {}
+    const productMap: Record<string, { id: string; name: string; reorder_level: number }> = {}
     products?.forEach((p) => {
       productMap[p.id] = p
     })

@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAuth, type APIContext } from '@/lib/api/middleware'
 import { apiPaginated, apiInternal, parseSearchParams, getPaginationParams, getSortParams } from '@/lib/api/response'
+import { logger } from '@/lib/logger'
 
 export async function GET(request: NextRequest) {
   return withAuth(request, async (ctx: APIContext) => {
@@ -57,12 +58,13 @@ export async function GET(request: NextRequest) {
       const { data, count, error } = await query
 
       if (error) {
-        return apiInternal(`Database error: ${error.message}`)
+        logger.error('[Sales API] Database query failed', { message: error.message, code: error.code })
+        return apiInternal()
       }
 
       return apiPaginated(data || [], count || 0, page, limit)
     } catch (error) {
-      console.error('[Sales API] Error:', error)
+      logger.error('[Sales API] Error:', error)
       return apiInternal()
     }
   })

@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Search, User, X, Phone, Loader2, Mail } from "lucide-react"
-import { searchCustomers } from "@/lib/customers-actions"
+import { EmptyState } from "@/components/ui/empty-state"
+import { searchCustomers } from "@/lib/modules/customers"
 import { formatKSh, pointsToKSh } from "@/lib/currency"
 import type { SelectedCustomer } from "@/app/(dashboard)/pos/page"
 import {
@@ -270,9 +271,9 @@ export function CustomerLookup({ selectedCustomer, onSelectCustomer, loyaltyRede
                       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted">
                         <User className="h-4 w-4 text-muted-foreground" />
                       </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">Walk-in Customer</p>
-                        <p className="text-xs text-muted-foreground">No customer record</p>
+                        <div className="flex-1">
+                          <p className="text-sm font-medium">Walk-in Customer</p>
+                          <EmptyState title="No customer record" compact />
                       </div>
                     </div>
                   </CommandItem>

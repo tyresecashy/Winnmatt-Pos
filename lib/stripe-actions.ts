@@ -1,5 +1,7 @@
 'use server'
 
+import { logger } from '@/lib/logger'
+
 /**
  * Stripe Payment Server Actions
  * Handles Stripe card payment completion
@@ -8,10 +10,9 @@
 import Stripe from 'stripe'
 import { supabaseAdmin } from '@/lib/supabase-server'
 import { authenticateServerAction } from './auth-helpers'
-import { logger } from './logger'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2024-12-18.acacia' as any,
+  apiVersion: '2026-06-24.dahlia' as any,
 })
 
 export interface StripePaymentResult {
@@ -81,7 +82,7 @@ export async function createStripePaymentIntent(
     logger.error('[Stripe] Failed to create PaymentIntent', error)
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to create payment',
+      error: 'Operation failed. Please try again.',
     }
   }
 }
@@ -147,7 +148,7 @@ export async function confirmStripePayment(
         }),
       })
     } catch (logError) {
-      logger.warn('[Stripe] Failed to log payment (table may not exist)', logError)
+      logger.warn('[Stripe] Failed to log payment (table may not exist)', logError as Record<string, unknown>)
     }
 
     logger.info('[Stripe] Payment confirmed', { saleId, paymentIntentId })
@@ -156,7 +157,7 @@ export async function confirmStripePayment(
     logger.error('[Stripe] Failed to confirm payment', error)
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Failed to confirm payment',
+      error: 'Operation failed. Please try again.',
     }
   }
 }
@@ -234,7 +235,7 @@ export async function refundStripePayment(
         }),
       })
     } catch (logError) {
-      logger.warn('[Stripe] Failed to log refund (table may not exist)', logError)
+      logger.warn('[Stripe] Failed to log refund (table may not exist)', logError as Record<string, unknown>)
     }
 
     logger.info('[Stripe] Refund created', { saleId, refundId: refund.id })
@@ -243,7 +244,7 @@ export async function refundStripePayment(
     logger.error('[Stripe] Refund failed', error)
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Refund failed',
+      error: 'Operation failed. Please try again.',
     }
   }
 }

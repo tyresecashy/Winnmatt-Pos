@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, startTransition } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -21,7 +21,7 @@ import { formatKSh } from '@/lib/currency'
 import {
   getSuppliers, getSupplierById,
   type Supplier,
-} from '@/lib/suppliers-actions'
+} from '@/lib/modules/suppliers'
 import {
   Truck, Plus, Search, Loader2, DollarSign, Clock, TrendingUp,
   AlertCircle, CheckCircle, RefreshCw, ArrowRight, Phone, Mail,
@@ -76,28 +76,28 @@ export default function AccountsPayablePage() {
       setLoading(true)
       const suppliersData = await getSuppliers()
       // Enrich with AP-specific fields
-      const enriched = suppliersData.map(s => ({
+      const enriched: SupplierWithAP[] = suppliersData.map((s: Supplier) => ({
         ...s,
-        outstanding_balance: (s as any).outstanding_balance || (s as any).balance || 0,
-        credit_limit: (s as any).credit_limit || 0,
-        credit_days: (s as any).credit_days || 30,
-        total_purchase_amount: (s as any).total_purchase_amount || 0,
-        total_orders: (s as any).total_orders || 0,
-        status: (s as any).status || 'active',
-        company_name: (s as any).company_name || '',
-        tax_number: (s as any).tax_number || '',
-        bank_name: (s as any).bank_name || '',
-        bank_account: (s as any).bank_account || '',
-      })) as SupplierWithAP[]
+        outstanding_balance: s.balance || 0,
+        credit_limit: s.credit_limit ?? 0,
+        credit_days: s.credit_days ?? 30,
+        total_purchase_amount: s.total_purchase_amount ?? 0,
+        total_orders: s.total_orders ?? 0,
+        status: s.status || 'active',
+        company_name: s.company_name ?? '',
+        tax_number: s.tax_number ?? '',
+        bank_name: s.bank_name ?? '',
+        bank_account: s.bank_account ?? '',
+      }))
       setSuppliers(enriched)
-    } catch (err: any) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' })
+    } catch (err: unknown) {
+      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Unknown error', variant: 'destructive' })
     } finally {
       setLoading(false)
     }
   }, [toast])
 
-  useEffect(() => { loadData() }, [loadData])
+  useEffect(() => { startTransition(() => { loadData() }) }, [loadData])
 
   // ── Filtered Suppliers ──
   const filteredSuppliers = useMemo(() => {
@@ -144,25 +144,22 @@ export default function AccountsPayablePage() {
 
     setSaving(true)
     try {
-      // For now, we'll use a simple update approach
-      // In production, this would create a proper AP payment record
-      const newBalance = selectedSupplier.outstanding_balance - Math.round(parseFloat(paymentForm.amount))
+      const { recordSupplierPayment } = await import('@/lib/suppliers-actions')
+      const result = await recordSupplierPayment(
+        selectedSupplier.id, parseFloat(paymentForm.amount),
+        paymentForm.payment_date, paymentForm.payment_method,
+        paymentForm.reference_number, paymentForm.notes,
+      )
 
-      const { supabaseAdmin } = await import('@/lib/supabase-server')
-      const { error } = await (await import('@/lib/supabase-server')).supabaseAdmin
-        .from('suppliers')
-        .update({ balance: Math.max(0, newBalance), updated_at: new Date().toISOString() })
-        .eq('id', selectedSupplier.id)
-
-      if (error) throw error
+      if (!result.success) throw new Error(result.error || 'Payment failed')
 
       toast({ title: 'Payment recorded', description: `KES ${paymentForm.amount} paid to ${selectedSupplier.name}` })
       setShowPaymentDialog(false)
       setSelectedSupplier(null)
       setPaymentForm({ amount: '', payment_date: new Date().toISOString().split('T')[0], payment_method: 'bank_transfer', reference_number: '', notes: '' })
       loadData()
-    } catch (err: any) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' })
+    } catch (err: unknown) {
+      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Unknown error', variant: 'destructive' })
     } finally {
       setSaving(false)
     }

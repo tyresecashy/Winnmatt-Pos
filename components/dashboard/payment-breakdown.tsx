@@ -1,7 +1,7 @@
 'use client'
-import { logger } from '@/lib/logger';
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback } from 'react'
+import { useDashboardQuery } from '@/hooks/use-dashboard-query'
 import { motion } from 'framer-motion'
 import { chartAnimations } from '@/lib/motion'
 import { useAuth } from '@/contexts/auth-context'
@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AlertCircle, RefreshCw } from 'lucide-react'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
-import { getPaymentBreakdownToday } from '@/lib/dashboard-actions'
+import { getPaymentBreakdownToday } from '@/lib/modules/dashboard'
 import { formatKSh } from '@/lib/currency'
 
 const COLORS = ['hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))']
@@ -22,89 +22,18 @@ interface PaymentMethod {
 
 export function PaymentBreakdown() {
   const { profile } = useAuth()
-  const [paymentData, setPaymentData] = useState<PaymentMethod[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [retryCount, setRetryCount] = useState(0)
-  const fetchPromiseRef = useRef<Promise<void> | null>(null)
-  const lastFetchAtRef = useRef(0)
-  const hasLoadedRef = useRef(false)
+  const branchId = profile?.branch_id
 
-  useEffect(() => {
-    let cancelled = false
+  const fetcher = useCallback(
+    () => branchId ? getPaymentBreakdownToday(branchId) : Promise.resolve([]),
+    [branchId]
+  )
 
-    async function loadPaymentData(options?: { force?: boolean; minIntervalMs?: number }) {
-      const branchId = profile?.branch_id
-      if (!branchId) {
-        if (!cancelled) {
-          setPaymentData([])
-          setLoading(false)
-        }
-        return
-      }
-
-      const now = Date.now()
-      if (!options?.force && fetchPromiseRef.current) {
-        return fetchPromiseRef.current
-      }
-
-      if (!options?.force && now - lastFetchAtRef.current < (options?.minIntervalMs ?? 0)) {
-        return
-      }
-
-      const shouldShowLoading = !hasLoadedRef.current
-      if (shouldShowLoading) {
-        setLoading(true)
-      }
-
-      const fetchPromise = (async () => {
-        try {
-          const data = await getPaymentBreakdownToday(branchId)
-          if (!cancelled) {
-            setError(null)
-            setPaymentData(data)
-            hasLoadedRef.current = true
-            lastFetchAtRef.current = Date.now()
-          }
-        } catch (error) {
-          logger.error('Error loading payment data:', error)
-          if (!cancelled) setError('Failed to load payment data')
-        } finally {
-          if (!cancelled && shouldShowLoading) {
-            setLoading(false)
-          }
-        }
-      })()
-
-      fetchPromiseRef.current = fetchPromise
-
-      try {
-        await fetchPromise
-      } finally {
-        if (fetchPromiseRef.current === fetchPromise) {
-          fetchPromiseRef.current = null
-        }
-      }
-    }
-
-    void loadPaymentData({ force: true })
-
-    const intervalId = window.setInterval(() => {
-      void loadPaymentData({ minIntervalMs: 30000 })
-    }, 60000)
-
-    const handleFocus = () => {
-      void loadPaymentData({ minIntervalMs: 15000 })
-    }
-
-    window.addEventListener('focus', handleFocus)
-
-    return () => {
-      cancelled = true
-      window.clearInterval(intervalId)
-      window.removeEventListener('focus', handleFocus)
-    }
-  }, [profile?.branch_id, retryCount])
+  const { data: paymentData, loading, error, retry } = useDashboardQuery<PaymentMethod[]>(
+    fetcher,
+    [],
+    { deps: [branchId], pollIntervalMs: 60000, minIntervalMs: 30000 }
+  )
 
   return (
     <Card>
@@ -214,7 +143,7 @@ export function PaymentBreakdown() {
           <div className="flex items-center gap-2 p-3 mt-3 text-sm text-destructive bg-destructive/10 rounded-md">
             <AlertCircle className="h-4 w-4 shrink-0" />
             <span>{error}</span>
-            <Button variant="outline" size="sm" onClick={() => setRetryCount(c => c + 1)} className="ml-auto">
+            <Button variant="outline" size="sm" onClick={retry} className="ml-auto">
               <RefreshCw className="h-3 w-3 mr-1" />
               Retry
             </Button>

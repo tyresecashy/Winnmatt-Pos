@@ -3,9 +3,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Search, X, Package, Users, Truck, UserCheck, Clock, Star } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { globalSearch, type SearchResult } from '@/lib/search-actions'
+import { globalSearch, type SearchResult } from '@/lib/modules/system'
 import { formatKSh } from '@/lib/currency'
 
 // ─── Recent Searches (localStorage) ─────────────────────────────────────────
@@ -46,38 +47,37 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchResult[]>([])
-  const [recentSearches, setRecentSearches] = useState<string[]>([])
+  const [recentSearches, setRecentSearches] = useState<string[]>(() => getRecentSearches())
   const [loading, setLoading] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(0)
 
-  // Load recent searches on mount
-  useEffect(() => {
-    setRecentSearches(getRecentSearches())
-  }, [])
+  // recentSearches initialized via useState lazy initializer above
 
   // Focus input when opened
   useEffect(() => {
     if (open) {
-      setTimeout(() => inputRef.current?.focus(), 100)
-      setQuery('')
-      setResults([])
-      setSelectedIndex(0)
+      const id = setTimeout(() => {
+        inputRef.current?.focus()
+        setQuery('')
+        setResults([])
+        setSelectedIndex(0)
+      }, 100)
+      return () => clearTimeout(id)
     }
   }, [open])
 
   // Search when query changes
   useEffect(() => {
-    if (!query || query.trim().length < 2) {
-      setResults([])
-      return
-    }
-
     const debounceTimer = setTimeout(async () => {
+      if (!query || query.trim().length < 2) {
+        setResults([])
+        return
+      }
       setLoading(true)
       try {
-        const response = await globalSearch(query, { limit: 20 })
-        if (response.success && response.data) {
-          setResults(response.data)
+        const response = await globalSearch(query, { limit: 20 } as any)
+        if (Array.isArray(response)) {
+          setResults(response as any)
           setSelectedIndex(0)
         }
       } catch (error) {
@@ -89,6 +89,27 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
 
     return () => clearTimeout(debounceTimer)
   }, [query])
+
+  const handleResultClick = useCallback((result: SearchResult) => {
+    addRecentSearch(query)
+    onClose()
+
+    // Navigate based on entity type
+    switch (result.entity_type) {
+      case 'product':
+        router.push(`/inventory?highlight=${result.entity_id}`)
+        break
+      case 'customer':
+        router.push(`/customers?highlight=${result.entity_id}`)
+        break
+      case 'employee':
+        router.push(`/employees?highlight=${result.entity_id}`)
+        break
+      case 'supplier':
+        router.push(`/suppliers?highlight=${result.entity_id}`)
+        break
+    }
+  }, [query, onClose, router]) // addRecentSearch removed — it's stable, not a hook dep
 
   // Handle keyboard navigation
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -115,28 +136,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
         onClose()
         break
     }
-  }, [query, results, recentSearches, selectedIndex, onClose])
-
-  function handleResultClick(result: SearchResult) {
-    addRecentSearch(query)
-    onClose()
-
-    // Navigate based on entity type
-    switch (result.entity_type) {
-      case 'product':
-        router.push(`/inventory?highlight=${result.entity_id}`)
-        break
-      case 'customer':
-        router.push(`/customers?highlight=${result.entity_id}`)
-        break
-      case 'employee':
-        router.push(`/employees?highlight=${result.entity_id}`)
-        break
-      case 'supplier':
-        router.push(`/suppliers?highlight=${result.entity_id}`)
-        break
-    }
-  }
+  }, [query, results, recentSearches, selectedIndex, onClose, handleResultClick])
 
   function handleRecentClick(recent: string) {
     setQuery(recent)
@@ -158,7 +158,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
       case 'customer': return 'bg-green-100 text-green-800'
       case 'employee': return 'bg-purple-100 text-purple-800'
       case 'supplier': return 'bg-orange-100 text-orange-800'
-      default: return 'bg-gray-100 text-gray-800'
+      default: return 'bg-accent text-foreground'
     }
   }
 
@@ -166,7 +166,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center pt-[10vh]">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4 overflow-hidden">
+      <div className="bg-background rounded-lg shadow-xl w-full max-w-2xl mx-4 overflow-hidden">
         {/* Search Input */}
         <div className="flex items-center border-b px-4">
           <Search className="h-5 w-5 text-muted-foreground mr-3" />
@@ -181,7 +181,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
           {query && (
             <button
               onClick={() => setQuery('')}
-              className="p-1 hover:bg-gray-100 rounded"
+              className="p-1 hover:bg-accent rounded"
             >
               <X className="h-4 w-4" />
             </button>
@@ -200,7 +200,7 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
           {!loading && query.trim().length >= 2 && results.length === 0 && (
             <div className="p-8 text-center text-muted-foreground">
               <Search className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p className="font-medium">No results found for "{query}"</p>
+              <EmptyState title={`No results found for "${query}"`} compact />
               <p className="text-sm mt-1">Try different keywords</p>
             </div>
           )}
@@ -215,8 +215,8 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
                 <button
                   key={recent}
                   onClick={() => handleRecentClick(recent)}
-                  className={`w-full px-3 py-2 text-left rounded-md flex items-center gap-3 hover:bg-gray-100 ${
-                    index === selectedIndex ? 'bg-gray-100' : ''
+                  className={`w-full px-3 py-2 text-left rounded-md flex items-center gap-3 hover:bg-accent ${
+                    index === selectedIndex ? 'bg-accent' : ''
                   }`}
                 >
                   <Clock className="h-4 w-4 text-muted-foreground" />
@@ -232,8 +232,8 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
                 <button
                   key={`${result.entity_type}-${result.entity_id}`}
                   onClick={() => handleResultClick(result)}
-                  className={`w-full px-3 py-2 text-left rounded-md flex items-center gap-3 hover:bg-gray-100 ${
-                    index === selectedIndex ? 'bg-gray-100' : ''
+                  className={`w-full px-3 py-2 text-left rounded-md flex items-center gap-3 hover:bg-accent ${
+                    index === selectedIndex ? 'bg-accent' : ''
                   }`}
                 >
                   <div className={`p-2 rounded ${getEntityColor(result.entity_type)}`}>

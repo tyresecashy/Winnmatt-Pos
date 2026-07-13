@@ -1,7 +1,7 @@
 import { createServerActionClient } from '@/lib/supabase-server'
-import { getRegisters, getCashDrawers, getCashSummary } from '@/lib/cash-actions'
+import { getRegisters, getCashDrawers, getCashSummary } from '@/lib/modules/cash'
 import { RegistersClient } from './registers-client'
-import { getEmployeeStats } from '@/lib/employee-actions'
+import { getEmployeeStats } from '@/lib/modules/workforce'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,8 +32,8 @@ export default async function RegistersPage() {
 
   return (
     <RegistersClient
-      initialRegisters={registers}
-      initialDrawers={drawers}
+      initialRegisters={registers as any}
+      initialDrawers={drawers as any}
       summary={summary}
       branches={branches || []}
       cashiers={cashiers || []}

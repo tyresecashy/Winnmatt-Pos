@@ -47,25 +47,17 @@ export interface SalesTrend {
 
 export class SalesAnalyticsService {
   async getSalesMetrics(startDate: string, endDate: string): Promise<SalesMetrics> {
-    const { data: currentPeriod } = await supabaseAdmin
-      .from('sales')
-      .select('total_amount, id')
-      .gte('created_at', startDate)
-      .lte('created_at', endDate)
-      .eq('payment_status', 'completed');
-
     const start_date = new Date(startDate);
     const end_date = new Date(endDate);
     const period_length = end_date.getTime() - start_date.getTime();
     const prev_start = new Date(start_date.getTime() - period_length).toISOString();
     const prev_end = start_date.toISOString();
 
-    const { data: previousPeriod } = await supabaseAdmin
-      .from('sales')
-      .select('total_amount, id')
-      .gte('created_at', prev_start)
-      .lte('created_at', prev_end)
-      .eq('payment_status', 'completed');
+    // current and previous period are independent — run in parallel
+    const [{ data: currentPeriod }, { data: previousPeriod }] = await Promise.all([
+      supabaseAdmin.from('sales').select('total_amount, id').gte('created_at', startDate).lte('created_at', endDate).eq('payment_status', 'completed'),
+      supabaseAdmin.from('sales').select('total_amount, id').gte('created_at', prev_start).lte('created_at', prev_end).eq('payment_status', 'completed'),
+    ]);
 
     const currentRevenue = currentPeriod?.reduce((sum, sale) => sum + (sale.total_amount || 0), 0) || 0;
     const previousRevenue = previousPeriod?.reduce((sum, sale) => sum + (sale.total_amount || 0), 0) || 0;
@@ -110,9 +102,11 @@ export class SalesAnalyticsService {
 
     salesItems.forEach((item) => {
       const existing = productMap.get(item.product_id);
-      const productName = (item.products as any)?.name || 'Unknown';
-      const category = (item.products as any)?.category_id || 'Uncategorized';
-      const costPrice = (item.products as any)?.purchase_price || 0;
+      const prod = (item.products as Array<{ name: string; category_id: string; purchase_price: number }> | { name: string; category_id: string; purchase_price: number } | null)
+      const prodObj = Array.isArray(prod) ? prod[0] : prod
+      const productName = prodObj?.name || 'Unknown';
+      const category = prodObj?.category_id || 'Uncategorized';
+      const costPrice = prodObj?.purchase_price || 0;
 
       if (existing) {
         existing.totalSold += item.quantity;
@@ -159,10 +153,10 @@ export class SalesAnalyticsService {
     }
 
     sales.forEach((sale) => {
-      const hour = new Date(sale.created_at).getHours();
+      const hour = new Date((sale as any).created_at).getHours();
       const hourData = hourMap.get(hour)!;
       hourData.transactions++;
-      hourData.revenue += sale.total_amount || 0;
+      hourData.revenue += (sale as any).total_amount || 0;
     });
 
     return Array.from(hourMap.entries()).map(([hour, data]) => ({
@@ -189,7 +183,7 @@ export class SalesAnalyticsService {
     let totalRevenue = 0;
 
     salesItems.forEach((item) => {
-      const category = (item.products as any)?.category_id || 'Uncategorized';
+      const category = ((item.products as { category_id?: string })?.category_id) || 'Uncategorized';
       const existing = categoryMap.get(category) || { revenue: 0, count: 0 };
       existing.revenue += item.line_total || 0;
       existing.count++;
@@ -248,9 +242,9 @@ export class SalesAnalyticsService {
     const dateMap = new Map<string, { revenue: number; transactions: number }>();
 
     sales.forEach((sale) => {
-      const date = sale.created_at.split('T')[0];
+      const date = ((sale as any).created_at ?? '').split('T')[0];
       const existing = dateMap.get(date) || { revenue: 0, transactions: 0 };
-      existing.revenue += sale.total_amount || 0;
+      existing.revenue += (sale as any).total_amount || 0;
       existing.transactions++;
       dateMap.set(date, existing);
     });
@@ -267,7 +261,7 @@ export class SalesAnalyticsService {
     return this.getProductPerformance(startDate, endDate, limit);
   }
 
-  async getSlowMovingProducts(startDate: string, endDate: string, daysSinceLastSale: number = 30): Promise<any[]> {
+  async getSlowMovingProducts(startDate: string, endDate: string, daysSinceLastSale: number = 30): Promise<Record<string, unknown>[]> {
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - daysSinceLastSale);
 
@@ -276,7 +270,7 @@ export class SalesAnalyticsService {
       .select('id, name, category_id, last_sold_at')
       .lt('last_sold_at', cutoffDate.toISOString());
 
-    return products || [];
+    return (products || []) as any[];
   }
 }
 

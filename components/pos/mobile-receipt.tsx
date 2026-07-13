@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { Printer, Download, Share2, X } from 'lucide-react'
 import { formatKSh } from '@/lib/currency'
+import { escapeHtml } from '@/lib/export-utils'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -50,24 +51,31 @@ export function MobileReceipt({
   onShare,
 }: MobileReceiptProps) {
   const handlePrint = () => {
+    // Escape user-controlled values to prevent XSS in document.write
+    const safeBranch = escapeHtml(receipt.branch)
+    const safeOrderNumber = escapeHtml(receipt.order_number)
+    const safeCashier = escapeHtml(receipt.cashier)
+    const safeCustomerName = receipt.customer_name ? escapeHtml(receipt.customer_name) : ''
+    const safePaymentMethod = escapeHtml(receipt.payment_method.toUpperCase())
+
     // Create printable content
     const printContent = `
       <div style="font-family: monospace; font-size: 12px; max-width: 300px; margin: 0 auto;">
         <div style="text-align: center; margin-bottom: 20px;">
           <h2 style="margin: 0;">WINNMATT</h2>
-          <p style="margin: 5px 0;">${receipt.branch}</p>
+          <p style="margin: 5px 0;">${safeBranch}</p>
           <p style="margin: 5px 0;">${receipt.date} ${receipt.time}</p>
         </div>
         
-        <p style="margin: 5px 0;"><strong>Order:</strong> ${receipt.order_number}</p>
-        <p style="margin: 5px 0;"><strong>Cashier:</strong> ${receipt.cashier}</p>
-        ${receipt.customer_name ? `<p style="margin: 5px 0;"><strong>Customer:</strong> ${receipt.customer_name}</p>` : ''}
+        <p style="margin: 5px 0;"><strong>Order:</strong> ${safeOrderNumber}</p>
+        <p style="margin: 5px 0;"><strong>Cashier:</strong> ${safeCashier}</p>
+        ${safeCustomerName ? `<p style="margin: 5px 0;"><strong>Customer:</strong> ${safeCustomerName}</p>` : ''}
         
         <hr style="margin: 15px 0; border: none; border-top: 1px dashed #000;" />
         
         ${receipt.items.map(item => `
           <div style="display: flex; justify-content: space-between; margin: 5px 0;">
-            <span>${item.name}</span>
+            <span>${escapeHtml(item.name)}</span>
             <span>${formatKSh(item.total)}</span>
           </div>
           <div style="display: flex; justify-content: space-between; margin: 5px 0; font-size: 10px; color: #666;">
@@ -95,7 +103,7 @@ export function MobileReceipt({
         
         <div style="display: flex; justify-content: space-between; margin: 5px 0;">
           <span>Payment:</span>
-          <span>${receipt.payment_method.toUpperCase()}</span>
+          <span>${safePaymentMethod}</span>
         </div>
         ${receipt.amount_tendered ? `
           <div style="display: flex; justify-content: space-between; margin: 5px 0;">
@@ -129,7 +137,7 @@ export function MobileReceipt({
         <!DOCTYPE html>
         <html>
           <head>
-            <title>Receipt - ${receipt.order_number}</title>
+            <title>Receipt - ${safeOrderNumber}</title>
             <style>
               body { margin: 0; padding: 20px; }
               @media print {
@@ -245,7 +253,7 @@ Thank you for shopping with us!
                     <span>{item.name}</span>
                     <span>{formatKSh(item.total)}</span>
                   </div>
-                  <div className="flex justify-between text-xs text-gray-500">
+                  <div className="flex justify-between text-xs text-muted-foreground">
                     <span>{item.quantity} × {formatKSh(item.unit_price)}</span>
                   </div>
                 </div>
@@ -299,7 +307,7 @@ Thank you for shopping with us!
             </div>
 
             {/* Footer */}
-            <div className="text-center text-xs text-gray-500 mt-4">
+            <div className="text-center text-xs text-muted-foreground mt-4">
               <p>Thank you for shopping with us!</p>
               <p>Visit us at www.winnmatt.com</p>
             </div>

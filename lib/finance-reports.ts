@@ -8,7 +8,7 @@ import { logger } from '@/lib/logger'
 import { supabaseAdmin } from '@/lib/supabase-server'
 import { authenticateServerAction } from '@/lib/auth-helpers'
 
-interface AccountBalance {
+export interface AccountBalance {
   id: string
   code: string
   name: string
@@ -18,13 +18,13 @@ interface AccountBalance {
   balance: number
 }
 
-interface TrialBalanceRow {
+export interface TrialBalanceRow {
   accounts: AccountBalance[]
   totalDebit: number
   totalCredit: number
 }
 
-interface PLReport {
+export interface PLReport {
   revenue: AccountBalance[]
   expenses: AccountBalance[]
   totalRevenue: number
@@ -32,7 +32,7 @@ interface PLReport {
   netIncome: number
 }
 
-interface BalanceSheetReport {
+export interface BalanceSheetReport {
   assets: AccountBalance[]
   liabilities: AccountBalance[]
   equity: AccountBalance[]
@@ -55,11 +55,12 @@ export async function generateTrialBalance(
   const end = endDate || now.toISOString().split('T')[0]
 
   // Get all accounts
-  const { data: accounts } = await supabaseAdmin
+  const { data: accountsRaw } = await supabaseAdmin
     .from('accounts')
     .select('id, code, name, account_type')
     .eq('is_active', true)
     .order('code')
+  const accounts = (accountsRaw || []) as unknown as Array<{ id: string; code: string; name: string; account_type: string }>
 
   // Get all journal entry lines for the period
   const { data: lines } = await supabaseAdmin
@@ -78,7 +79,7 @@ export async function generateTrialBalance(
     accountMap.set(line.account_id, existing)
   }
 
-  const accountBalances: AccountBalance[] = (accounts || []).map(acc => {
+  const accountBalances: AccountBalance[] = accounts.map(acc => {
     const bal = accountMap.get(acc.id) || { debit: 0, credit: 0 }
     const balance = bal.debit - bal.credit
     return {
@@ -112,12 +113,13 @@ export async function generateProfitAndLoss(
   const end = endDate || now.toISOString().split('T')[0]
 
   // Get all accounts
-  const { data: accounts } = await supabaseAdmin
+  const { data: accountsRaw } = await supabaseAdmin
     .from('accounts')
     .select('id, code, name, account_type')
     .eq('is_active', true)
-    .in('account_type', ['revenue', 'income', 'expense'])
+    .in('account_type', ['revenue', 'expense'])
     .order('code')
+  const accounts = (accountsRaw || []) as unknown as Array<{ id: string; code: string; name: string; account_type: string }>
 
   // Get journal entry lines
   const { data: lines } = await supabaseAdmin
@@ -138,7 +140,7 @@ export async function generateProfitAndLoss(
   const revenue: AccountBalance[] = []
   const expenses: AccountBalance[] = []
 
-  for (const acc of accounts || []) {
+  for (const acc of accounts) {
     const bal = accountMap.get(acc.id) || { debit: 0, credit: 0 }
     const entry: AccountBalance = {
       id: acc.id,
@@ -150,7 +152,7 @@ export async function generateProfitAndLoss(
       balance: bal.debit - bal.credit,
     }
 
-    if (acc.account_type === 'revenue' || acc.account_type === 'income') {
+    if (acc.account_type === 'revenue') {
       // Revenue: credit balance is positive (income)
       entry.balance = bal.credit - bal.debit
       if (entry.debit > 0 || entry.credit > 0) revenue.push(entry)
@@ -185,12 +187,13 @@ export async function generateBalanceSheet(
   const end = asOfDate || now.toISOString().split('T')[0]
 
   // Get all accounts
-  const { data: accounts } = await supabaseAdmin
+  const { data: accountsRaw } = await supabaseAdmin
     .from('accounts')
     .select('id, code, name, account_type')
     .eq('is_active', true)
     .in('account_type', ['asset', 'liability', 'equity'])
     .order('code')
+  const accounts = (accountsRaw || []) as unknown as Array<{ id: string; code: string; name: string; account_type: string }>
 
   // Get all journal entry lines up to the date
   const { data: lines } = await supabaseAdmin
@@ -211,7 +214,7 @@ export async function generateBalanceSheet(
   const liabilities: AccountBalance[] = []
   const equity: AccountBalance[] = []
 
-  for (const acc of accounts || []) {
+  for (const acc of accounts) {
     const bal = accountMap.get(acc.id) || { debit: 0, credit: 0 }
     const entry: AccountBalance = {
       id: acc.id,

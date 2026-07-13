@@ -5,6 +5,7 @@ import { useMemo, useState } from "react"
 import Link from "next/link"
 import { useAuth } from "@/contexts/auth-context"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { EmptyState } from '@/components/ui/empty-state'
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import {
@@ -128,7 +129,7 @@ export default function AdminConsolePage() {
       {filteredCategories.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
           <Search className="h-12 w-12 mb-3 opacity-20" />
-          <p className="text-sm">No settings match your search</p>
+          <EmptyState title="No settings match your search" compact />
           <Button variant="link" className="mt-1" onClick={() => setSearchQuery("")}>
             Clear search
           </Button>

@@ -1,5 +1,7 @@
 'use server'
 
+import { logger } from '@/lib/logger'
+
 import { createClient } from '@supabase/supabase-js'
 import { authenticateServerAction } from './auth-helpers'
 import { emitEvent } from '@/lib/automation/events'
@@ -96,7 +98,10 @@ export async function getAccounts(branchId?: string) {
   }
 
   const { data, error } = await query
-  if (error) throw new Error(error.message)
+  if (error) {
+      if (error) logger.error('Operation failed', { error: error })
+      throw new Error('Operation failed')
+    }
   return data as Account[]
 }
 
@@ -146,7 +151,10 @@ export async function createAccount(data: {
     .select()
     .single()
 
-  if (error) throw new Error(error.message)
+  if (error) {
+      if (error) logger.error('Operation failed', { error: error })
+      throw new Error('Operation failed')
+    }
   return { success: true, data: account }
 }
 
@@ -163,7 +171,10 @@ export async function updateAccount(id: string, data: {
     .update({ ...data, updated_at: new Date().toISOString() })
     .eq('id', id)
 
-  if (error) throw new Error(error.message)
+  if (error) {
+      if (error) logger.error('Operation failed', { error: error })
+      throw new Error('Operation failed')
+    }
   return { success: true }
 }
 
@@ -196,7 +207,10 @@ export async function deleteAccount(id: string) {
     .update({ is_active: false })
     .eq('id', id)
 
-  if (error) throw new Error(error.message)
+  if (error) {
+      if (error) logger.error('Operation failed', { error: error })
+      throw new Error('Operation failed')
+    }
   return { success: true }
 }
 
@@ -237,7 +251,10 @@ export async function getJournalEntries(params?: {
   query = query.range(offset, offset + limit - 1)
 
   const { data, error } = await query
-  if (error) throw new Error(error.message)
+  if (error) {
+      if (error) logger.error('Operation failed', { error: error })
+      throw new Error('Operation failed')
+    }
   return data as JournalEntry[]
 }
 
@@ -250,7 +267,10 @@ export async function getJournalEntry(id: string) {
     .eq('id', id)
     .single()
 
-  if (error) throw new Error(error.message)
+  if (error) {
+      if (error) logger.error('Operation failed', { error: error })
+      throw new Error('Operation failed')
+    }
   return data as JournalEntry
 }
 
@@ -309,7 +329,10 @@ export async function createJournalEntry(data: {
     .select()
     .single()
 
-  if (entryError) throw new Error(entryError.message)
+  if (entryError) {
+      if (entryError) logger.error('Operation failed', { error: entryError })
+      throw new Error('Operation failed')
+    }
 
   // Create lines
   const lines = data.lines.map((line, i) => ({
@@ -325,7 +348,10 @@ export async function createJournalEntry(data: {
     .from('journal_entry_lines')
     .insert(lines)
 
-  if (linesError) throw new Error(linesError.message)
+  if (linesError) {
+      if (linesError) logger.error('Operation failed', { error: linesError })
+      throw new Error('Operation failed')
+    }
 
   return { success: true, data: entry }
 }
@@ -352,7 +378,10 @@ export async function voidJournalEntry(id: string, reason: string) {
     })
     .eq('id', id)
 
-  if (error) throw new Error(error.message)
+  if (error) {
+      if (error) logger.error('Operation failed', { error: error })
+      throw new Error('Operation failed')
+    }
   return { success: true }
 }
 
@@ -374,7 +403,10 @@ export async function getAccountBalances(branchId?: string) {
     `)
 
   const { data: lines, error } = await query
-  if (error) throw new Error(error.message)
+  if (error) {
+      if (error) logger.error('Operation failed', { error: error })
+      throw new Error('Operation failed')
+    }
 
   // If branch filtering needed, also get branch-specific entries
   let filteredLines = lines
@@ -389,11 +421,11 @@ export async function getAccountBalances(branchId?: string) {
     filteredLines = lines?.filter(l => entryIds.includes(l.journal_entry_id)) || []
   }
 
-  // Calculate balances
-  const balanceMap = new Map<string, { debit: number; credit: number; account: any }>()
+  interface AccountInfo { account_number: string; name: string; account_type: string; normal_balance: string | null }
+  const balanceMap = new Map<string, { debit: number; credit: number; account: AccountInfo }>()
 
   for (const line of filteredLines || []) {
-    const acc = line.account as any
+    const acc = line.account as unknown as AccountInfo
     if (!acc) continue
 
     const existing = balanceMap.get(line.account_id) || { debit: 0, credit: 0, account: acc }
@@ -433,7 +465,10 @@ export async function getFinancialPeriods() {
     .select('*')
     .order('start_date', { ascending: false })
 
-  if (error) throw new Error(error.message)
+  if (error) {
+      if (error) logger.error('Operation failed', { error: error })
+      throw new Error('Operation failed')
+    }
   return data as FinancialPeriod[]
 }
 
@@ -458,7 +493,10 @@ export async function createFinancialPeriod(data: {
     .select()
     .single()
 
-  if (error) throw new Error(error.message)
+  if (error) {
+      if (error) logger.error('Operation failed', { error: error })
+      throw new Error('Operation failed')
+    }
   return { success: true, data: period }
 }
 
@@ -507,12 +545,30 @@ export async function closeFinancialPeriod(id: string) {
   }
 
   // 4. Create closing journal entries (zero out income/expense accounts)
+  // Look up Retained Earnings account dynamically
+  const { data: retainedEarnings } = await supabaseAdmin
+    .from('accounts')
+    .select('id')
+    .eq('account_subtype', 'retained_earnings')
+    .maybeSingle()
+
+  if (!retainedEarnings) {
+    throw new Error('Retained Earnings account not found. Ensure a system account with account_subtype = retained_earnings exists.')
+  }
+  const retainedEarningsId = retainedEarnings.id
+
   // Get all income and expense account balances for the period
+  // (journal_entry_lines has no entry_date — join through journal_entries)
   const { data: lines } = await supabaseAdmin
     .from('journal_entry_lines')
-    .select('account_id, debit, credit')
-    .gte('entry_date', period.start_date)
-    .lte('entry_date', period.end_date)
+    .select(`
+      account_id,
+      debit,
+      credit,
+      journal_entry:journal_entries!inner(entry_date)
+    `)
+    .gte('journal_entry.entry_date', period.start_date)
+    .lte('journal_entry.entry_date', period.end_date)
 
   if (lines && lines.length > 0) {
     // Aggregate by account
@@ -553,7 +609,7 @@ export async function closeFinancialPeriod(id: string) {
           })
           // Credit/Debit Retained Earnings
           closingLines.push({
-            account_id: '00000000-0000-0000-0000-000000000010', // Retained Earnings
+            account_id: retainedEarningsId,
             debit: netBalance < 0 ? amount : 0,
             credit: netBalance > 0 ? amount : 0,
             description: `Closing: ${account.name}`,
@@ -574,7 +630,7 @@ export async function closeFinancialPeriod(id: string) {
             description: `Closing: ${account.name}`,
           })
           closingLines.push({
-            account_id: '00000000-0000-0000-0000-000000000010', // Retained Earnings
+            account_id: retainedEarningsId,
             debit: netBalance > 0 ? amount : 0,
             credit: netBalance < 0 ? amount : 0,
             description: `Closing: ${account.name}`,
@@ -598,16 +654,20 @@ export async function closeFinancialPeriod(id: string) {
           status: 'posted',
           reference_type: 'period_close',
           reference_id: id,
+          period_id: period.period_id || id,
           created_by: profile.id,
         })
         .select('id')
         .single()
 
-      if (closingErr) throw new Error(`Failed to create closing entry: ${closingErr.message}`)
+      if (closingErr) {
+      if (closingErr) logger.error('Operation failed', { error: closingErr })
+      throw new Error('Operation failed')
+    }
 
       // Insert closing lines
       const linesToInsert = closingLines.map(line => ({
-        entry_id: closingEntry.id,
+        journal_entry_id: closingEntry.id,
         account_id: line.account_id,
         debit: line.debit,
         credit: line.credit,
@@ -628,16 +688,25 @@ export async function closeFinancialPeriod(id: string) {
     })
     .eq('id', id)
 
-  if (closeErr) throw new Error(closeErr.message)
+  if (closeErr) {
+      if (closeErr) logger.error('Operation failed', { error: closeErr })
+      throw new Error('Operation failed')
+    }
 
   // Emit period.closed event
-  await emitEvent('period.closed', {
-    period_id: id,
-    name: period.name,
-    start_date: period.start_date,
-    end_date: period.end_date,
-    entries_created: entries?.length || 0,
-  }, { source: 'finance', entity_type: 'financial_period', entity_id: id })
+  await emitEvent({
+    eventType: 'period.closed',
+    source: 'finance',
+    entityType: 'financial_period',
+    entityId: id,
+    payload: {
+      period_id: id,
+      name: period.name,
+      start_date: period.start_date,
+      end_date: period.end_date,
+      entries_created: entries?.length || 0,
+    },
+  })
 
   return { success: true, message: `Period "${period.name}" closed successfully${entries?.length ? ` (${entries.length} entries)` : ''}` }
 }
@@ -755,7 +824,10 @@ export async function getBankAccounts(branchId?: string) {
   }
 
   const { data, error } = await query
-  if (error) throw new Error(error.message)
+  if (error) {
+      if (error) logger.error('Operation failed', { error: error })
+      throw new Error('Operation failed')
+    }
   return data as BankAccount[]
 }
 
@@ -787,7 +859,10 @@ export async function createBankAccount(data: {
     .select()
     .single()
 
-  if (error) throw new Error(error.message)
+  if (error) {
+      if (error) logger.error('Operation failed', { error: error })
+      throw new Error('Operation failed')
+    }
   return { success: true, data: bankAccount }
 }
 
@@ -804,7 +879,10 @@ export async function updateBankAccount(id: string, data: {
     .update({ ...data, updated_at: new Date().toISOString() })
     .eq('id', id)
 
-  if (error) throw new Error(error.message)
+  if (error) {
+      if (error) logger.error('Operation failed', { error: error })
+      throw new Error('Operation failed')
+    }
   return { success: true }
 }
 
@@ -826,7 +904,10 @@ export async function deleteBankAccount(id: string) {
     .update({ is_active: false })
     .eq('id', id)
 
-  if (error) throw new Error(error.message)
+  if (error) {
+      if (error) logger.error('Operation failed', { error: error })
+      throw new Error('Operation failed')
+    }
   return { success: true }
 }
 
@@ -860,7 +941,10 @@ export async function getBankTransactions(bankAccountId: string, params?: {
   query = query.range(offset, offset + limit - 1)
 
   const { data, error } = await query
-  if (error) throw new Error(error.message)
+  if (error) {
+      if (error) logger.error('Operation failed', { error: error })
+      throw new Error('Operation failed')
+    }
   return data as BankTransaction[]
 }
 
@@ -910,7 +994,10 @@ export async function createBankTransaction(data: {
     .select()
     .single()
 
-  if (error) throw new Error(error.message)
+  if (error) {
+      if (error) logger.error('Operation failed', { error: error })
+      throw new Error('Operation failed')
+    }
 
   // Update bank account balance with optimistic lock
   const { data: updatedRow, error: updateError } = await supabaseAdmin
@@ -920,7 +1007,10 @@ export async function createBankTransaction(data: {
     .eq('current_balance', currentBalance)
     .select('id')
 
-  if (updateError) throw new Error(updateError.message)
+  if (updateError) {
+    logger.error('Operation failed', { error: updateError })
+    throw new Error('Operation failed')
+  }
   if (!updatedRow || updatedRow.length === 0) {
     throw new Error('Concurrent modification detected — please retry')
   }
@@ -939,7 +1029,10 @@ export async function reconcileBankTransaction(id: string) {
     })
     .eq('id', id)
 
-  if (error) throw new Error(error.message)
+  if (error) {
+      if (error) logger.error('Operation failed', { error: error })
+      throw new Error('Operation failed')
+    }
   return { success: true }
 }
 
@@ -995,7 +1088,10 @@ export async function getReconciliations(bankAccountId: string) {
     .eq('bank_account_id', bankAccountId)
     .order('reconciliation_date', { ascending: false })
 
-  if (error) throw new Error(error.message)
+  if (error) {
+      if (error) logger.error('Operation failed', { error: error })
+      throw new Error('Operation failed')
+    }
   return data || []
 }
 
@@ -1007,28 +1103,43 @@ export async function getUnreconciledTransactions(bankAccountId: string) {
     .from('bank_transactions')
     .select('*')
     .eq('bank_account_id', bankAccountId)
-    .eq('reconciled', false)
+    .eq('is_reconciled', false)
     .order('transaction_date', { ascending: false })
 
-  if (error) throw new Error(error.message)
+  if (error) {
+      if (error) logger.error('Operation failed', { error: error })
+      throw new Error('Operation failed')
+    }
   return transactions || []
 }
 
 export async function getUnmatchedJournalEntries(bankAccountId: string) {
   await authenticateServerAction()
 
-  // Get journal entry lines that reference this bank account but aren't reconciled
+  // Resolve the bank account's linked chart-of-accounts ID first
+  const { data: bankAcct } = await supabaseAdmin
+    .from('bank_accounts')
+    .select('account_id')
+    .eq('id', bankAccountId)
+    .single()
+
+  if (!bankAcct?.account_id) return []
+
+  // Get journal entry lines that reference this bank's chart account but aren't reconciled
   const { data: entries, error } = await supabaseAdmin
     .from('journal_entry_lines')
     .select(`
       *,
       journal_entry:journal_entries(id, entry_date, description, reference_type, reference_id)
     `)
-    .eq('account_id', bankAccountId)
+    .eq('account_id', bankAcct.account_id)
     .order('entry_date', { ascending: false })
     .limit(100)
 
-  if (error) throw new Error(error.message)
+  if (error) {
+      if (error) logger.error('Operation failed', { error: error })
+      throw new Error('Operation failed')
+    }
   return entries || []
 }
 
@@ -1062,7 +1173,10 @@ export async function createReconciliation(data: {
     .select('id')
     .single()
 
-  if (reconErr) throw new Error(reconErr.message)
+  if (reconErr) {
+      if (reconErr) logger.error('Operation failed', { error: reconErr })
+      throw new Error('Operation failed')
+    }
 
   // Insert matched items
   if (data.matched_transactions.length > 0) {
@@ -1070,7 +1184,6 @@ export async function createReconciliation(data: {
       reconciliation_id: recon.id,
       bank_transaction_id: m.bank_transaction_id,
       journal_entry_id: m.journal_entry_id,
-      match_type: 'manual' as const,
     }))
 
     await supabaseAdmin.from('bank_reconciliation_items').insert(items)
@@ -1080,7 +1193,7 @@ export async function createReconciliation(data: {
     if (txIds.length > 0) {
       await supabaseAdmin
         .from('bank_transactions')
-        .update({ reconciled: true })
+        .update({ is_reconciled: true })
         .in('id', txIds)
     }
   }
@@ -1102,6 +1215,9 @@ export async function completeReconciliation(reconciliationId: string) {
     })
     .eq('id', reconciliationId)
 
-  if (error) throw new Error(error.message)
+  if (error) {
+      if (error) logger.error('Operation failed', { error: error })
+      throw new Error('Operation failed')
+    }
   return { success: true }
 }

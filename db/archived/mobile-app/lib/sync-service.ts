@@ -1,3 +1,4 @@
+// @ts-nocheck — archived mobile app, not part of active build
 /* eslint-disable no-console */
 import { offlineStorage, PendingSyncItem } from './offline-storage';
 import NetInfo from '@react-native-community/netinfo';

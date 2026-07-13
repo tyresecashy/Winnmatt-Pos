@@ -32,7 +32,7 @@ export interface PerformanceTest {
   status: 'pending' | 'running' | 'completed' | 'failed';
   started_at?: string;
   completed_at?: string;
-  results?: any;
+  results?: Record<string, unknown>[];
 }
 
 export interface PerformanceReport {

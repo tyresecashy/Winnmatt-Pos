@@ -20,7 +20,7 @@ export type { InventoryMetrics, StockTurnover, ShrinkageReport, ReorderPredictio
 export type { CustomerMetrics, RFMSegment, CustomerLifetimeValue, PurchasePattern, ChurnRisk } from './customer-analytics';
 export type { WorkforceMetrics, TaskEfficiency, AttendancePattern, LaborCostAnalysis, TaskDurationAnalysis } from './workforce-analytics';
 export type { FinancialMetrics, PLTrend, CashFlowForecast, ExpenseBreakdown, MarginAnalysis } from './financial-analytics';
-export type { ReportWidget, ReportTemplate, ScheduledReport, DataSource } from './report-builder';
+export type { ReportWidget, ReportTemplate, ScheduledReport, DataSource, ReportResult } from './report-builder';
 
 export class AnalyticsService {
   async getDashboardMetrics(startDate: string, endDate: string) {
@@ -98,12 +98,12 @@ export class AnalyticsService {
     return metrics.activeWorkers;
   }
 
-  async generateCustomReport(config: any) {
+  async generateCustomReport(config: { templateId: string; parameters: Record<string, unknown> }) {
     return reportBuilderService.generateReport(config.templateId, config.parameters);
   }
 
-  async exportReport(reportData: any, format: 'pdf' | 'excel' | 'csv') {
-    return reportBuilderService.exportReport(reportData, format);
+  async exportReport(reportData: unknown, format: 'pdf' | 'excel' | 'csv') {
+    return reportBuilderService.exportReport(reportData as Parameters<typeof reportBuilderService.exportReport>[0], format);
   }
 }
 

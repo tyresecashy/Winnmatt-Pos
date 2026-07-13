@@ -1,7 +1,7 @@
 'use client'
 import { logger } from '@/lib/logger';
 
-import { useDeferredValue, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -23,6 +23,11 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -30,10 +35,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Search, Receipt, Calendar, Download, Eye, AlertCircle, RotateCcw, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Calendar } from '@/components/ui/calendar'
+import { Search, Receipt, Download, Eye, AlertCircle, RotateCcw, ChevronLeft, ChevronRight, CalendarIcon, X } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 import { formatKSh } from '@/lib/currency'
 import { formatTime, formatDate } from '@/lib/date-time'
-import { serverVoidSale, serverGetSaleAuditTrail } from '@/lib/void-sale-actions'
+import { serverVoidSale, serverGetSaleAuditTrail } from '@/lib/modules/sales'
+import { searchSales } from '@/lib/modules/sales'
+import { cn } from '@/lib/utils'
 
 interface Sale {
   id: string
@@ -104,9 +113,9 @@ const saleStatusColors: Record<string, string> = {
 
 export function SalesHistoryClient({
   initialSales,
-  totalSales,
-  totalTransactions,
-  averageTransaction,
+  totalSales: _totalSales,
+  totalTransactions: _totalTransactions,
+  averageTransaction: _averageTransaction,
   branches,
   paymentMethods,
   currentUserId,
@@ -114,10 +123,27 @@ export function SalesHistoryClient({
   userRole,
 }: SalesHistoryClientProps) {
   const { toast } = useToast()
+
+  // Search & filter state
   const [searchTerm, setSearchTerm] = useState('')
-  const [branchFilter, setBranchFilter] = useState<string>('all')
   const [paymentFilter, setPaymentFilter] = useState<string>('all')
+  const [dateFrom, setDateFrom] = useState<string | undefined>()
+  const [dateTo, setDateTo] = useState<string | undefined>()
+  const [branchId, setBranchId] = useState(currentBranchId)
+
+  // Server-side data
   const [sales, setSales] = useState(initialSales)
+  const [totalServer, setTotalServer] = useState(initialSales.length)
+  const [loading, setLoading] = useState(false)
+
+  // Pagination
+  const [pageSize, setPageSize] = useState(15)
+  const [currentPage, setCurrentPage] = useState(1)
+
+  // Debounce search timer
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+
+  // Selected sale for detail dialog
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null)
   const [showDetails, setShowDetails] = useState(false)
   const [showVoidDialog, setShowVoidDialog] = useState(false)
@@ -125,57 +151,81 @@ export function SalesHistoryClient({
   const [isVoiding, setIsVoiding] = useState(false)
   const [auditTrail, setAuditTrail] = useState<any[]>([])
   const [showAuditTrail, setShowAuditTrail] = useState(false)
-  const deferredSearchTerm = useDeferredValue(searchTerm)
-
-  // Pagination
-  const [pageSize, setPageSize] = useState(15)
-  const [currentPage, setCurrentPage] = useState(1)
-
-  // Reset to page 1 when filters change
-  useEffect(() => {
-    const timer = setTimeout(() => setCurrentPage(1))
-    return () => clearTimeout(timer)
-  }, [branchFilter, deferredSearchTerm, paymentFilter])
 
   const getNormalizedSaleStatus = (sale: Sale) =>
     sale.sale_status || (sale.payment_status === 'failed' ? 'voided' : 'completed')
 
+  // Server-side fetch
+  const doSearch = useCallback(async (opts: {
+    query: string
+    payment: string
+    from: string | undefined
+    to: string | undefined
+    page: number
+    size: number
+  }) => {
+    setLoading(true)
+    try {
+      const result = await searchSales(opts.query, {
+        paymentMethod: opts.payment === 'all' ? '' : opts.payment,
+        startDate: opts.from,
+        endDate: opts.to,
+        page: opts.page,
+        pageSize: opts.size,
+      })
+      setSales(result.data.map(s => ({
+        id: s.id,
+        receipt_number: s.receipt_number,
+        customer_name: s.customer?.name || 'Walk-in',
+        customer_phone: s.customer?.phone || '',
+        branch_name: s.branch?.name || 'Unknown',
+        branch_code: s.branch?.code || '',
+        branch_id: s.branch?.id || '',
+        payment_method: s.payment_method,
+        total_amount: s.total_amount,
+        cashier_name: s.cashier?.full_name || 'Unknown',
+        created_at: s.created_at,
+        subtitle: s.subtotal,
+        tax_amount: s.tax_amount,
+        discount_amount: s.discount_amount,
+        payment_status: s.payment_status,
+        sale_status: s.sale_status || (s.payment_status === 'failed' ? 'voided' : 'completed'),
+        void_reason: s.void_reason,
+        voided_by: s.voided_by,
+        voided_at: s.voided_at,
+        notes: s.notes,
+      })))
+      setTotalServer(result.total)
+    } catch (e) {
+      logger.error('Search failed', e)
+    } finally {
+      setLoading(false)
+    }
+  }, [branchId])
+
+  // Debounced search trigger
   useEffect(() => {
-    const timer = setTimeout(() => setSales(initialSales))
-    return () => clearTimeout(timer)
-  }, [initialSales])
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => doSearch({
+      query: searchTerm,
+      payment: paymentFilter,
+      from: dateFrom,
+      to: dateTo,
+      page: currentPage,
+      size: pageSize,
+    }), 300)
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
+  }, [searchTerm, paymentFilter, dateFrom, dateTo, currentPage, pageSize, doSearch])
 
-  // Filter sales on client
-  const filteredSales = useMemo(() => {
-    const normalizedSearch = deferredSearchTerm.trim().toLowerCase()
+  // Stats computed server-side from total
+  const totalPages = Math.max(1, Math.ceil(totalServer / pageSize))
 
-    return sales.filter((sale) => {
-      const matchesSearch =
-        !normalizedSearch ||
-        sale.receipt_number.toLowerCase().includes(normalizedSearch) ||
-        sale.customer_name.toLowerCase().includes(normalizedSearch) ||
-        sale.customer_phone.includes(deferredSearchTerm)
-
-      const matchesBranch = branchFilter === 'all' || sale.branch_name === branchFilter
-
-      const matchesPayment =
-        paymentFilter === 'all' || sale.payment_method === paymentFilter
-
-      return matchesSearch && matchesBranch && matchesPayment
-    })
-  }, [branchFilter, deferredSearchTerm, paymentFilter, sales])
-
-  // Calculate stats for filtered results
-  const filteredTotal = filteredSales.reduce((sum, s) => sum + s.total_amount, 0)
-  const filteredCount = filteredSales.length
+  const filteredTotal = useMemo(() =>
+    sales.reduce((sum, s) => sum + s.total_amount, 0),
+    [sales]
+  )
+  const filteredCount = sales.length
   const filteredAverage = filteredCount > 0 ? Math.round(filteredTotal / filteredCount) : 0
-
-  // Paginate filtered results
-  const totalPages = Math.max(1, Math.ceil(filteredSales.length / pageSize))
-  const paginatedSales = useMemo(() => {
-    const startIdx = (currentPage - 1) * pageSize
-    return filteredSales.slice(startIdx, startIdx + pageSize)
-  }, [filteredSales, currentPage, pageSize])
 
   const handleViewDetails = (sale: Sale) => {
     setSelectedSale(sale)
@@ -286,7 +336,7 @@ export function SalesHistoryClient({
       'Status',
     ]
 
-    const rows = filteredSales.map((sale) => [
+    const rows = sales.map((sale) => [
       sale.receipt_number,
       formatDate(sale.created_at),
       formatTime(sale.created_at),
@@ -359,26 +409,55 @@ export function SalesHistoryClient({
             <div className="relative flex-1 max-w-sm">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Search by receipt, customer, or phone..."
+                placeholder="Search by receipt number..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1) }}
                 className="pl-9"
               />
             </div>
-            <Select value={branchFilter} onValueChange={setBranchFilter}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Branch" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Branches</SelectItem>
-                {branches.map((branch) => (
-                  <SelectItem key={branch.id} value={branch.name}>
-                    {branch.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={paymentFilter} onValueChange={setPaymentFilter}>
+
+            {/* Date From */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className={cn("w-[160px] justify-start text-left font-normal", !dateFrom && "text-muted-foreground")}>
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {dateFrom ? formatDate(dateFrom) : 'From date'}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={dateFrom ? new Date(dateFrom) : undefined}
+                  onSelect={(d) => { setDateFrom(d?.toISOString()); setCurrentPage(1) }}
+                />
+              </PopoverContent>
+            </Popover>
+
+            {/* Date To */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className={cn("w-[160px] justify-start text-left font-normal", !dateTo && "text-muted-foreground")}>
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {dateTo ? formatDate(dateTo) : 'To date'}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={dateTo ? new Date(dateTo) : undefined}
+                  onSelect={(d) => { setDateTo(d?.toISOString()); setCurrentPage(1) }}
+                />
+              </PopoverContent>
+            </Popover>
+
+            {/* Clear date filter */}
+            {(dateFrom || dateTo) && (
+              <Button variant="ghost" size="icon" onClick={() => { setDateFrom(undefined); setDateTo(undefined); setCurrentPage(1) }}>
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+
+            <Select value={paymentFilter} onValueChange={(v) => { setPaymentFilter(v); setCurrentPage(1) }}>
               <SelectTrigger className="w-[150px]">
                 <SelectValue placeholder="Payment" />
               </SelectTrigger>
@@ -394,23 +473,13 @@ export function SalesHistoryClient({
           </div>
         </CardHeader>
         <CardContent>
-          {filteredSales.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
-                {sales.length === 0
-                  ? <Receipt className="h-6 w-6 text-muted-foreground" />
-                  : <Search className="h-6 w-6 text-muted-foreground" />
-                }
-              </div>
-              <p className="text-lg font-medium">
-                {sales.length === 0 ? 'No sales yet' : 'No sales match your filters'}
-              </p>
-              <p className="text-sm text-muted-foreground mt-1">
-                {sales.length === 0
-                  ? 'Sales will appear here once you start processing transactions.'
-                  : 'Try different dates or search terms.'}
-              </p>
-            </div>
+          {totalServer === 0 && !loading ? (
+            <EmptyState
+              icon={Search}
+              title="No sales match your filters"
+              description="Try different dates or search terms."
+              compact
+            />
           ) : (
             <Table>
               <TableHeader>
@@ -427,14 +496,14 @@ export function SalesHistoryClient({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {paginatedSales.length === 0 && filteredSales.length > 0 ? (
+                {sales.length === 0 && totalServer > 0 ? (
                   <TableRow>
                     <TableCell colSpan={9} className="text-center py-4 text-muted-foreground">
                       No sales on this page
                     </TableCell>
                   </TableRow>
                 ) : (
-                  paginatedSales.map((sale) => (
+                  sales.map((sale) => (
                   <TableRow key={sale.id}>
                     <TableCell>
                       <div className="flex items-center gap-2">
@@ -499,7 +568,7 @@ export function SalesHistoryClient({
               </TableBody>
             </Table>
           )}
-          {filteredSales.length > 0 && (
+          {totalServer > 0 && (
             <div className="flex items-center justify-between px-2 pt-4">
               <div className="flex items-center gap-2">
                 <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); setCurrentPage(1) }}>
@@ -513,8 +582,10 @@ export function SalesHistoryClient({
                   </SelectContent>
                 </Select>
                 <p className="text-sm text-muted-foreground">
-                  Showing {Math.min((currentPage - 1) * pageSize + 1, filteredSales.length)}–
-                  {Math.min(currentPage * pageSize, filteredSales.length)} of {filteredSales.length} sales
+                  {loading ? 'Searching...' : (
+                    <>Showing {Math.min((currentPage - 1) * pageSize + 1, totalServer)}–
+                    {Math.min(currentPage * pageSize, totalServer)} of {totalServer} sales</>
+                  )}
                 </p>
               </div>
               <div className="flex items-center gap-1">
@@ -523,7 +594,7 @@ export function SalesHistoryClient({
                   size="icon"
                   className="h-8 w-8"
                   onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
+                  disabled={currentPage === 1 || loading}
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
@@ -535,7 +606,7 @@ export function SalesHistoryClient({
                   size="icon"
                   className="h-8 w-8"
                   onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
+                  disabled={currentPage === totalPages || loading}
                 >
                   <ChevronRight className="h-4 w-4" />
                 </Button>

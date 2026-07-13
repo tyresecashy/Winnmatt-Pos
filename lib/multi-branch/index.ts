@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger'
 import { branchService } from './branch-service';
 
 export { branchService };
@@ -52,10 +53,10 @@ export class MultiBranchManager {
   async syncInventoryAcrossBranches(): Promise<void> {
     // Sync inventory levels across branches
     // This would be called periodically or on demand
-    console.log('Syncing inventory across branches...');
+    logger.info('[MultiBranch] Syncing inventory across branches...');
   }
 
-  async generateBranchReport(branchId: string, startDate: string, endDate: string): Promise<any> {
+  async generateBranchReport(branchId: string, startDate: string, endDate: string): Promise<Record<string, unknown>> {
     const metrics = await branchService.getBranchMetrics(startDate, endDate);
     const branchMetrics = metrics.find(m => m.branchId === branchId);
     

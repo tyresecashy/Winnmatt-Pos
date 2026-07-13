@@ -1,7 +1,10 @@
 'use server'
 
+import { authenticateServerAction } from '@/lib/auth-helpers'
 import { supabaseAdmin } from '@/lib/supabase-server'
 import { logger } from '@/lib/logger'
+import { getTaxForCategory } from '@/lib/tax-actions'
+import { calculateTax } from '@/lib/tax-utils'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -93,6 +96,9 @@ export interface ShoppingCart {
  */
 export async function getStores(): Promise<EcommerceStore[]> {
   try {
+    const auth = await authenticateServerAction()
+    if (!auth.success || !auth.profile) return []
+
     const { data, error } = await supabaseAdmin
       .from('ecommerce_stores')
       .select('*')
@@ -111,6 +117,9 @@ export async function getStores(): Promise<EcommerceStore[]> {
  */
 export async function getStoreBySlug(slug: string): Promise<EcommerceStore | null> {
   try {
+    const auth = await authenticateServerAction()
+    if (!auth.success || !auth.profile) return null
+
     const { data, error } = await supabaseAdmin
       .from('ecommerce_stores')
       .select('*')
@@ -134,6 +143,11 @@ export async function createStore(
   description?: string
 ): Promise<{ success: boolean; data?: EcommerceStore; error?: string }> {
   try {
+    const auth = await authenticateServerAction()
+    if (!auth.success || !auth.profile) {
+      return { success: false, error: 'Unauthorized' }
+    }
+
     const { data, error } = await supabaseAdmin
       .from('ecommerce_stores')
       .insert({ name, slug, description })
@@ -144,7 +158,7 @@ export async function createStore(
     return { success: true, data: data as EcommerceStore }
   } catch (error) {
     logger.error('[Ecommerce] Failed to create store:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -161,6 +175,9 @@ export async function getOrders(
   } = {}
 ): Promise<{ orders: EcommerceOrder[]; total: number }> {
   try {
+    const auth = await authenticateServerAction()
+    if (!auth.success || !auth.profile) return { orders: [], total: 0 }
+
     const { storeId, status, paymentStatus, limit = 50, offset = 0 } = filters
 
     let query = supabaseAdmin
@@ -188,6 +205,9 @@ export async function getOrders(
  */
 export async function getOrder(orderId: string): Promise<EcommerceOrder | null> {
   try {
+    const auth = await authenticateServerAction()
+    if (!auth.success || !auth.profile) return null
+
     const { data, error } = await supabaseAdmin
       .from('ecommerce_orders')
       .select(`
@@ -201,7 +221,7 @@ export async function getOrder(orderId: string): Promise<EcommerceOrder | null> 
       .single()
 
     if (error) return null
-    return data as EcommerceOrder
+    return data as unknown as EcommerceOrder
   } catch (error) {
     logger.error('[Ecommerce] Failed to get order:', error)
     return null
@@ -213,25 +233,89 @@ export async function getOrder(orderId: string): Promise<EcommerceOrder | null> 
  */
 export async function createOrder(
   storeId: string,
-  items: { productId: string; quantity: number; unitPrice: number }[],
+  items: { productId: string; quantity: number }[],
   options: {
     customerId?: string
     shippingAddress?: Record<string, unknown>
     billingAddress?: Record<string, unknown>
     notes?: string
     paymentMethod?: string
+    shippingMethodId?: string
   } = {}
 ): Promise<{ success: boolean; data?: EcommerceOrder; error?: string }> {
   try {
-    // Calculate totals
-    const subtotal = items.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0)
-    const taxAmount = 0 // Calculate based on tax rules
-    const shippingAmount = 0 // Calculate based on shipping method
-    const totalAmount = subtotal + taxAmount + shippingAmount - 0 // discount
+    const auth = await authenticateServerAction()
+    if (!auth.success || !auth.profile) {
+      return { success: false, error: 'Unauthorized' }
+    }
+
+    // Look up real prices and categories from DB — never trust client-supplied unitPrice
+    const productIds = items.map(i => i.productId)
+    const { data: products } = await supabaseAdmin
+      .from('products')
+      .select('id, selling_price, category_id')
+      .in('id', productIds)
+
+    if (!products || products.length === 0) {
+      return { success: false, error: 'Products not found' }
+    }
+
+    const productMap = new Map(products.map(p => [p.id, p]))
+
+    // Build order items with DB prices
+    const orderItems = items.map(item => {
+      const product = productMap.get(item.productId)
+      const unitPrice = product?.selling_price || 0
+      return {
+        product_id: item.productId,
+        category_id: product?.category_id || null,
+        quantity: item.quantity,
+        unit_price: unitPrice,
+        total_price: unitPrice * item.quantity,
+      }
+    })
+
+    const subtotal = orderItems.reduce((sum, item) => sum + item.total_price, 0)
+
+    // ── Tax calculation per line item ───────────────────────────────────
+    let taxAmount = 0
+    for (const item of orderItems) {
+      if (!item.category_id) continue
+      const taxInfo = await getTaxForCategory(item.category_id)
+      if (taxInfo.combined_percentage > 0) {
+        const result = calculateTax(
+          item.total_price,
+          taxInfo.combined_percentage,
+          taxInfo.is_tax_inclusive
+        )
+        taxAmount += result.taxCents
+      }
+    }
+
+    // ── Shipping calculation ────────────────────────────────────────────
+    let shippingAmount = 0
+    if (options.shippingMethodId) {
+      const { data: shippingMethod } = await supabaseAdmin
+        .from('ecommerce_shipping_methods')
+        .select('base_price, price_per_km, min_order_amount, max_order_amount')
+        .eq('id', options.shippingMethodId)
+        .eq('is_active', true)
+        .single()
+
+      if (shippingMethod) {
+        if (shippingMethod.min_order_amount === null || subtotal >= shippingMethod.min_order_amount) {
+          if (shippingMethod.max_order_amount === null || subtotal <= shippingMethod.max_order_amount) {
+            shippingAmount = shippingMethod.base_price
+          }
+        }
+      }
+    }
+
+    const totalAmount = subtotal + taxAmount + shippingAmount
 
     // Create order
-    const { data: order, error: orderError } = await supabaseAdmin
-      .from('ecommerce_orders')
+    const { data: order, error: orderError } = await (supabaseAdmin
+      .from('ecommerce_orders') as any)
       .insert({
         store_id: storeId,
         customer_id: options.customerId || null,
@@ -249,34 +333,41 @@ export async function createOrder(
 
     if (orderError) throw orderError
 
-    // Create order items
-    const orderItems = items.map(item => ({
+    // Create order items (with DB prices)
+    const dbOrderItems = orderItems.map(item => ({
       order_id: order.id,
-      product_id: item.productId,
+      product_id: item.product_id,
       quantity: item.quantity,
-      unit_price: item.unitPrice,
-      total_price: item.unitPrice * item.quantity,
+      unit_price: item.unit_price,
+      total_price: item.total_price,
+      tax_rate: 0,
     }))
 
     const { error: itemsError } = await supabaseAdmin
       .from('ecommerce_order_items')
-      .insert(orderItems)
+      .insert(dbOrderItems)
 
     if (itemsError) throw itemsError
 
     // Emit order.created event
     const { emitEvent } = await import('@/lib/automation/events')
-    await emitEvent('order.created', {
-      order_id: order.id,
-      order_number: order.order_number,
-      total_amount: totalAmount,
-      customer_id: options.customerId,
-    }, { source: 'ecommerce', entity_type: 'order', entity_id: order.id })
+    await emitEvent({
+      eventType: 'order.created',
+      payload: {
+        order_id: order.id,
+        order_number: order.order_number,
+        total_amount: totalAmount,
+        customer_id: options.customerId,
+      },
+      source: 'ecommerce',
+      entityType: 'order',
+      entityId: order.id,
+    })
 
     return { success: true, data: order as EcommerceOrder }
   } catch (error) {
     logger.error('[Ecommerce] Failed to create order:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -288,6 +379,11 @@ export async function updateOrderStatus(
   status: EcommerceOrder['status']
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    const auth = await authenticateServerAction()
+    if (!auth.success || !auth.profile) {
+      return { success: false, error: 'Unauthorized' }
+    }
+
     const updates: Record<string, unknown> = { status }
 
     // Set timestamp based on status
@@ -315,15 +411,18 @@ export async function updateOrderStatus(
 
     // Emit event
     const { emitEvent } = await import('@/lib/automation/events')
-    await emitEvent(`order.${status}`, {
-      order_id: orderId,
-      status,
-    }, { source: 'ecommerce', entity_type: 'order', entity_id: orderId })
+    await emitEvent({
+      eventType: `order.${status}`,
+      payload: { order_id: orderId, status },
+      source: 'ecommerce',
+      entityType: 'order',
+      entityId: orderId,
+    })
 
     return { success: true }
   } catch (error) {
     logger.error('[Ecommerce] Failed to update order status:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -335,6 +434,11 @@ export async function getOrCreateCart(
   customerId?: string
 ): Promise<ShoppingCart> {
   try {
+    const auth = await authenticateServerAction()
+    if (!auth.success || !auth.profile) {
+      return { id: '', session_id: sessionId, customer_id: customerId ?? null, items: [], total: 0, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
+    }
+
     // Try to get existing cart
     let { data: cart } = await supabaseAdmin
       .from('ecommerce_cart')
@@ -359,9 +463,9 @@ export async function getOrCreateCart(
         *,
         product:products(name, sku, selling_price, image_url)
       `)
-      .eq('cart_id', cart.id)
+      .eq('cart_id', cart!.id)
 
-    const cartItems = (items || []) as CartItem[]
+    const cartItems = (items || []) as unknown as CartItem[]
     const total = cartItems.reduce((sum, item) => {
       const price = item.product?.selling_price || 0
       return sum + (price * item.quantity)
@@ -377,7 +481,7 @@ export async function getOrCreateCart(
     return {
       id: '',
       session_id: sessionId,
-      customer_id: customerId,
+      customer_id: customerId ?? null,
       items: [],
       total: 0,
       created_at: new Date().toISOString(),
@@ -395,6 +499,11 @@ export async function addToCart(
   quantity: number = 1
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    const auth = await authenticateServerAction()
+    if (!auth.success || !auth.profile) {
+      return { success: false, error: 'Unauthorized' }
+    }
+
     // Check if item already in cart
     const { data: existing } = await supabaseAdmin
       .from('ecommerce_cart_items')
@@ -423,7 +532,7 @@ export async function addToCart(
     return { success: true }
   } catch (error) {
     logger.error('[Ecommerce] Failed to add to cart:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -435,6 +544,11 @@ export async function removeFromCart(
   productId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    const auth = await authenticateServerAction()
+    if (!auth.success || !auth.profile) {
+      return { success: false, error: 'Unauthorized' }
+    }
+
     const { error } = await supabaseAdmin
       .from('ecommerce_cart_items')
       .delete()
@@ -445,7 +559,7 @@ export async function removeFromCart(
     return { success: true }
   } catch (error) {
     logger.error('[Ecommerce] Failed to remove from cart:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -457,6 +571,11 @@ export async function syncProduct(
   storeId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    const auth = await authenticateServerAction()
+    if (!auth.success || !auth.profile) {
+      return { success: false, error: 'Unauthorized' }
+    }
+
     // Get product details
     const { data: product } = await supabaseAdmin
       .from('products')
@@ -471,8 +590,8 @@ export async function syncProduct(
     // Sync logic would go here (integrate with Shopify, WooCommerce, etc.)
     // For now, just update the sync status
 
-    const { error } = await supabaseAdmin
-      .from('ecommerce_product_sync')
+    const { error } = await (supabaseAdmin
+      .from('ecommerce_product_sync') as any)
       .upsert({
         product_id: productId,
         store_id: storeId,
@@ -485,7 +604,7 @@ export async function syncProduct(
     return { success: true }
   } catch (error) {
     logger.error('[Ecommerce] Failed to sync product:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -497,6 +616,11 @@ export async function validateDiscountCode(
   orderAmount: number
 ): Promise<{ valid: boolean; discount?: number; error?: string }> {
   try {
+    const auth = await authenticateServerAction()
+    if (!auth.success || !auth.profile) {
+      return { valid: false, error: 'Unauthorized' }
+    }
+
     const { data: discountCode, error } = await supabaseAdmin
       .from('ecommerce_discount_codes')
       .select('*')
@@ -514,7 +638,7 @@ export async function validateDiscountCode(
     }
 
     // Check usage limit
-    if (discountCode.usage_limit && discountCode.used_count >= discountCode.usage_limit) {
+    if (discountCode.usage_limit && (discountCode.used_count ?? 0) >= discountCode.usage_limit) {
       return { valid: false, error: 'Discount code usage limit reached' }
     }
 

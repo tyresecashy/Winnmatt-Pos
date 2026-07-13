@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { logger } from '@/lib/logger';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -74,7 +75,7 @@ export class BranchService {
       .order('name');
 
     if (error) {
-      console.error('Error fetching branches:', error);
+      logger.error('Error fetching branches:', error);
       return [];
     }
 
@@ -89,7 +90,7 @@ export class BranchService {
       .single();
 
     if (error) {
-      console.error('Error fetching branch:', error);
+      logger.error('Error fetching branch:', error);
       return null;
     }
 
@@ -104,7 +105,7 @@ export class BranchService {
       .single();
 
     if (error) {
-      console.error('Error creating branch:', error);
+      logger.error('Error creating branch:', error);
       return null;
     }
 
@@ -120,7 +121,7 @@ export class BranchService {
       .single();
 
     if (error) {
-      console.error('Error updating branch:', error);
+      logger.error('Error updating branch:', error);
       return null;
     }
 
@@ -228,7 +229,7 @@ export class BranchService {
     const { data, error } = await query;
 
     if (error) {
-      console.error('Error fetching transfers:', error);
+      logger.error('Error fetching transfers:', error);
       return [];
     }
 
@@ -246,7 +247,7 @@ export class BranchService {
       .single();
 
     if (error) {
-      console.error('Error creating transfer:', error);
+      logger.error('Error creating transfer:', error);
       return null;
     }
 
@@ -254,7 +255,7 @@ export class BranchService {
   }
 
   async updateTransferStatus(transferId: string, status: string, userId: string): Promise<boolean> {
-    const updates: any = { status };
+    const updates: Record<string, unknown> = { status };
     
     if (status === 'approved') {
       updates.approved_by = userId;
@@ -270,7 +271,7 @@ export class BranchService {
       .eq('id', transferId);
 
     if (error) {
-      console.error('Error updating transfer:', error);
+      logger.error('Error updating transfer:', error);
       return false;
     }
 
@@ -355,7 +356,7 @@ export class BranchService {
     return performance;
   }
 
-  async getCentralizedInventory(): Promise<any[]> {
+  async getCentralizedInventory(): Promise<Record<string, unknown>[]> {
     const { data: products } = await supabase
       .from('products')
       .select(`
@@ -373,10 +374,10 @@ export class BranchService {
     if (!products) return [];
 
     return products.map((product) => {
-      const branchStock = (product.branch_inventory || []).map((bi: any) => ({
+      const branchStock = ((product.branch_inventory || []) as Record<string, unknown>[]).map((bi) => ({
         branchId: bi.branch_id,
-        branchName: bi.branch?.name || 'Unknown',
-        quantity: bi.quantity || 0,
+        branchName: ((bi.branch as Record<string, unknown>)?.name as string) || 'Unknown',
+        quantity: (bi.quantity as number) || 0,
       }));
 
       const totalStock = branchStock.reduce((sum, bs) => sum + bs.quantity, 0);

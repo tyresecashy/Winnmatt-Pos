@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { getMergedReceiptSettings } from '@/lib/receipt-settings'
-import type { MergedReceiptSettings } from '@/lib/db.types'
+import type { MergedReceiptSettings } from '@/lib/receipt-settings'
 
 /**
  * React hook to fetch and cache merged receipt settings

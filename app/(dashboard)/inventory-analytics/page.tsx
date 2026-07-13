@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -20,7 +21,7 @@ import {
   createPurchaseOrdersFromSuggestions,
   type AnalyticsProduct,
   type ReorderSuggestion,
-} from '@/lib/inventory-analytics-actions'
+} from '@/lib/modules/inventory'
 import { useAuth } from '@/contexts/auth-context'
 import { formatKSh } from '@/lib/currency'
 
@@ -239,14 +240,14 @@ export default function InventoryAnalyticsPage() {
                     <div key={s.product_id} className={`p-4 rounded-lg border ${
                       s.priority === 'critical' ? 'border-red-200 bg-red-50 dark:bg-red-950/20' :
                       s.priority === 'high' ? 'border-yellow-200 bg-yellow-50 dark:bg-yellow-950/20' :
-                      'border-gray-200'
+                      'border'
                     }`}>
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
                             <Badge variant={
                               s.priority === 'critical' ? 'destructive' :
-                              s.priority === 'high' ? 'warning' : 'secondary'
+                              s.priority === 'high' ? 'ghost' : 'secondary'
                             } className="uppercase text-xs">
                               {s.priority}
                             </Badge>
@@ -361,7 +362,7 @@ export default function InventoryAnalyticsPage() {
                           <td className="py-3">
                             <Badge variant={
                               p.stock_status === 'critical' ? 'destructive' :
-                              p.stock_status === 'reorder' ? 'warning' : 'default'
+                              p.stock_status === 'reorder' ? 'ghost' : 'default'
                             }>
                               {p.stock_status}
                             </Badge>
@@ -388,7 +389,7 @@ export default function InventoryAnalyticsPage() {
               </CardHeader>
               <CardContent>
                 {topProfit.length === 0 ? (
-                  <p className="text-muted-foreground">No data available</p>
+                  <EmptyState title="No data available" compact />
                 ) : (
                   <div className="space-y-3">
                     {topProfit.map((p, i) => (
@@ -420,7 +421,7 @@ export default function InventoryAnalyticsPage() {
               </CardHeader>
               <CardContent>
                 {topRevenue.length === 0 ? (
-                  <p className="text-muted-foreground">No data available</p>
+                  <EmptyState title="No data available" compact />
                 ) : (
                   <div className="space-y-3">
                     {topRevenue.map((p, i) => (

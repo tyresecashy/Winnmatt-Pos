@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, startTransition } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -15,8 +15,9 @@ import { toast } from '@/hooks/use-toast'
 import {
   getBankAccounts, getReconciliations, getUnreconciledTransactions,
   getUnmatchedJournalEntries, createReconciliation, completeReconciliation
-} from '@/lib/finance-actions'
+} from '@/lib/modules/finance'
 import { formatKSh } from '@/lib/currency'
+import { EmptyState } from '@/components/ui/empty-state'
 import { ArrowLeftRight, CheckCircle, Plus, RefreshCw } from 'lucide-react'
 
 interface BankAccount { id: string; account_name: string; account_number: string | null; bank_name: string; current_balance: number }
@@ -35,17 +36,14 @@ export default function BankReconciliationPage() {
   const [selectedTx, setSelectedTx] = useState<Set<string>>(new Set())
   const [selectedJE, setSelectedJE] = useState<Set<string>>(new Set())
 
-  useEffect(() => { loadAccounts() }, [])
-  useEffect(() => { if (selectedAccount) loadReconciliationData() }, [selectedAccount])
-
-  async function loadAccounts() {
+  const loadAccounts = useCallback(async () => {
     const data = await getBankAccounts()
-    setAccounts(data)
+    setAccounts(data as unknown as BankAccount[])
     if (data.length > 0) setSelectedAccount(data[0].id)
     setLoading(false)
-  }
+  }, [])
 
-  async function loadReconciliationData() {
+  const loadReconciliationData = useCallback(async () => {
     if (!selectedAccount) return
     const [recs, txs, jes] = await Promise.all([
       getReconciliations(selectedAccount),
@@ -60,7 +58,10 @@ export default function BankReconciliationPage() {
     // Set book balance from account
     const account = accounts.find(a => a.id === selectedAccount)
     if (account) setBookBalance(String(account.current_balance))
-  }
+  }, [selectedAccount, accounts])
+
+  useEffect(() => { startTransition(() => { loadAccounts() }) }, [loadAccounts])
+  useEffect(() => { startTransition(() => { if (selectedAccount) loadReconciliationData() }) }, [selectedAccount, loadReconciliationData])
 
   function toggleTx(id: string) {
     const next = new Set(selectedTx)
@@ -80,8 +81,11 @@ export default function BankReconciliationPage() {
       return
     }
 
-    const matched = Array.from(selectedTx).map(txId => {
-      const jeId = Array.from(selectedJE).pop() || ''
+    // Match selected bank transactions to selected journal entries by index.
+    // If there are fewer JEs than txs, the last JE is reused for remaining txs.
+    const jeArray = Array.from(selectedJE)
+    const matched = Array.from(selectedTx).map((txId, i) => {
+      const jeId = jeArray[Math.min(i, jeArray.length - 1)] || ''
       return { bank_transaction_id: txId, journal_entry_id: jeId }
     })
 
@@ -231,7 +235,7 @@ export default function BankReconciliationPage() {
                   </TableRow>
                 ))}
                 {journalEntries.length === 0 && (
-                  <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-4">No unmatched entries</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-4"><EmptyState title="No unmatched entries" compact /></TableCell></TableRow>
                 )}
               </TableBody>
             </Table>
@@ -268,7 +272,7 @@ export default function BankReconciliationPage() {
                 </TableRow>
               ))}
               {reconciliations.length === 0 && (
-                <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-4">No reconciliations yet</TableCell></TableRow>
+                <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-4"><EmptyState title="No reconciliations yet" compact /></TableCell></TableRow>
               )}
             </TableBody>
           </Table>

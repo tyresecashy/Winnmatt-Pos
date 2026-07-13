@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAuth, type APIContext } from '@/lib/api/middleware'
 import { apiSuccess, apiBadRequest, apiInternal, parseSearchParams } from '@/lib/api/response'
+import { logger } from '@/lib/logger'
 
 interface SearchResult {
   entity_type: string
@@ -16,6 +17,11 @@ interface SearchResult {
   subtitle: string
   meta?: Record<string, unknown>
 }
+
+interface ProductRow { id: string; name: string; sku: string; barcode: string | null; selling_price: number; status: string }
+interface CustomerRow { id: string; name: string; phone: string | null; email: string | null; type: string; loyalty_points: number }
+interface SaleRow { id: string; receipt_number: string; total_amount: number; payment_method: string; created_at: string }
+interface SupplierRow { id: string; name: string; contact_person: string | null; phone: string | null; email: string | null }
 
 export async function GET(request: NextRequest) {
   return withAuth(request, async (ctx: APIContext) => {
@@ -41,7 +47,8 @@ export async function GET(request: NextRequest) {
           .limit(limit)
 
         if (data) {
-          results.push(...data.map(p => ({
+          const rows = data as unknown as ProductRow[]
+          results.push(...rows.map(p => ({
             entity_type: 'product',
             id: p.id,
             title: p.name,
@@ -60,7 +67,8 @@ export async function GET(request: NextRequest) {
           .limit(limit)
 
         if (data) {
-          results.push(...data.map(c => ({
+          const rows = data as unknown as CustomerRow[]
+          results.push(...rows.map(c => ({
             entity_type: 'customer',
             id: c.id,
             title: c.name,
@@ -80,7 +88,8 @@ export async function GET(request: NextRequest) {
           .limit(limit)
 
         if (data) {
-          results.push(...data.map(s => ({
+          const rows = data as unknown as SaleRow[]
+          results.push(...rows.map(s => ({
             entity_type: 'sale',
             id: s.id,
             title: `Sale #${s.receipt_number}`,
@@ -99,7 +108,8 @@ export async function GET(request: NextRequest) {
           .limit(limit)
 
         if (data) {
-          results.push(...data.map(s => ({
+          const rows = data as unknown as SupplierRow[]
+          results.push(...rows.map(s => ({
             entity_type: 'supplier',
             id: s.id,
             title: s.name,
@@ -117,7 +127,7 @@ export async function GET(request: NextRequest) {
 
       return apiSuccess(results.slice(0, limit))
     } catch (error) {
-      console.error('[Search API] Error:', error)
+      logger.error('[Search API] Error:', error)
       return apiInternal()
     }
   })

@@ -1,3 +1,5 @@
+import { logger } from '@/lib/logger'
+
 export type BackupStatus = 'completed' | 'running' | 'failed' | 'pending';
 export type RestoreStatus = 'completed' | 'running' | 'failed' | 'pending';
 
@@ -187,7 +189,7 @@ export class DisasterRecoveryService {
     if (!backup) return false;
 
     // Simulate restore process
-    console.log(`Restoring backup ${backupId}...`);
+    logger.info(`[DisasterRecovery] Restoring backup ${backupId}...`);
     return true;
   }
 
@@ -235,9 +237,9 @@ export class DisasterRecoveryService {
     return this.plans.find(p => p.id === planId) || null;
   }
 
-  async testDRPlan(planId: string): Promise<any> {
+  async testDRPlan(planId: string): Promise<Record<string, unknown>> {
     const plan = this.plans.find(p => p.id === planId);
-    if (!plan) return null;
+    if (!plan) return null as any;
 
     const startTime = Date.now();
     
@@ -277,7 +279,7 @@ export class DisasterRecoveryService {
     };
   }
 
-  async validateBackupIntegrity(): Promise<any> {
+  async validateBackupIntegrity(): Promise<Record<string, unknown>> {
     const results = [];
     
     for (const backup of this.backups.slice(0, 10)) {

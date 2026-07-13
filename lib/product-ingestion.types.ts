@@ -15,7 +15,7 @@ export interface ProductSource {
   description?: string
   source_type: ProductSourceType
   is_active: boolean
-  config?: Record<string, any>
+  config?: Record<string, unknown>
   created_at: string
   updated_at: string
 }
@@ -44,7 +44,7 @@ export interface ProductImportBatch {
   failed_records: number
   duplicates_found: number
   batch_hash?: string
-  error_log?: Record<string, any>
+  error_log?: Record<string, unknown>
   imported_by: string
   started_at: string
   completed_at?: string
@@ -71,7 +71,7 @@ export interface RawProductImport {
   id: string
   batch_id: string
   source_product_id: string
-  raw_data: Record<string, any>
+  raw_data: Record<string, unknown>
   source_name?: string
   source_brand?: string
   source_category?: string

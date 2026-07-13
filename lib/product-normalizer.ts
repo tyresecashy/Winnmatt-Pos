@@ -253,7 +253,8 @@ export async function normalizeImportBatch(batchId: string): Promise<number> {
     .eq('batch_id', batchId)
 
   if (fetchError) {
-    throw new Error(`Failed to fetch imports: ${fetchError.message}`)
+    logger.error('Operation failed', { error: fetchError })
+    throw new Error('Operation failed')
   }
 
   if (!rawImports || rawImports.length === 0) {
@@ -273,7 +274,8 @@ export async function normalizeImportBatch(batchId: string): Promise<number> {
     .select()
 
   if (insertError) {
-    throw new Error(`Failed to insert normalized products: ${insertError.message}`)
+    logger.error('Operation failed', { error: insertError })
+    throw new Error('Operation failed')
   }
 
   // Update batch status
@@ -313,7 +315,8 @@ export async function getStagingProducts(
   const { data, error } = await query.order('created_at', { ascending: false })
 
   if (error) {
-    throw new Error(`Failed to get staging products: ${error.message}`)
+    logger.error('Operation failed', { error: error })
+    throw new Error('Operation failed')
   }
 
   return data || []

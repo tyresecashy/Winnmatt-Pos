@@ -20,9 +20,10 @@ import {
   validateCoupon,
   type Promotion,
   type ValidatedPromotion,
-} from "@/lib/promotion-actions"
+} from "@/lib/modules/promotions"
 import { formatKSh } from "@/lib/currency"
 import { BadgePercent, ChevronDown, ChevronUp, Tag, X, Loader2, Check, Percent, Coins } from "lucide-react"
+import { EmptyState } from "@/components/ui/empty-state"
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -62,8 +63,6 @@ export function PromotionPanel({
   const [couponValidated, setCouponValidated] = useState<ValidatedPromotion | null>(null)
 
   const prevCartRef = useRef(0)
-  const appliedPromosRef = useRef(appliedPromos)
-  appliedPromosRef.current = appliedPromos
 
   // ─── Fetch auto-apply promotions when cart changes ─────────────────────
 
@@ -72,16 +71,15 @@ export function PromotionPanel({
     if (Math.abs(cartTotalCents - prevCartRef.current) < 100) return
     prevCartRef.current = cartTotalCents
 
-    if (cartTotalCents <= 0) {
-      setAutoPromotions([])
-      return
-    }
-
     let cancelled = false
 
     const fetchAuto = async () => {
+      if (cartTotalCents <= 0) {
+        setAutoPromotions([])
+        return
+      }
       const promotions = await getAutoApplyPromotions(cartTotalCents, cartItemCategoryIds)
-      if (!cancelled) {
+      if (!cancelled && promotions) {
         setAutoPromotions(promotions)
       }
     }
@@ -364,9 +362,7 @@ export function PromotionPanel({
             )}
 
             {autoPromotions.length === 0 && appliedPromos.length === 0 && !couponValidated && (
-              <p className="text-[11px] text-muted-foreground italic">
-                No promotions available for this cart.
-              </p>
+              <EmptyState title="No promotions available for this cart." compact />
             )}
           </div>
         </CollapsibleContent>

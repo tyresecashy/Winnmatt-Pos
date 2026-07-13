@@ -13,6 +13,7 @@ import { supabaseAdmin } from '@/lib/supabase-server'
 import type { EventType, EventSource, EmitEventOptions, ProcessEventResult } from './types'
 import { evaluateConditions } from './conditions'
 import { executeAction } from './actions'
+import { publish } from '@/lib/realtime/event-bus'
 
 /**
  * Emit an automation event.
@@ -38,12 +39,12 @@ export async function emitEvent(options: EmitEventOptions): Promise<ProcessEvent
       .from('automation_events')
       .insert({
         event_type: eventType,
-        source,
+        source: source as string,
         entity_type: entityType || null,
         entity_id: entityId || null,
-        payload,
+        payload: payload as Record<string, unknown>,
         processed: false,
-      })
+      } as never)
       .select('id')
       .single()
 
@@ -56,6 +57,20 @@ export async function emitEvent(options: EmitEventOptions): Promise<ProcessEvent
 
     // 2. Process the event through the rule engine
     const result = await processEvent(event.id, eventType, payload)
+
+    // 3. Publish to realtime event bus (non-blocking)
+    try {
+      publish({
+        type: eventType,
+        source,
+        entityType: entityType || undefined,
+        entityId: entityId || undefined,
+        payload: { ...payload, rulesEvaluated: result.rulesEvaluated, actionsExecuted: result.actionsExecuted },
+        timestamp: Date.now(),
+      })
+    } catch (err) {
+      logger.warn('[Automation] Failed to publish to event bus:', err as Record<string, unknown>)
+    }
 
     return {
       eventId: event.id,
@@ -104,13 +119,13 @@ async function processEvent(
       rulesEvaluated++
 
       // Check cooldown
-      if (rule.cooldown_ms > 0) {
+      if (rule.cooldown_ms && rule.cooldown_ms > 0) {
         const { data: recentLog } = await supabaseAdmin
           .from('automation_logs')
           .select('id')
           .eq('rule_id', rule.id)
           .eq('status', 'success')
-          .gt('created_at', new Date(Date.now() - rule.cooldown_ms).toISOString())
+          .gt('created_at', new Date(Date.now() - (rule.cooldown_ms || 0)).toISOString())
           .limit(1)
 
         if (recentLog && recentLog.length > 0) {
@@ -144,7 +159,7 @@ async function processEvent(
         .eq('rule_id', rule.id)
         .order('sort_order')
 
-      const conditionsMet = evaluateConditions(conditions || [], payload)
+      const conditionsMet = evaluateConditions((conditions || []) as unknown as import('./types').AutomationCondition[], payload)
 
       if (!conditionsMet) {
         logger.info('[Automation] Rule conditions not met', { ruleId: rule.id, ruleName: rule.name })
@@ -163,7 +178,7 @@ async function processEvent(
           const actionStart = Date.now()
 
           try {
-            await executeAction(action.action_type, action.params, payload)
+            await executeAction(action.action_type, action.params as Record<string, unknown>, payload)
 
             // Log success
             await supabaseAdmin.from('automation_logs').insert({
@@ -172,8 +187,8 @@ async function processEvent(
               action_type: action.action_type,
               status: 'success',
               duration_ms: Date.now() - actionStart,
-              input: { params: action.params, payload },
-            })
+              input: { params: action.params as Record<string, unknown>, payload },
+            } as never)
 
             actionsExecuted++
           } catch (actionError) {
@@ -187,8 +202,8 @@ async function processEvent(
               status: 'failed',
               error_msg: String(actionError),
               duration_ms: Date.now() - actionStart,
-              input: { params: action.params, payload },
-            })
+              input: { params: action.params as Record<string, unknown>, payload },
+            } as never)
           }
         }
       }

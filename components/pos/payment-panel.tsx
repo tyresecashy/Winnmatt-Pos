@@ -2,41 +2,14 @@
 import { logger } from '@/lib/logger';
 
 import { useEffect, useState, useCallback, useRef } from "react"
+import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Separator } from "@/components/ui/separator"
-import { Checkbox } from "@/components/ui/checkbox"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { useToast } from "@/components/ui/use-toast"
-import { formatKSh } from "@/lib/currency"
-import {
-  Banknote,
-  Receipt,
-  Percent,
-  ChevronDown,
-  ChevronUp,
-  AlertCircle,
-  RotateCcw,
-  X,
-  Check,
-  Smartphone,
-  Plus,
-  Wand2,
-  Split,
-  CreditCard,
-} from "lucide-react"
-import type { SelectedCustomer } from "@/app/(dashboard)/pos/page"
-import { ReceiptPreview, type SaleDetailsData } from "@/components/receipt-preview"
-import { isReceiptPayloadValid } from "@/lib/receipt-builder"
-import { StripeCheckout } from "@/components/pos/stripe-checkout"
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
 import {
   Dialog,
   DialogContent,
@@ -44,11 +17,33 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { useToast } from "@/components/ui/use-toast"
+import { formatKSh } from "@/lib/currency"
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible"
+  Receipt,
+  Percent,
+  ChevronDown,
+  ChevronUp,
+  AlertCircle,
+  CreditCard,
+  RotateCcw,
+} from "lucide-react"
+import type { SelectedCustomer } from "@/app/(dashboard)/pos/page"
+import type { SaleDetailsData } from "@/components/receipt-preview"
+import { isReceiptPayloadValid } from "@/lib/receipt-builder"
+import { StripeCheckout } from "@/components/pos/stripe-checkout"
+
+// Import extracted sub-components
+import { PaymentSummary } from '@/components/pos/payment/_summary'
+import { PaymentMethodSelector, type PaymentMethod } from '@/components/pos/payment/_method-selector'
+import { CashPaymentForm } from '@/components/pos/payment/_cash-form'
+import { MpesaPaymentForm } from '@/components/pos/payment/_mpesa-form'
+import { CardPaymentForm } from '@/components/pos/payment/_card-form'
+import { SplitPaymentForm, type SplitEntry } from '@/components/pos/payment/_split-form'
+import { LoyaltyRedemptionSection, type LoyaltyRedemptionData } from '@/components/pos/payment/_loyalty-redemption'
+import { ReceiptDialog } from '@/components/pos/payment/_receipt-dialog'
+import { PaymentSuccessAnimation } from '@/components/pos/payment/_success-animation'
+import { usePaymentKeys } from '@/components/pos/payment/use-payment-keys'
 
 interface PaymentPanelProps {
   subtotal: number
@@ -58,7 +53,7 @@ interface PaymentPanelProps {
   total: number
   showPayment: boolean
   onShowPayment: (show: boolean) => void
-  onCompletePayment: (receiptNumber: string, paymentMethod: string, options?: Record<string, any>) => void
+  onCompletePayment: (receiptNumber: string, paymentMethod: string, options?: Record<string, unknown>) => void
   customer: SelectedCustomer | null
   fullSaleData?: SaleDetailsData | null
   onReceiptClose?: () => void
@@ -76,8 +71,6 @@ interface PaymentPanelProps {
   }
   onRedemptionPointsChange?: (points: number) => void
 }
-
-type PaymentMethod = "cash" | "mpesa" | "card"
 
 export function PaymentPanel({
   subtotal,
@@ -100,8 +93,15 @@ export function PaymentPanel({
   const [amountReceived, setAmountReceived] = useState("")
   const [mpesaPhone, setMpesaPhone] = useState("")
   const [discountInput, setDiscountInput] = useState(cartDiscount > 0 ? cartDiscount.toString() : "")
+  const prevDiscountCartRef = useRef(cartDiscount)
   useEffect(() => {
-    setDiscountInput(cartDiscount > 0 ? cartDiscount.toString() : "")
+    if (cartDiscount !== prevDiscountCartRef.current) {
+      prevDiscountCartRef.current = cartDiscount
+      const id = setTimeout(() => {
+        setDiscountInput(cartDiscount > 0 ? cartDiscount.toString() : "")
+      }, 0)
+      return () => clearTimeout(id)
+    }
   }, [cartDiscount])
   const [showDiscountSection, setShowDiscountSection] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
@@ -115,14 +115,17 @@ export function PaymentPanel({
   const [checkoutRequestId, setCheckoutRequestId] = useState<string | null>(null)
   const [showStripeCheckout, setShowStripeCheckout] = useState(false)
   const [stripeSaleId, setStripeSaleId] = useState<string | null>(null)
+  const [showSuccessAnimation, setShowSuccessAnimation] = useState(false)
+  const [animationConfirmed, setAnimationConfirmed] = useState(false)
 
   // Split payment state
   const [enableSplit, setEnableSplit] = useState(false)
-  const [splits, setSplits] = useState<Array<{ id: string; method: 'cash' | 'card' | 'bank_transfer' | 'cheque' | 'credit'; amount: number }>>([])
+  const [splits, setSplits] = useState<SplitEntry[]>([])
   const [splitAmountInputs, setSplitAmountInputs] = useState<Record<string, string>>({})
 
   useEffect(() => {
     if (!showPayment) return
+    if (showSuccessAnimation) return
 
     if (fullSaleData && isReceiptPayloadValid(fullSaleData)) {
       const timer = setTimeout(() => {
@@ -131,7 +134,7 @@ export function PaymentPanel({
       })
       return () => clearTimeout(timer)
     }
-  }, [fullSaleData, showPayment, onShowPayment])
+  }, [fullSaleData, showPayment, onShowPayment, showSuccessAnimation])
 
   useEffect(() => {
     if (!customer?.phone) return
@@ -153,42 +156,67 @@ export function PaymentPanel({
     let cancelled = false
     let isPolling = false
 
-    const pollStatus = async () => {
-      if (cancelled || isPolling || isMpesaFinalizing) {
-        return
+    // ── SSE subscription ────────────────────────────────────────────
+    let eventSource: EventSource | null = null
+    try {
+      eventSource = new EventSource(
+        `/api/mpesa/stream?checkoutRequestId=${encodeURIComponent(checkoutRequestId)}`
+      )
+
+      eventSource.addEventListener('payment.confirmed', async () => {
+        if (cancelled) return
+        setIsMpesaFinalizing(true)
+        setPaymentStatus("Payment confirmed via SSE. Opening receipt...")
+        await onCompletePaymentRef.current(receiptNumber, "mpesa", {
+          skipSaleCreation: true,
+          saleId: pendingSaleId,
+        })
+      })
+
+      eventSource.addEventListener('payment.failed', (e) => {
+        if (cancelled) return
+        const data = JSON.parse(e.data)
+        setIsProcessing(false)
+        setIsMpesaFinalizing(false)
+        setCheckoutRequestId(null)
+        setPendingSaleId(null)
+        setPaymentStatus("")
+        setPaymentError(data.errorMessage || "M-Pesa payment was not completed.")
+      })
+
+      eventSource.onerror = () => {
+        eventSource?.close()
       }
+    } catch {
+      // SSE not available — polling fallback handles it
+    }
+
+    // ── Polling fallback ────────────────────────────────────────────
+    const pollStatus = async () => {
+      if (cancelled || isPolling || isMpesaFinalizing) return
 
       isPolling = true
-
       try {
         const response = await fetch(
           `/api/mpesa/status?checkoutRequestId=${encodeURIComponent(checkoutRequestId)}&saleId=${encodeURIComponent(pendingSaleId)}`,
-          {
-            method: "GET",
-            credentials: "include",
-          }
+          { method: "GET", credentials: "include" }
         )
 
         if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}))
-          throw new Error(errorData.error || "Unable to check M-Pesa status")
+          const errData = await response.json().catch(() => ({}))
+          throw new Error(errData.error || "Unable to check M-Pesa status")
         }
 
         const statusResult = await response.json()
-
-        if (cancelled) {
-          return
-        }
+        if (cancelled) return
 
         if (statusResult.isConfirmed) {
           setIsMpesaFinalizing(true)
           setPaymentStatus("Payment confirmed. Opening receipt...")
-
           await onCompletePaymentRef.current(receiptNumber, "mpesa", {
             skipSaleCreation: true,
             saleId: pendingSaleId,
           })
-
           return
         }
 
@@ -214,13 +242,12 @@ export function PaymentPanel({
     }
 
     void pollStatus()
-    const intervalId = window.setInterval(() => {
-      void pollStatus()
-    }, 3000)
+    const intervalId = window.setInterval(() => { void pollStatus() }, 3000)
 
     return () => {
       cancelled = true
       window.clearInterval(intervalId)
+      eventSource?.close()
     }
   }, [
     checkoutRequestId,
@@ -268,7 +295,7 @@ export function PaymentPanel({
     })
   }, [])
 
-  const updateSplitMethod = useCallback((id: string, method: 'cash' | 'card' | 'bank_transfer' | 'cheque' | 'credit') => {
+  const updateSplitMethod = useCallback((id: string, method: SplitEntry['method']) => {
     setSplits((prev) => prev.map((s) => (s.id === id ? { ...s, method } : s)))
   }, [])
 
@@ -280,6 +307,9 @@ export function PaymentPanel({
     }
   }, [])
 
+  const totalAfterRedemption = Math.max(0, total - (loyaltyRedemption?.redemptionDiscount || 0))
+
+  // Intentionally not wrapped in useCallback — ref pattern always has latest version
   const handlePayment = async () => {
     if (isProcessing) return
 
@@ -305,42 +335,50 @@ export function PaymentPanel({
         }
         const primarySplit = splits.reduce((max, s) => s.amount > max.amount ? s : max)
         setPaymentStatus(`Processing split payment (primary: ${primarySplit.method})...`)
-        await onCompletePayment(newReceiptNumber, primarySplit.method, {
-          splits: splits.map((s) => ({ method: s.method, amount: s.amount })),
-          redemption: loyaltyRedemption && loyaltyRedemption.pointsToRedeem > 0
-            ? {
-                pointsToRedeem: loyaltyRedemption.pointsToRedeem,
-                discountApplied: loyaltyRedemption.redemptionDiscount,
-              }
-            : undefined,
-        })
+        setShowSuccessAnimation(true)
+        try {
+          await onCompletePayment(newReceiptNumber, primarySplit.method, {
+            splits: splits.map((s) => ({ method: s.method, amount: s.amount })),
+            redemption: loyaltyRedemption && loyaltyRedemption.pointsToRedeem > 0
+              ? { pointsToRedeem: loyaltyRedemption.pointsToRedeem, discountApplied: loyaltyRedemption.redemptionDiscount }
+              : undefined,
+          })
+        } catch (e) {
+          setShowSuccessAnimation(false)
+          setAnimationConfirmed(false)
+          throw e
+        }
+        setAnimationConfirmed(true)
         setPaymentStatus("")
+        setIsProcessing(false)
         return
       }
 
       if (selectedMethod === "cash") {
         setPaymentStatus("Saving cash sale...")
-        await onCompletePayment(newReceiptNumber, "cash", {
-          redemption: loyaltyRedemption && loyaltyRedemption.pointsToRedeem > 0
-            ? {
-                pointsToRedeem: loyaltyRedemption.pointsToRedeem,
-                discountApplied: loyaltyRedemption.redemptionDiscount,
-              }
-            : undefined,
-        })
+        setShowSuccessAnimation(true)
+        try {
+          await onCompletePayment(newReceiptNumber, "cash", {
+            redemption: loyaltyRedemption && loyaltyRedemption.pointsToRedeem > 0
+              ? { pointsToRedeem: loyaltyRedemption.pointsToRedeem, discountApplied: loyaltyRedemption.redemptionDiscount }
+              : undefined,
+          })
+        } catch (e) {
+          setShowSuccessAnimation(false)
+          setAnimationConfirmed(false)
+          throw e
+        }
+        setAnimationConfirmed(true)
         setPaymentStatus("")
+        setIsProcessing(false)
         return
       }
 
       if (selectedMethod === "card") {
         setPaymentStatus("Creating pending card sale...")
-        // Create a pending sale first, then open Stripe checkout
         await onCompletePayment(newReceiptNumber, "card", {
           redemption: loyaltyRedemption && loyaltyRedemption.pointsToRedeem > 0
-            ? {
-                pointsToRedeem: loyaltyRedemption.pointsToRedeem,
-                discountApplied: loyaltyRedemption.redemptionDiscount,
-              }
+            ? { pointsToRedeem: loyaltyRedemption.pointsToRedeem, discountApplied: loyaltyRedemption.redemptionDiscount }
             : undefined,
           onSaleCreated: (saleId: string) => {
             setStripeSaleId(saleId)
@@ -357,26 +395,19 @@ export function PaymentPanel({
       }
 
       setPaymentStatus("Creating pending M-Pesa sale...")
-
       await onCompletePayment(newReceiptNumber, "mpesa", {
         mpesaPhone: cleanedPhone,
         redemption: loyaltyRedemption && loyaltyRedemption.pointsToRedeem > 0
-          ? {
-              pointsToRedeem: loyaltyRedemption.pointsToRedeem,
-              discountApplied: loyaltyRedemption.redemptionDiscount,
-            }
+          ? { pointsToRedeem: loyaltyRedemption.pointsToRedeem, discountApplied: loyaltyRedemption.redemptionDiscount }
           : undefined,
         onSaleCreated: (saleId: string, pendingReceiptNumber?: string) => {
           setPendingSaleId(saleId)
-          if (pendingReceiptNumber) {
-            setReceiptNumber(pendingReceiptNumber)
-          }
+          if (pendingReceiptNumber) setReceiptNumber(pendingReceiptNumber)
         },
         onCheckoutId: (requestId: string) => {
           setCheckoutRequestId(requestId)
         },
       })
-
       setPaymentStatus("STK Push sent. Waiting for customer confirmation on phone...")
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error occurred"
@@ -387,27 +418,24 @@ export function PaymentPanel({
       setIsMpesaFinalizing(false)
       setPendingSaleId(null)
       setCheckoutRequestId(null)
-
-      toast({
-        title: "Payment Error",
-        description: errorMessage,
-        variant: "destructive",
-      })
+      setShowSuccessAnimation(false)
+      setAnimationConfirmed(false)
+      toast({ title: "Payment Error", description: errorMessage, variant: "destructive" })
     }
   }
 
   const handleComplete = () => {
     setShowReceipt(false)
+    setShowSuccessAnimation(false)
+    setAnimationConfirmed(false)
     onShowPayment(false)
     resetPaymentState()
     onReceiptClose?.()
   }
 
   const change = amountReceived
-    ? parseFloat(amountReceived) - Math.max(0, total - (loyaltyRedemption?.redemptionDiscount || 0))
+    ? parseFloat(amountReceived) - totalAfterRedemption
     : 0
-
-  const totalAfterRedemption = Math.max(0, total - (loyaltyRedemption?.redemptionDiscount || 0))
 
   const isMpesaPending = selectedMethod === "mpesa" && !!checkoutRequestId && isProcessing
 
@@ -420,13 +448,41 @@ export function PaymentPanel({
       })
       return
     }
-
     onShowPayment(open)
-
-    if (!open && !showReceipt) {
-      resetPaymentState()
-    }
+    if (!open && !showReceipt) resetPaymentState()
   }
+
+  const handleReceiptDialogChange = (open: boolean) => {
+    if (!open) handleComplete()
+  }
+
+  const handlePaymentRef = useRef(handlePayment)
+  useEffect(() => { handlePaymentRef.current = handlePayment }) // ref sync — no deps needed, runs after every render
+
+  const handlePayClick = useCallback(() => {
+    if (!isProcessing && showPayment) handlePaymentRef.current()
+  }, [isProcessing, showPayment])
+
+  const handleSelectCash = useCallback(() => {
+    if (!isProcessing) { setSelectedMethod("cash"); setPaymentError(null); setPaymentStatus("") }
+  }, [isProcessing])
+
+  const handleSelectMpesa = useCallback(() => {
+    if (!isProcessing) { setSelectedMethod("mpesa"); setPaymentError(null); setPaymentStatus("") }
+  }, [isProcessing])
+
+  const handleSelectCard = useCallback(() => {
+    if (!isProcessing) { setSelectedMethod("card"); setPaymentError(null); setPaymentStatus("") }
+  }, [isProcessing])
+
+  usePaymentKeys({
+    onCash: handleSelectCash,
+    onMpesa: handleSelectMpesa,
+    onCard: handleSelectCard,
+    onPay: handlePayClick,
+    onCancel: () => handlePaymentDialogChange(false),
+    enabled: showPayment && !showReceipt,
+  })
 
   const paymentButtonDisabled =
     selectedMethod === "cash"
@@ -436,13 +492,9 @@ export function PaymentPanel({
         : isProcessing || !mpesaPhone.trim()
 
   const paymentButtonLabel = selectedMethod === "cash"
-    ? isProcessing
-      ? "Saving Cash Sale..."
-      : "Complete Cash Payment"
+    ? isProcessing ? "Saving Cash Sale..." : "Complete Cash Payment"
     : selectedMethod === "card"
-      ? isProcessing
-        ? "Creating Card Sale..."
-        : "Process Card Payment"
+      ? isProcessing ? "Creating Card Sale..." : "Process Card Payment"
       : isMpesaFinalizing
         ? "Opening Receipt..."
         : isMpesaPending
@@ -451,8 +503,15 @@ export function PaymentPanel({
             ? "Sending STK Push..."
             : "Send M-Pesa Prompt"
 
+  const paymentMethodText = selectedMethod === "mpesa"
+    ? "Finalizing M-Pesa Payment..."
+    : selectedMethod === "cash"
+      ? "Finalizing Cash Sale..."
+      : "Finalizing Card Sale..."
+
   return (
     <>
+      {/* ── Sidebar Summary ────────────────────────────────── */}
       <div className="p-4 space-y-4 border-t bg-gradient-to-t from-muted/30 to-card">
         <Collapsible open={showDiscountSection} onOpenChange={setShowDiscountSection}>
           <CollapsibleTrigger asChild>
@@ -461,11 +520,7 @@ export function PaymentPanel({
                 <Percent className="h-3.5 w-3.5" />
                 Cart Discount
               </span>
-              {showDiscountSection ? (
-                <ChevronUp className="h-4 w-4" />
-              ) : (
-                <ChevronDown className="h-4 w-4" />
-              )}
+              {showDiscountSection ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
             </Button>
           </CollapsibleTrigger>
           <CollapsibleContent>
@@ -477,24 +532,11 @@ export function PaymentPanel({
                 onChange={(e) => setDiscountInput(e.target.value)}
                 className="flex-1"
               />
-              <Button
-                size="sm"
-                onClick={() => {
-                  const value = parseFloat(discountInput) || 0
-                  onCartDiscountChange(value)
-                }}
-              >
+              <Button size="sm" onClick={() => onCartDiscountChange(parseFloat(discountInput) || 0)}>
                 Apply
               </Button>
               {cartDiscount > 0 && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    onCartDiscountChange(0)
-                    setDiscountInput("")
-                  }}
-                >
+                <Button size="sm" variant="outline" onClick={() => { onCartDiscountChange(0); setDiscountInput("") }}>
                   Clear
                 </Button>
               )}
@@ -502,39 +544,15 @@ export function PaymentPanel({
           </CollapsibleContent>
         </Collapsible>
 
-        <div className="space-y-2 p-3 rounded-lg bg-background border">
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Subtotal</span>
-            <span>{formatKSh(subtotal)}</span>
-          </div>
-          {(itemDiscounts + cartDiscount + promotionDiscount) > 0 && (
-            <>
-              {itemDiscounts > 0 && (
-                <div className="flex justify-between text-sm text-success">
-                  <span>Item Discounts</span>
-                  <span>-{formatKSh(itemDiscounts)}</span>
-                </div>
-              )}
-              {cartDiscount > 0 && (
-                <div className="flex justify-between text-sm text-success">
-                  <span>Cart Discount</span>
-                  <span>-{formatKSh(cartDiscount)}</span>
-                </div>
-              )}
-              {promotionDiscount > 0 && (
-                <div className="flex justify-between text-sm text-blue-600">
-                  <span>Promotion Discount</span>
-                  <span>-{formatKSh(promotionDiscount)}</span>
-                </div>
-              )}
-            </>
-          )}
-          <Separator />
-          <div className="flex justify-between text-xl font-bold pt-1">
-            <span>Total</span>
-            <span className="text-primary">{formatKSh(total)}</span>
-          </div>
-        </div>
+        <PaymentSummary
+          subtotal={subtotal}
+          itemDiscounts={itemDiscounts}
+          cartDiscount={cartDiscount}
+          promotionDiscount={promotionDiscount}
+          redemptionDiscount={loyaltyRedemption?.redemptionDiscount || 0}
+          total={total}
+          variant="compact"
+        />
 
         <Button
           className="w-full h-12 text-lg font-semibold"
@@ -547,6 +565,7 @@ export function PaymentPanel({
         </Button>
       </div>
 
+      {/* ── Payment Dialog ─────────────────────────────────── */}
       <Dialog open={showPayment && !showReceipt} onOpenChange={handlePaymentDialogChange}>
         <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden p-0 sm:max-w-md">
           <DialogHeader className="shrink-0 space-y-3 border-b px-6 pt-6 pb-4">
@@ -558,532 +577,139 @@ export function PaymentPanel({
             </DialogTitle>
             <DialogDescription>
               Choose how the customer will pay. M-Pesa uses an STK Push prompt. Loyalty
-               redemption is available for named customers.
+              redemption is available for named customers.
             </DialogDescription>
-            {customer ? (
+            {customer && (
               <div className="text-sm text-muted-foreground">
                 Customer: <span className="font-medium text-foreground">{customer.name}</span>
               </div>
-            ) : null}
-
-            {isProcessing && paymentStatus && (
-              <div className="bg-blue-50 dark:bg-blue-950/30 rounded-lg p-3 text-sm text-blue-900 dark:text-blue-100 border border-blue-200 dark:border-blue-800">
-                <div className="flex items-center gap-2">
-                  <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
-                  {paymentStatus}
-                </div>
-              </div>
             )}
 
-            {paymentError && (
-              <div className="bg-destructive/15 rounded-lg p-3 text-sm text-destructive border-2 border-destructive/50">
-                <div className="font-bold mb-1 flex items-center gap-2">
-                  <AlertCircle className="h-4 w-4" />
-                  Payment Failed
-                </div>
-                <div className="font-mono text-xs break-words whitespace-pre-wrap">{paymentError}</div>
-                <button
-                  onClick={() => {
-                    setPaymentError(null)
-                    setPaymentStatus("")
-                  }}
-                  className="mt-2 text-xs underline hover:no-underline"
+            {/* Processing status */}
+            <AnimatePresence>
+              {isProcessing && paymentStatus && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+                  animate={{ opacity: 1, height: "auto", marginBottom: 12 }}
+                  exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="bg-primary/10 rounded-lg p-3 text-sm text-primary border border-primary/30 overflow-hidden"
                 >
-                  Dismiss and Retry
-                </button>
-              </div>
-            )}
+                  <div className="flex items-center gap-2.5">
+                    <span className="relative flex h-3 w-3">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
+                      <span className="relative inline-flex rounded-full h-3 w-3 bg-primary" />
+                    </span>
+                    <span className="font-medium">{paymentStatus}</span>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Payment error */}
+            <AnimatePresence>
+              {paymentError && (
+                <motion.div
+                  initial={{ opacity: 0, y: -8, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -4, scale: 0.95 }}
+                  transition={{ duration: 0.2 }}
+                  className="bg-destructive/10 rounded-lg p-3 text-sm text-destructive border border-destructive/30"
+                >
+                  <div className="font-semibold mb-1 flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4" />
+                    Payment Failed
+                  </div>
+                  <div className="font-mono text-xs break-words whitespace-pre-wrap text-destructive/80">{paymentError}</div>
+                  <button
+                    onClick={() => { setPaymentError(null); setPaymentStatus(""); setIsProcessing(false) }}
+                    className="mt-2 text-xs font-medium text-destructive hover:text-destructive/80 transition-colors inline-flex items-center gap-1"
+                  >
+                    <RotateCcw className="h-3 w-3" />
+                    Dismiss and Retry
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </DialogHeader>
+
           <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6">
             <div className="space-y-4 py-4">
-              <div className="bg-muted/30 rounded-lg p-3 space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Subtotal</span>
-                  <span className="font-medium">{formatKSh(subtotal)}</span>
-                </div>
-                {itemDiscounts > 0 && (
-                  <div className="flex justify-between text-destructive">
-                    <span className="text-muted-foreground">Item Discounts</span>
-                    <span>-{formatKSh(itemDiscounts)}</span>
-                  </div>
-                )}
-                {cartDiscount > 0 && (
-                  <div className="flex justify-between text-destructive">
-                    <span className="text-muted-foreground">Cart Discount</span>
-                    <span>-{formatKSh(cartDiscount)}</span>
-                  </div>
-                )}
-                {promotionDiscount > 0 && (
-                  <div className="flex justify-between text-blue-600">
-                    <span className="text-muted-foreground">Promotion Discount</span>
-                    <span>-{formatKSh(promotionDiscount)}</span>
-                  </div>
-                )}
-                {(loyaltyRedemption?.redemptionDiscount || 0) > 0 && (
-                  <div className="flex justify-between text-destructive">
-                    <span className="text-muted-foreground">Loyalty Redemption</span>
-                    <span>-{formatKSh(loyaltyRedemption?.redemptionDiscount || 0)}</span>
-                  </div>
-                )}
+              {/* Order summary */}
+              <PaymentSummary
+                subtotal={subtotal}
+                itemDiscounts={itemDiscounts}
+                cartDiscount={cartDiscount}
+                promotionDiscount={promotionDiscount}
+                redemptionDiscount={loyaltyRedemption?.redemptionDiscount || 0}
+                total={total}
+                variant="full"
+              />
 
-                <Separator className="my-2" />
-
-                <div className="flex justify-between items-center">
-                  <span className="font-bold text-base">Total to Pay</span>
-                  <span className="font-bold text-2xl text-primary">
-                    {formatKSh(totalAfterRedemption)}
-                  </span>
-                </div>
-              </div>
-
+              {/* Loyalty redemption */}
               {customer && loyaltyRedemption && (
-                <div className="space-y-3 rounded-lg border bg-primary/5 p-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-medium">Loyalty Redemption</div>
-                      <div className="text-xs text-muted-foreground">
-                        Customer balance: {loyaltyRedemption.currentBalance.toLocaleString()} pts
-                      </div>
-                    </div>
-                    <div className="text-right text-xs text-muted-foreground">
-                      <div>Value per point</div>
-                      <div className="font-medium text-foreground">
-                        {formatKSh(loyaltyRedemption.redeemValueCents)}
-                      </div>
-                    </div>
-                  </div>
-
-                  {loyaltyRedemption.loading ? (
-                    <div className="rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-                      Checking loyalty redemption eligibility...
-                    </div>
-                  ) : loyaltyRedemption.eligible ? (
-                    <>
-                      <div className="grid grid-cols-[1fr_auto_auto] gap-2">
-                        <div className="space-y-2">
-                          <Label htmlFor="redeemPoints">Points to Redeem</Label>
-                          <Input
-                            id="redeemPoints"
-                            type="number"
-                            min={0}
-                            max={loyaltyRedemption.maxRedeemablePoints}
-                            value={loyaltyRedemption.pointsToRedeem > 0 ? loyaltyRedemption.pointsToRedeem : ""}
-                            onChange={(e) => onRedemptionPointsChange?.(parseInt(e.target.value || "0", 10))}
-                            disabled={isProcessing}
-                          />
-                        </div>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="self-end"
-                          disabled={isProcessing}
-                          onClick={() => onRedemptionPointsChange?.(loyaltyRedemption.maxRedeemablePoints)}
-                        >
-                          Max
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          className="self-end"
-                          disabled={isProcessing || loyaltyRedemption.pointsToRedeem === 0}
-                          onClick={() => onRedemptionPointsChange?.(0)}
-                        >
-                          Clear
-                        </Button>
-                      </div>
-
-                      <div className="rounded-md bg-background px-3 py-2 text-sm space-y-1">
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Redeemable now</span>
-                          <span>
-                            up to {loyaltyRedemption.maxRedeemablePoints.toLocaleString()} pts
-                            {" "}
-                            ({formatKSh(loyaltyRedemption.maxRedeemableDiscount)})
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Redemption value</span>
-                          <span>-{formatKSh(loyaltyRedemption.redemptionDiscount)}</span>
-                        </div>
-                        <div className="flex justify-between font-semibold">
-                          <span>New cash total</span>
-                          <span>{formatKSh(totalAfterRedemption)}</span>
-                        </div>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-                      {loyaltyRedemption.reason || 'This customer is not eligible to redeem points on this sale.'}
-                    </div>
-                  )}
-                </div>
+                <LoyaltyRedemptionSection
+                  data={loyaltyRedemption as LoyaltyRedemptionData}
+                  totalAfterRedemption={totalAfterRedemption}
+                  onPointsChange={onRedemptionPointsChange!}
+                  disabled={isProcessing}
+                />
               )}
 
-              {/* ── Split Payment Toggle ───────────────────── */}
-              <div className="flex items-center justify-between rounded-lg border p-3">
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    id="splitPayment"
-                    checked={enableSplit}
-                    onCheckedChange={(checked) => {
-                      if (isProcessing) return
-                      setEnableSplit(!!checked)
-                      if (!checked) {
-                        setSplits([])
-                        setSplitAmountInputs({})
-                      } else {
-                        const id = crypto.randomUUID()
-                        setSplits([{ id, method: 'cash', amount: totalAfterRedemption }])
-                        setSplitAmountInputs({ [id]: String(totalAfterRedemption) })
-                      }
-                    }}
-                  />
-                  <Label htmlFor="splitPayment" className="text-sm font-medium cursor-pointer">Split Payment</Label>
-                </div>
-                <span className="text-xs text-muted-foreground">Multiple methods</span>
-              </div>
+              {/* Split payment */}
+              <SplitPaymentForm
+                enabled={enableSplit}
+                onToggle={(checked) => {
+                  if (isProcessing) return
+                  setEnableSplit(checked)
+                  if (!checked) {
+                    setSplits([])
+                    setSplitAmountInputs({})
+                  } else {
+                    const id = crypto.randomUUID()
+                    setSplits([{ id, method: 'cash', amount: totalAfterRedemption }])
+                    setSplitAmountInputs({ [id]: String(totalAfterRedemption) })
+                  }
+                }}
+                splits={splits}
+                splitAmountInputs={splitAmountInputs}
+                onAddSplit={addSplitMethod}
+                onRemoveSplit={removeSplit}
+                onUpdateSplitMethod={updateSplitMethod}
+                onUpdateSplitAmount={updateSplitAmount}
+                totalToPay={totalAfterRedemption}
+                disabled={isProcessing}
+              />
 
-              {enableSplit ? (
-                <div className="space-y-3 rounded-lg border bg-muted/10 p-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                      Payment Allocation
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 text-xs gap-1"
-                      onClick={() => {
-                        // Auto-balance: distribute remaining evenly across splits
-                        const remaining = totalAfterRedemption - splits.reduce((s, sp) => s + sp.amount, 0)
-                        if (remaining <= 0 || splits.length === 0) return
-                        const perSplit = Math.floor(remaining / splits.length)
-                        const extra = remaining - perSplit * splits.length
-                        setSplits(prev => prev.map((sp, i) => {
-                          const newAmt = sp.amount + perSplit + (i === 0 ? extra : 0)
-                          return { ...sp, amount: newAmt }
-                        }))
-                        setSplitAmountInputs(prev => {
-                          const next = { ...prev }
-                          splits.forEach((sp, i) => {
-                            const newAmt = sp.amount + perSplit + (i === 0 ? extra : 0)
-                            next[sp.id] = String(newAmt)
-                          })
-                          return next
-                        })
-                      }}
-                      disabled={isProcessing || splits.length === 0}
-                    >
-                      <Wand2 className="h-3 w-3 mr-1" />
-                      Auto-Balance
-                    </Button>
-                  </div>
-
-                  {/* Progress bar showing allocation */}
-                  {(() => {
-                    const allocated = splits.reduce((s, sp) => s + sp.amount, 0)
-                    const pct = totalAfterRedemption > 0 ? Math.min((allocated / totalAfterRedemption) * 100, 100) : 0
-                    const remaining = totalAfterRedemption - allocated
-                    return (
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-muted-foreground">
-                            {formatKSh(allocated)} / {formatKSh(totalAfterRedemption)}
-                          </span>
-                          <span className={remaining > 0 ? 'text-destructive font-medium' : 'text-green-600 font-medium'}>
-                            {remaining > 0 ? `${formatKSh(remaining)} remaining` : 'Fully allocated'}
-                          </span>
-                        </div>
-                        <div className="w-full bg-muted rounded-full h-2 overflow-hidden flex">
-                          {splits.map((sp, i) => {
-                            const width = totalAfterRedemption > 0 ? (sp.amount / totalAfterRedemption) * 100 : 0
-                            const colors = ['bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-amber-500', 'bg-rose-500']
-                            return width > 0 ? (
-                              <div
-                                key={sp.id}
-                                className={`${colors[i % colors.length]} h-2 transition-all`}
-                                style={{ width: `${Math.min(width, 100)}%` }}
-                                title={`${sp.method}: ${formatKSh(sp.amount)}`}
-                              />
-                            ) : null
-                          })}
-                          {remaining > 0 && (
-                            <div className="bg-muted-foreground/20 h-2 flex-1" title={`Unallocated: ${formatKSh(remaining)}`} />
-                          )}
-                        </div>
-                        {/* Color legend */}
-                        <div className="flex flex-wrap gap-2 pt-1">
-                          {splits.map((sp, i) => {
-                            const colors = ['bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-amber-500', 'bg-rose-500']
-                            return (
-                              <span key={sp.id} className="flex items-center gap-1 text-[9px] text-muted-foreground">
-                                <span className={`inline-block w-2 h-2 rounded-full ${colors[i % colors.length]}`} />
-                                {sp.method}
-                              </span>
-                            )
-                          })}
-                        </div>
-                      </div>
-                    )
-                  })()}
-
-                  {/* Quick split presets */}
-                  <div className="flex gap-1">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-[10px] h-7 px-2"
-                      onClick={() => {
-                        // 50/50
-                        const half = Math.floor(totalAfterRedemption / 2)
-                        if (splits.length >= 2) {
-                          setSplits(prev => prev.map((sp, i) => ({
-                            ...sp,
-                            amount: i === 0 ? half + (totalAfterRedemption - half * 2) : half,
-                          })))
-                          setSplitAmountInputs(prev => {
-                            const next = { ...prev }
-                            splits.forEach((sp, i) => {
-                              next[sp.id] = String(i === 0 ? half + (totalAfterRedemption - half * 2) : half)
-                            })
-                            return next
-                          })
-                        }
-                      }}
-                      disabled={isProcessing || splits.length < 2}
-                    >
-                      <Split className="h-3 w-3 mr-1" />
-                      50/50
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-[10px] h-7 px-2"
-                      onClick={() => {
-                        // Equal split
-                        const perSplit = Math.floor(totalAfterRedemption / splits.length)
-                        const extra = totalAfterRedemption - perSplit * splits.length
-                        setSplits(prev => prev.map((sp, i) => ({
-                          ...sp,
-                          amount: perSplit + (i === 0 ? extra : 0),
-                        })))
-                        setSplitAmountInputs(prev => {
-                          const next = { ...prev }
-                          splits.forEach((sp, i) => {
-                            next[sp.id] = String(perSplit + (i === 0 ? extra : 0))
-                          })
-                          return next
-                        })
-                      }}
-                      disabled={isProcessing || splits.length < 2}
-                    >
-                      Equal
-                    </Button>
-                  </div>
-
-                  {splits.map((split) => (
-                    <div key={split.id} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-end">
-                      <div className="space-y-1">
-                        <Label className="text-xs">Method</Label>
-                        <Select
-                          value={split.method}
-                          onValueChange={(v: 'cash' | 'card' | 'bank_transfer' | 'cheque' | 'credit') =>
-                            updateSplitMethod(split.id, v)
-                          }
-                          disabled={isProcessing}
-                        >
-                          <SelectTrigger className="h-9">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="cash">Cash</SelectItem>
-                            <SelectItem value="card">Card</SelectItem>
-                            <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-                            <SelectItem value="cheque">Cheque</SelectItem>
-                            <SelectItem value="credit">Credit</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Amount (KSh)</Label>
-                        <Input
-                          type="number"
-                          min={0}
-                          placeholder="0"
-                          value={splitAmountInputs[split.id] ?? ''}
-                          onChange={(e) => updateSplitAmount(split.id, e.target.value)}
-                          className="h-9"
-                          disabled={isProcessing}
-                        />
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-9 w-9"
-                        onClick={() => removeSplit(split.id)}
-                        disabled={isProcessing || splits.length <= 1}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
-                  <div className="flex items-center justify-between text-sm">
-                    <Button variant="outline" size="sm" onClick={addSplitMethod} disabled={isProcessing}>
-                      <Plus className="h-3 w-3 mr-1" />
-                      Add Method
-                    </Button>
-                  </div>
-                </div>
-              ) : (
+              {/* Payment method + forms (only when split is off) */}
+              {!enableSplit && (
                 <>
-                  <div className="grid grid-cols-3 gap-2">
-                    <Card
-                      className={`p-4 cursor-pointer text-center transition-all border-2 ${
-                        selectedMethod === "cash"
-                          ? "bg-primary/10 text-primary border-primary"
-                          : "border-border hover:border-primary/40"
-                      }`}
-                      onClick={() => {
-                        if (isProcessing) return
-                        setSelectedMethod("cash")
-                        setPaymentError(null)
-                        setPaymentStatus("")
-                      }}
-                    >
-                      <Banknote className="h-6 w-6 mx-auto mb-2" />
-                      <span className="text-sm font-medium">Cash</span>
-                    </Card>
-                    <Card
-                      className={`p-4 cursor-pointer text-center transition-all border-2 ${
-                        selectedMethod === "mpesa"
-                          ? "bg-primary/10 text-primary border-primary"
-                          : "border-border hover:border-primary/40"
-                      }`}
-                      onClick={() => {
-                        if (isProcessing) return
-                        setSelectedMethod("mpesa")
-                        setPaymentError(null)
-                        setPaymentStatus("")
-                      }}
-                    >
-                      <Smartphone className="h-6 w-6 mx-auto mb-2" />
-                      <span className="text-sm font-medium">M-Pesa</span>
-                    </Card>
-                    <Card
-                      className={`p-4 cursor-pointer text-center transition-all border-2 ${
-                        selectedMethod === "card"
-                          ? "bg-primary/10 text-primary border-primary"
-                          : "border-border hover:border-primary/40"
-                      }`}
-                      onClick={() => {
-                        if (isProcessing) return
-                        setSelectedMethod("card")
-                        setPaymentError(null)
-                        setPaymentStatus("")
-                      }}
-                    >
-                      <CreditCard className="h-6 w-6 mx-auto mb-2" />
-                      <span className="text-sm font-medium">Card</span>
-                    </Card>
-                  </div>
+                  <PaymentMethodSelector
+                    selected={selectedMethod}
+                    onSelect={(m) => { setSelectedMethod(m); setPaymentError(null); setPaymentStatus("") }}
+                    disabled={isProcessing}
+                  />
 
                   {selectedMethod === "cash" ? (
-                    <div className="space-y-3">
-                      <div className="space-y-2">
-                        <Label htmlFor="amount">Amount Received</Label>
-                        <Input
-                          id="amount"
-                          type="number"
-                          placeholder="Enter amount"
-                          value={amountReceived}
-                          onChange={(e) => setAmountReceived(e.target.value)}
-                          className="text-lg h-12"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                        {[totalAfterRedemption, Math.ceil(totalAfterRedemption / 100) * 100, Math.ceil(totalAfterRedemption / 500) * 500, Math.ceil(totalAfterRedemption / 1000) * 1000].map((amount, i) => (
-                          <Button key={`dyn-${i}`} variant="outline" size="sm" onClick={() => setAmountReceived(amount.toString())} className="text-xs">
-                            {formatKSh(amount)}
-                          </Button>
-                        ))}
-                      </div>
-
-                      <div className="grid grid-cols-5 gap-2">
-                        {[50, 100, 200, 500, 1000].map((denom) => (
-                          <Button key={denom} variant="outline" size="sm" onClick={() => {
-                            const current = parseFloat(amountReceived) || 0
-                            setAmountReceived((current + denom).toString())
-                          }} className="text-xs">
-                            +{formatKSh(denom)}
-                          </Button>
-                        ))}
-                      </div>
-
-                      {parseFloat(amountReceived) >= totalAfterRedemption && (
-                        <div className="space-y-2">
-                          <div className="flex justify-between p-4 rounded-lg bg-success/10 text-success border border-success/20">
-                            <span className="font-medium">Change to Return</span>
-                            <span className="font-bold text-lg">{formatKSh(change)}</span>
-                          </div>
-                          {change > 0 && (
-                            <div className="rounded-lg bg-muted/30 border p-3 text-sm space-y-1">
-                              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Break Down</p>
-                              {(() => {
-                                const denoms = [1000, 500, 200, 100, 50, 20, 10, 5, 1]
-                                const remaining = Math.round(change)
-                                const parts: { denom: number; count: number }[] = []
-                                let rem = remaining
-                                for (const d of denoms) {
-                                  if (rem >= d) {
-                                    const count = Math.floor(rem / d)
-                                    parts.push({ denom: d, count })
-                                    rem = rem % d
-                                  }
-                                }
-                                return (
-                                  <div className="flex flex-wrap gap-x-3 gap-y-1">
-                                    {parts.map((p) => (
-                                      <span key={p.denom} className="text-xs">
-                                         {p.count} &times; {formatKSh(p.denom)}
-                                      </span>
-                                    ))}
-                                  </div>
-                                )
-                              })()}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
+                    <CashPaymentForm
+                      amountReceived={amountReceived}
+                      onAmountChange={setAmountReceived}
+                      totalToPay={totalAfterRedemption}
+                      disabled={isProcessing}
+                    />
                   ) : selectedMethod === "card" ? (
-                    <div className="space-y-3">
-                      <div className="rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                        Card payment is processed securely via Stripe. Click "Process Card Payment" below to open the secure card form.
-                      </div>
-                    </div>
+                    <CardPaymentForm />
                   ) : (
-                    <div className="space-y-3">
-                      <div className="space-y-2">
-                        <Label htmlFor="mpesaPhone">Customer M-Pesa Phone Number</Label>
-                        <Input
-                          id="mpesaPhone"
-                          type="tel"
-                          placeholder="e.g. 0712345678"
-                          value={mpesaPhone}
-                          onChange={(e) => setMpesaPhone(e.target.value)}
-                          className="text-lg h-12"
-                          disabled={isMpesaPending}
-                        />
-                      </div>
-                      <div className="rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                        Send the STK prompt, then wait for the customer to enter their M-Pesa PIN on their phone.
-                      </div>
-                    </div>
+                    <MpesaPaymentForm
+                      phone={mpesaPhone}
+                      onPhoneChange={setMpesaPhone}
+                      disabled={isMpesaPending}
+                    />
                   )}
                 </>
               )}
 
+              {/* Pay button */}
               <Button
                 className="w-full h-12 text-lg font-semibold"
                 onClick={handlePayment}
@@ -1096,111 +722,23 @@ export function PaymentPanel({
         </DialogContent>
       </Dialog>
 
-      <Dialog
+      {/* ── Receipt Dialog ─────────────────────────────────── */}
+      <ReceiptDialog
         open={showReceipt}
-        onOpenChange={(open) => {
-          if (!open) {
-            handleComplete()
-          }
-        }}
-      >
-        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto print:max-h-none print:overflow-visible">
-          <DialogHeader className="sr-only">
-            <DialogTitle>Receipt Preview</DialogTitle>
-            <DialogDescription>
-              Review the saved receipt, print it, or close the dialog to continue checkout.
-            </DialogDescription>
-          </DialogHeader>
-          {receiptLoadError ? (
-            <div className="text-center space-y-4 py-6">
-              <div className="h-16 w-16 rounded-full bg-destructive/10 mx-auto flex items-center justify-center">
-                <AlertCircle className="h-8 w-8 text-destructive" />
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-destructive">Receipt Not Ready</h3>
-                <p className="text-sm text-muted-foreground mt-2">
-                  {receiptLoadError}
-                </p>
-              </div>
+        onOpenChange={handleReceiptDialogChange}
+        receiptNumber={receiptNumber}
+        receiptLoadError={receiptLoadError}
+        fullSaleData={fullSaleData}
+        onRetry={() => setReceiptLoadError(null)}
+        onComplete={handleComplete}
+        paymentMethodText={paymentMethodText}
+      />
 
-              <div className="bg-muted/50 rounded-lg p-4 text-left space-y-2 text-sm">
-                <div className="space-y-1">
-                  <p className="font-medium">What you can do:</p>
-                  <ul className="text-xs text-muted-foreground space-y-1 ml-4">
-                    <li>The sale may already be saved.</li>
-                    <li>Receipt #: {receiptNumber}</li>
-                    <li>Close this window and check recent sales.</li>
-                  </ul>
-                </div>
-              </div>
-
-              <div className="flex gap-2 pt-2">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setReceiptLoadError(null)
-                  }}
-                  className="flex-1"
-                >
-                  <RotateCcw className="h-4 w-4 mr-2" />
-                  Retry
-                </Button>
-                <Button
-                  onClick={() => handleComplete()}
-                  className="flex-1"
-                >
-                  <X className="h-4 w-4 mr-2" />
-                  Close and Continue
-                </Button>
-              </div>
-            </div>
-          ) : fullSaleData ? (
-            <div className="py-4">
-              <ReceiptPreview
-                saleData={fullSaleData}
-                showPrintButton={true}
-                showCloseButton={true}
-                onPrint={() => {
-                  // ReceiptPreview handles print itself.
-                }}
-                onClose={() => {
-                  handleComplete()
-                }}
-              />
-            </div>
-          ) : (
-            <div className="text-center space-y-4 py-6 max-h-[70vh] overflow-y-auto">
-              <div className="h-16 w-16 rounded-full bg-success/10 mx-auto flex items-center justify-center">
-                <Check className="h-8 w-8 text-success" />
-              </div>
-              <div>
-                <h3 className="text-xl font-bold">
-                  {selectedMethod === "mpesa" ? "Finalizing M-Pesa Payment..." : "Finalizing Cash Sale..."}
-                </h3>
-                <p className="text-success font-mono text-lg font-bold mt-2">
-                  Receipt #{receiptNumber}
-                </p>
-              </div>
-
-              <div className="bg-muted/50 rounded-lg p-4 text-left space-y-2 text-sm">
-                <div className="flex items-center gap-2">
-                  <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
-                  <p className="text-sm text-muted-foreground">Preparing your receipt...</p>
-                </div>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Stripe Card Checkout Dialog */}
+      {/* ── Stripe Card Checkout ────────────────────────────── */}
       <Dialog
         open={showStripeCheckout}
         onOpenChange={(open) => {
-          if (!open) {
-            setShowStripeCheckout(false)
-            setStripeSaleId(null)
-          }
+          if (!open) { setShowStripeCheckout(false); setStripeSaleId(null) }
         }}
       >
         <DialogContent className="sm:max-w-md">
@@ -1217,7 +755,7 @@ export function PaymentPanel({
             <StripeCheckout
               saleId={stripeSaleId}
               amount={totalAfterRedemption}
-              onSuccess={async (paymentIntentId) => {
+              onSuccess={async (paymentIntentId: string) => {
                 setShowStripeCheckout(false)
                 setStripeSaleId(null)
                 setPaymentStatus("Card payment confirmed. Opening receipt...")
@@ -1227,7 +765,7 @@ export function PaymentPanel({
                   stripePaymentIntentId: paymentIntentId,
                 })
               }}
-              onError={(error) => {
+              onError={(error: string) => {
                 setPaymentError(error)
                 setShowStripeCheckout(false)
                 setStripeSaleId(null)
@@ -1240,6 +778,30 @@ export function PaymentPanel({
           )}
         </DialogContent>
       </Dialog>
+
+      {/* ── Success Animation ──────────────────────────────── */}
+      <PaymentSuccessAnimation
+        show={showSuccessAnimation}
+        confirmed={animationConfirmed}
+        method={selectedMethod}
+        receiptNumber={receiptNumber}
+        totalAmount={total}
+        customerEmail={customer?.email}
+        onComplete={() => {
+          setShowSuccessAnimation(false)
+          setAnimationConfirmed(false)
+          // Wait for animation, then show receipt
+          setTimeout(() => setShowReceipt(true), 300)
+        }}
+        onViewReceipt={() => {
+          setShowSuccessAnimation(false)
+          setAnimationConfirmed(false)
+          setTimeout(() => setShowReceipt(true), 300)
+        }}
+        onNewPayment={() => {
+          handleComplete()
+        }}
+      />
     </>
   )
 }

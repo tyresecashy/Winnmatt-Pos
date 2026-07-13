@@ -16,7 +16,7 @@ import { authenticateRequest, verifySaleAccess, unauthorizedResponse, forbiddenR
 import { logger } from '@/lib/logger'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2024-12-18.acacia' as any,
+  apiVersion: '2026-06-24.dahlia' as const,
 })
 
 export async function POST(req: NextRequest) {
@@ -129,10 +129,7 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     logger.error('[Stripe] Create PaymentIntent error', error)
     return NextResponse.json(
-      {
-        error: 'Internal server error',
-        message: error instanceof Error ? error.message : 'Unknown error',
-      },
+      { error: 'Internal server error' },
       { status: 500 }
     )
   }

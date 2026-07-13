@@ -161,7 +161,7 @@ export async function createFeatureFlag(
     return { success: true }
   } catch (error) {
     logger.error('[FeatureFlags] Failed to create flag:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -186,7 +186,7 @@ export async function updateFeatureFlag(
     return { success: true }
   } catch (error) {
     logger.error('[FeatureFlags] Failed to update flag:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -218,7 +218,7 @@ export async function toggleFeatureFlag(id: string): Promise<{ success: boolean;
     return { success: true }
   } catch (error) {
     logger.error('[FeatureFlags] Failed to toggle flag:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -240,7 +240,7 @@ export async function deleteFeatureFlag(id: string): Promise<{ success: boolean;
     return { success: true }
   } catch (error) {
     logger.error('[FeatureFlags] Failed to delete flag:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 

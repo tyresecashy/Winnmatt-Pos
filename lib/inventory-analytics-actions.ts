@@ -88,7 +88,7 @@ export async function getInventoryAnalytics() {
     const supplierMap: Record<string, string> = {}
     for (const s of suppliers || []) { supplierMap[s.id] = s.name }
 
-    const processedProducts: AnalyticsProduct[] = (products || [])
+    const processedProducts: AnalyticsProduct[] = ((products || [])
       .filter(p => p.status === 'active')
       .map(p => {
         const stock = stockMap[p.id] || { total: 0, reserved: 0, branches: new Set() }
@@ -129,7 +129,7 @@ export async function getInventoryAnalytics() {
           branch_count: stock.branches.size,
           preferred_supplier_name: supplierMap[p.preferred_supplier_id || ''] || null,
         }
-      })
+      })) as AnalyticsProduct[]
 
     return {
       products: processedProducts,
@@ -320,7 +320,7 @@ export async function createPurchaseOrdersFromSuggestions(branchId: string) {
     }
   } catch (error) {
     logger.error('Error creating POs from suggestions:', error)
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to create POs', orders: [] }
+    return { success: false, error: 'Operation failed. Please try again.', orders: [] }
   }
 }
 
@@ -332,7 +332,8 @@ export async function dismissReorderSuggestion(productId: string) {
     // Could update reorder_suggestions table if it exists
     return { success: true }
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to dismiss' }
+    logger.error('Operation failed', { error: error })
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 

@@ -37,7 +37,7 @@ export function CSVUploadDialog({ onImportComplete }: CSVUploadDialogProps) {
   const [file, setFile] = useState<File | null>(null)
   const [sourceName, setSourceName] = useState('csv_import')
   const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState<any>(null)
+  const [result, setResult] = useState<{ batchId?: string; totalRecords?: number; validRecords?: number; errors?: string[] } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const { toast } = useToast()
 
@@ -147,13 +147,13 @@ export function CSVUploadDialog({ onImportComplete }: CSVUploadDialogProps) {
               <p>
                 <strong>Valid Records:</strong> {result.validRecords}
               </p>
-              {result.invalidRecords > 0 && (
+              {(result.errors?.length ?? 0) > 0 && (
                 <p className="text-amber-600">
-                  <strong>Invalid Records:</strong> {result.invalidRecords}
+                  <strong>Invalid Records:</strong> {result.errors?.length}
                 </p>
               )}
             </div>
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-muted-foreground">
               Processing may take a few minutes. Check the staging review page.
             </p>
           </div>
@@ -185,7 +185,7 @@ export function CSVUploadDialog({ onImportComplete }: CSVUploadDialogProps) {
                 disabled={loading}
               />
               {file && (
-                <p className="text-sm text-gray-600">
+                <p className="text-sm text-muted-foreground">
                   Selected: {file.name} ({(file.size / 1024).toFixed(0)} KB)
                 </p>
               )}

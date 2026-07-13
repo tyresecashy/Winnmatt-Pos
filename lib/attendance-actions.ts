@@ -24,10 +24,14 @@ export async function clockEvent(data: {
       .select()
       .single()
 
-    if (error) throw new Error(error.message)
+    if (error) {
+      if (error) logger.error('Operation failed', { error: error })
+      throw new Error('Operation failed')
+    }
     return { success: true, data: result }
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to record clock event' }
+    logger.error('Operation failed', { error: error })
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -67,7 +71,7 @@ export async function getAttendanceReport(branchId: string, date?: string) {
     if (error) throw error
 
     // Group by user
-    const grouped: Record<string, { user: any; events: any[] }> = {}
+    const grouped: Record<string, { user: Record<string, unknown>; events: Record<string, unknown>[] }> = {}
     for (const event of data || []) {
       const uid = event.user_id
       if (!grouped[uid]) {
@@ -115,6 +119,37 @@ export async function getShiftTemplates(branchId?: string) {
   } catch (error) {
     logger.error('Error fetching shift templates:', error)
     return []
+  }
+}
+
+/**
+ * Create an employee schedule record.
+ * This bridges the legacy employee_schedules system with the attendance display.
+ * Note: Future consolidation will migrate to worker_shifts.
+ */
+export async function addEmployeeSchedule(data: {
+  employee_profile_id: string
+  branch_id: string
+  date: string
+  start_time: string
+  end_time: string
+}) {
+  try {
+    const { error } = await supabaseAdmin
+      .from('employee_schedules')
+      .insert({
+        employee_profile_id: data.employee_profile_id,
+        branch_id: data.branch_id,
+        date: data.date,
+        start_time: data.start_time,
+        end_time: data.end_time,
+      })
+
+    if (error) throw error
+    return { success: true }
+  } catch (error) {
+    logger.error('[Attendance] Failed to add schedule:', error)
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 

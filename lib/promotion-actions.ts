@@ -37,10 +37,10 @@ export interface PromotionCoupon {
   id: string
   promotion_id: string
   code: string
-  usage_limit: number
-  current_usage: number
-  is_active: boolean
-  created_at: string
+  usage_limit: number | null
+  current_usage: number | null
+  is_active: boolean | null
+  created_at: string | null
 }
 
 export interface PromotionWithCoupons extends Promotion {
@@ -57,7 +57,7 @@ export async function getPromotions(): Promise<Promotion[]> {
       .order('created_at', { ascending: false })
 
     if (error) throw error
-    return data || []
+    return (data || []) as unknown as Promotion[]
   } catch (error) {
     logger.error('[PROMO] Failed to fetch promotions:', error)
     return []
@@ -80,7 +80,7 @@ export async function getPromotionById(id: string): Promise<PromotionWithCoupons
       .eq('promotion_id', id)
       .order('created_at', { ascending: true })
 
-    return { ...promotion, coupons: coupons || [] }
+    return { ...(promotion as unknown as Omit<PromotionWithCoupons, 'coupons'>), coupons: (coupons || []) as unknown as PromotionWithCoupons['coupons'] }
   } catch (error) {
     logger.error('[PROMO] Failed to fetch promotion:', error)
     return null
@@ -103,7 +103,7 @@ export async function createPromotion(
       .single()
 
     if (error) throw error
-    return promo
+    return promo as unknown as Promotion
   } catch (error) {
     logger.error('[PROMO] Failed to create promotion:', error)
     return null
@@ -128,7 +128,7 @@ export async function updatePromotion(
       .single()
 
     if (error) throw error
-    return data
+    return data as unknown as Promotion
   } catch (error) {
     logger.error('[PROMO] Failed to update promotion:', error)
     return null
@@ -252,7 +252,7 @@ export async function getAutoApplyPromotions(
 
     if (error) throw error
 
-    const promotions = (data || []).filter((p: Promotion) => {
+    const promotions = ((data || []) as unknown as Promotion[]).filter((p: Promotion) => {
       // Check min purchase
       if (p.min_purchase_cents > 0 && cartTotalCents < p.min_purchase_cents) return false
 
@@ -300,7 +300,7 @@ export async function validateCoupon(
     if (!coupon.is_active) return { valid: false, error: 'Coupon is inactive' }
 
     // Check coupon usage limit
-    if (coupon.usage_limit > 0 && coupon.current_usage >= coupon.usage_limit) {
+    if ((coupon.usage_limit ?? 0) > 0 && (coupon.current_usage ?? 0) >= (coupon.usage_limit ?? 0)) {
       return { valid: false, error: 'Coupon has reached its usage limit' }
     }
 
@@ -383,9 +383,10 @@ export async function applyPromotionToSale(
         couponId = coupon.id
 
         // Increment coupon usage atomically
-        const { error: couponIncErr } = await supabaseAdmin.rpc('exec_sql', {
-          query: `UPDATE promotion_coupons SET current_usage = COALESCE(current_usage, 0) + 1 WHERE id = '${coupon.id}'`,
-        })
+        const { error: couponIncErr } = await supabaseAdmin
+          .from('promotion_coupons')
+          .update({ current_usage: (coupon.current_usage ?? 0) + 1 })
+          .eq('id', coupon.id)
         if (couponIncErr) {
           logger.warn('[PROMO] Failed to increment coupon usage:', { error: couponIncErr.message })
         }
@@ -406,9 +407,16 @@ export async function applyPromotionToSale(
     if (logError) throw logError
 
     // Increment promotion usage counter atomically
-    const { error: promoIncErr } = await supabaseAdmin.rpc('exec_sql', {
-      query: `UPDATE promotions SET current_usage = COALESCE(current_usage, 0) + 1 WHERE id = '${promotionId}'`,
-    })
+    // Fetch current usage first for safe non-SQL-injection update
+    const { data: promo } = await supabaseAdmin
+      .from('promotions')
+      .select('current_usage')
+      .eq('id', promotionId)
+      .maybeSingle()
+    const { error: promoIncErr } = await supabaseAdmin
+      .from('promotions')
+      .update({ current_usage: (promo?.current_usage ?? 0) + 1 })
+      .eq('id', promotionId)
     if (promoIncErr) {
       logger.warn('[PROMO] Failed to increment promotion usage:', { error: promoIncErr.message })
     }

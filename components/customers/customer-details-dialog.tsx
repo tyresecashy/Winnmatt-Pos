@@ -14,9 +14,10 @@ import {
 } from "@/components/ui/dialog"
 import { formatKSh } from "@/lib/currency"
 import { Phone, Mail, Loader2, Calendar, ShoppingBag, Edit2, Cake, StickyNote, Tag, Users } from "lucide-react"
-import { getCustomerPurchases } from "@/lib/customers-actions"
-import { getCustomerSegments } from "@/lib/segment-actions"
-import type { Segment } from "@/lib/segment-actions"
+import { EmptyState } from "@/components/ui/empty-state"
+import { getCustomerPurchases } from "@/lib/modules/customers"
+import { getCustomerSegments } from "@/lib/modules/crm"
+import type { Segment } from "@/lib/modules/crm"
 
 interface CustomerDetailsDialogProps {
   isOpen: boolean
@@ -263,7 +264,7 @@ export function CustomerDetailsDialog({
                 <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
               </div>
             ) : purchases.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No purchases yet</p>
+              <EmptyState title="No purchases yet" compact />
             ) : (
               <div className="space-y-2">
                 {purchases.map((purchase) => (

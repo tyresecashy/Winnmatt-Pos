@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, startTransition } from 'react'
 import {
   Card,
   CardContent,
@@ -27,10 +27,11 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Building2, Users, CreditCard, TrendingUp, RefreshCw, AlertCircle, Search } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Input } from '@/components/ui/input'
 import { formatKSh } from '@/lib/currency'
-import { getCustomers } from '@/lib/customers-actions'
-import type { Customer } from '@/lib/customers-actions'
+import { getCustomersLegacy as getCustomers } from '@/lib/modules/customers'
+import type { CustomerRow as Customer } from '@/lib/modules/customers'
 
 export default function BusinessAccountsPage() {
   const [customers, setCustomers] = useState<Customer[]>([])
@@ -58,7 +59,7 @@ export default function BusinessAccountsPage() {
   }
 
   useEffect(() => {
-    loadCustomers()
+    startTransition(() => { loadCustomers() })
   }, [])
 
   const filtered = customers.filter((c) => {
@@ -204,17 +205,12 @@ export default function BusinessAccountsPage() {
               ))}
             </div>
           ) : filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted mb-4">
-                <Building2 className="h-6 w-6 text-muted-foreground" />
-              </div>
-              <p className="text-sm font-medium">No business accounts yet</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                {search
-                  ? 'No accounts match your search.'
-                  : 'Create a business or wholesale customer with a credit limit to see them here.'}
-              </p>
-            </div>
+            <EmptyState
+              icon={Building2}
+              title="No business accounts yet"
+              description={search ? 'No accounts match your search.' : 'Create a business or wholesale customer with a credit limit to see them here.'}
+              compact
+            />
           ) : (
             <Table>
               <TableHeader>

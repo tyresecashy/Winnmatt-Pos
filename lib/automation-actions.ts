@@ -143,7 +143,8 @@ export async function createAutomationRule(rule: {
     if (error) throw error
     return { success: true, id: data.id }
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to create rule' }
+    logger.error('Operation failed', { error: error })
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -160,6 +161,11 @@ export async function updateAutomationRule(
   }>
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    const auth = await authenticateServerAction()
+    if (!auth.success || !auth.profile) {
+      return { success: false, error: auth.error || 'Unauthorized' }
+    }
+
     const { error } = await supabaseAdmin
       .from('automation_rules')
       .update({ ...updates, updated_at: new Date().toISOString() })
@@ -168,12 +174,18 @@ export async function updateAutomationRule(
     if (error) throw error
     return { success: true }
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to update rule' }
+    logger.error('Operation failed', { error: error })
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
 export async function toggleAutomationRule(ruleId: string): Promise<{ success: boolean; is_active?: boolean; error?: string }> {
   try {
+    const auth = await authenticateServerAction()
+    if (!auth.success || !auth.profile) {
+      return { success: false, error: auth.error || 'Unauthorized' }
+    }
+
     // Get current state
     const { data: rule } = await supabaseAdmin
       .from('automation_rules')
@@ -192,12 +204,18 @@ export async function toggleAutomationRule(ruleId: string): Promise<{ success: b
     if (error) throw error
     return { success: true, is_active: newState }
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to toggle rule' }
+    logger.error('Operation failed', { error: error })
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
 export async function deleteAutomationRule(ruleId: string): Promise<{ success: boolean; error?: string }> {
   try {
+    const auth = await authenticateServerAction()
+    if (!auth.success || !auth.profile) {
+      return { success: false, error: auth.error || 'Unauthorized' }
+    }
+
     const { error } = await supabaseAdmin
       .from('automation_rules')
       .delete()
@@ -206,7 +224,8 @@ export async function deleteAutomationRule(ruleId: string): Promise<{ success: b
     if (error) throw error
     return { success: true }
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to delete rule' }
+    logger.error('Operation failed', { error: error })
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -223,6 +242,11 @@ export async function upsertCondition(condition: {
   sort_order?: number
 }): Promise<{ success: boolean; id?: string; error?: string }> {
   try {
+    const auth = await authenticateServerAction()
+    if (!auth.success || !auth.profile) {
+      return { success: false, error: auth.error || 'Unauthorized' }
+    }
+
     if (condition.id) {
       const { error } = await supabaseAdmin
         .from('automation_conditions')
@@ -257,12 +281,18 @@ export async function upsertCondition(condition: {
       return { success: true, id: data.id }
     }
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to save condition' }
+    logger.error('Operation failed', { error: error })
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
 export async function deleteCondition(conditionId: string): Promise<{ success: boolean; error?: string }> {
   try {
+    const auth = await authenticateServerAction()
+    if (!auth.success || !auth.profile) {
+      return { success: false, error: auth.error || 'Unauthorized' }
+    }
+
     const { error } = await supabaseAdmin
       .from('automation_conditions')
       .delete()
@@ -271,7 +301,8 @@ export async function deleteCondition(conditionId: string): Promise<{ success: b
     if (error) throw error
     return { success: true }
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to delete condition' }
+    logger.error('Operation failed', { error: error })
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
@@ -286,6 +317,11 @@ export async function upsertAction(action: {
   is_async?: boolean
 }): Promise<{ success: boolean; id?: string; error?: string }> {
   try {
+    const auth = await authenticateServerAction()
+    if (!auth.success || !auth.profile) {
+      return { success: false, error: auth.error || 'Unauthorized' }
+    }
+
     if (action.id) {
       const { error } = await supabaseAdmin
         .from('automation_actions')
@@ -294,7 +330,7 @@ export async function upsertAction(action: {
           params: action.params || {},
           sort_order: action.sort_order || 0,
           is_async: action.is_async || false,
-        })
+        } as any)
         .eq('id', action.id)
 
       if (error) throw error
@@ -308,7 +344,7 @@ export async function upsertAction(action: {
           params: action.params || {},
           sort_order: action.sort_order || 0,
           is_async: action.is_async || false,
-        })
+        } as any)
         .select('id')
         .single()
 
@@ -316,12 +352,18 @@ export async function upsertAction(action: {
       return { success: true, id: data.id }
     }
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to save action' }
+    logger.error('Operation failed', { error: error })
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 
 export async function deleteAction(actionId: string): Promise<{ success: boolean; error?: string }> {
   try {
+    const auth = await authenticateServerAction()
+    if (!auth.success || !auth.profile) {
+      return { success: false, error: auth.error || 'Unauthorized' }
+    }
+
     const { error } = await supabaseAdmin
       .from('automation_actions')
       .delete()
@@ -330,7 +372,8 @@ export async function deleteAction(actionId: string): Promise<{ success: boolean
     if (error) throw error
     return { success: true }
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to delete action' }
+    logger.error('Operation failed', { error: error })
+    return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
 

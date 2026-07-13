@@ -18,11 +18,13 @@ import {
   finalizeMpesaSale,
   failMpesaSale,
   getMpesaTransactionByCheckoutId,
+  getMpesaTransactionBySaleId,
 } from '@/lib/mpesa-actions'
 import { supabaseAdmin } from '@/lib/supabase-server'
 import { logger } from '@/lib/logger'
 import { mpesaCallbackBodySchema } from '@/lib/api-schemas'
 import { badRequest } from '@/lib/api-errors'
+import { publishEvent } from '@/lib/mpesa-events'
 
 async function restoreFailedMpesaSaleInventory(saleId: string) {
   const { data: sale, error: saleError } = await supabaseAdmin
@@ -101,12 +103,72 @@ async function failPendingMpesaSaleWithRestore(saleId: string, errorMessage: str
   return failMpesaSale(saleId, errorMessage)
 }
 
+// ─── Rate limiting for M-Pesa callbacks ──────────────────────────────────
+
+const callbackRateMap = new Map<string, { count: number; resetTime: number; firstSeen: number }>()
+
+function checkCallbackRateLimit(checkoutRequestId: string, ip: string): boolean {
+  const key = `${checkoutRequestId}:${ip}`
+  const now = Date.now()
+  const windowMs = 60_000 // 1 minute window
+  const maxCallbacks = 5   // max 5 callbacks per checkout+IP per minute
+
+  const entry = callbackRateMap.get(key)
+  if (!entry || now > entry.resetTime) {
+    callbackRateMap.set(key, { count: 1, resetTime: now + windowMs, firstSeen: now })
+    return true
+  }
+
+  if (entry.count >= maxCallbacks) {
+    logger.warn('[M-Pesa Callback] Rate limit exceeded', {
+      checkoutRequestId,
+      ip,
+      count: entry.count,
+      duration: now - entry.firstSeen,
+    })
+    return false
+  }
+
+  entry.count++
+  return true
+}
+
+// ─── Periodic cleanup of stale rate limit entries ────────────────────────
+// Run cleanup every 5 minutes to prevent memory leak
+const RATE_LIMIT_CLEANUP_INTERVAL = 5 * 60 * 1000
+let lastCleanup = Date.now()
+
+function cleanupRateLimitMap() {
+  const now = Date.now()
+  if (now - lastCleanup < RATE_LIMIT_CLEANUP_INTERVAL) return
+  lastCleanup = now
+  for (const [key, entry] of callbackRateMap.entries()) {
+    if (now > entry.resetTime) {
+      callbackRateMap.delete(key)
+    }
+  }
+  // Also prevent unbounded growth — if map exceeds 1000 entries, clear all expired
+  if (callbackRateMap.size > 1000) {
+    for (const [key, entry] of callbackRateMap.entries()) {
+      if (now > entry.resetTime) {
+        callbackRateMap.delete(key)
+      }
+    }
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
+    // Rate limiting based on client IP
+    const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+      ?? req.headers.get('x-real-ip')
+      ?? 'unknown'
+
     let body: unknown
     try {
       body = await req.json()
     } catch {
+      logger.warn('[M-Pesa Callback] Invalid JSON body', { ip: clientIp })
       return NextResponse.json(
         { success: false },
         { status: 200 }
@@ -137,7 +199,20 @@ export async function POST(req: NextRequest) {
       ResultDesc: resultDesc = '',
     } = stkCallback
 
-    logger.info('[M-Pesa Callback] Callback received', { resultCode, resultDesc })
+    // Apply rate limit BEFORE any processing
+    cleanupRateLimitMap()
+    if (!checkCallbackRateLimit(checkoutRequestId, clientIp)) {
+      return NextResponse.json(
+        { success: false, error: 'Rate limit exceeded' },
+        { status: 429 }
+      )
+    }
+
+    logger.info('[M-Pesa Callback] Callback received', {
+      resultCode,
+      resultDesc,
+      ip: clientIp,
+    })
 
     // Get the corresponding M-Pesa transaction
     const transactionResult = await getMpesaTransactionByCheckoutId(
@@ -145,7 +220,10 @@ export async function POST(req: NextRequest) {
     )
 
     if (!transactionResult.success || !transactionResult.transaction) {
-      logger.error('[M-Pesa Callback] Transaction not found in callback', undefined, { checkoutRequestId })
+      logger.error('[M-Pesa Callback] Transaction not found in callback', undefined, {
+        checkoutRequestId,
+        ip: clientIp,
+      })
       return NextResponse.json(
         { success: false },
         { status: 200 } // Still return 200 to Safaricom
@@ -158,12 +236,13 @@ export async function POST(req: NextRequest) {
     // ============================================================================
     // IDEMPOTENCY CHECK: Prevent duplicate processing
     // ============================================================================
-    // If callback_received_at is already set, this callback has been processed
     if (transaction.callback_received_at) {
-      logger.info('[M-Pesa Callback] Callback already processed (idempotency)', { resultCode, previousResultCode: transaction.status })
+      logger.info('[M-Pesa Callback] Callback already processed (idempotency)', {
+        resultCode,
+        previousResultCode: transaction.status,
+        ip: clientIp,
+      })
       
-      // Return success without re-processing side effects
-      // This prevents duplicate finalization, loyalty points, etc.
       return NextResponse.json(
         { success: true, resultCode, isReplayed: true },
         { status: 200 }
@@ -259,33 +338,46 @@ export async function POST(req: NextRequest) {
 }
 
 /**
- * Send success notification to POS system
- * Can use Socket.io, Server-sent events, or polling
- * For now, we've already updated the database which POS can poll
+ * Send success notification to POS system via SSE event bus
  */
 async function notifyPaymentSuccess(
   saleId: string,
   mpesaReceiptNumber?: string
 ) {
   try {
-    // TODO: Implement real-time notification
-    // For now, database is the source of truth that POS polls
-    logger.info('[M-Pesa Callback] Payment success notification', { saleId, mpesaReceiptNumber })
+    const transaction = await getMpesaTransactionBySaleId(saleId)
+    if (transaction.success && transaction.transaction) {
+      publishEvent({
+        type: 'payment.confirmed',
+        saleId,
+        checkoutRequestId: transaction.transaction.checkout_request_id,
+        mpesaReceiptNumber,
+        timestamp: Date.now(),
+      })
+    }
+    logger.info('[M-Pesa Callback] Payment success notification sent', { saleId, mpesaReceiptNumber })
   } catch (error) {
     logger.error('[M-Pesa Callback] Failed to notify success', error)
-    // Don't throw - failure to notify shouldn't affect callback processing
   }
 }
 
 /**
- * Send failure notification to POS system
+ * Send failure notification to POS system via SSE event bus
  */
 async function notifyPaymentFailure(saleId: string, errorMessage: string) {
   try {
-    // TODO: Implement real-time notification
-    logger.info('[M-Pesa Callback] Payment failure notification', { saleId, errorMessage })
+    const transaction = await getMpesaTransactionBySaleId(saleId)
+    if (transaction.success && transaction.transaction) {
+      publishEvent({
+        type: 'payment.failed',
+        saleId,
+        checkoutRequestId: transaction.transaction.checkout_request_id,
+        errorMessage,
+        timestamp: Date.now(),
+      })
+    }
+    logger.info('[M-Pesa Callback] Payment failure notification sent', { saleId, errorMessage })
   } catch (error) {
     logger.error('[M-Pesa Callback] Failed to notify failure', error)
-    // Don't throw - failure to notify shouldn't affect callback processing
   }
 }

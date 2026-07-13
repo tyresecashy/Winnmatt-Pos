@@ -90,22 +90,22 @@ export async function getExecutiveKPI(dateFilter?: string): Promise<ExecutiveKPI
       .gte('created_at', `${today}T00:00:00`)
       .lte('created_at', `${today}T23:59:59`)
 
-    const activeSales = (todaySales || []).filter(s => s.sale_status !== 'voided' && s.sale_status !== 'returned')
-    const refunds = (todaySales || []).filter(s => s.sale_status === 'returned')
-    const totalRevenue = activeSales.reduce((sum, s) => sum + (s.total || 0), 0)
-    const totalRefunds = refunds.reduce((sum, s) => sum + (s.total || 0), 0)
-    const totalDiscounts = activeSales.reduce((sum, s) => sum + (s.discount || 0), 0)
+    const salesRows = (todaySales || []) as unknown as Array<Record<string, unknown>>
+    const activeSales = salesRows.filter(s => s.sale_status !== 'voided' && s.sale_status !== 'returned')
+    const refunds = salesRows.filter(s => s.sale_status === 'returned')
+    const totalRevenue = activeSales.reduce((sum, s) => sum + ((s.total as number) || 0), 0)
+    const totalRefunds = refunds.reduce((sum, s) => sum + ((s.total as number) || 0), 0)
+    const totalDiscounts = activeSales.reduce((sum, s) => sum + ((s.discount as number) || 0), 0)
     const totalTransactions = activeSales.length
 
     // Calculate gross profit
     let totalCost = 0
     for (const sale of activeSales) {
-      const items = Array.isArray(sale.items) ? sale.items : []
+      const items = Array.isArray(sale.items) ? (sale.items as Array<Record<string, unknown>>) : []
       for (const item of items) {
-        const itemData = item as Record<string, unknown>
-        const product = itemData.product as { id: string; purchase_price: number } | null
+        const product = item.product as { id: string; purchase_price: number } | null
         const purchasePrice = product?.purchase_price || 0
-        const qty = (itemData.quantity as number) || 0
+        const qty = (item.quantity as number) || 0
         totalCost += purchasePrice * qty
       }
     }
@@ -113,19 +113,21 @@ export async function getExecutiveKPI(dateFilter?: string): Promise<ExecutiveKPI
     const marginPct = totalRevenue > 0 ? Math.round((grossProfit / totalRevenue) * 10000) / 100 : 0
 
     // Unique customers — select customer_id in query above doesn't exist, count distinct
-    const customerIds = new Set(activeSales.map(s => (s as Record<string, unknown>).customer_id as string).filter(Boolean))
+    const customerIds = new Set(activeSales.map(s => s.customer_id as string).filter(Boolean))
 
     // ── Stock value ──
     const { data: inventoryData } = await supabaseAdmin
       .from('inventory')
       .select('quantity, product:products(purchase_price)')
 
+    const inventoryRows = (inventoryData || []) as unknown as Array<Record<string, unknown>>
+
     let stockValue = 0
     let criticalCount = 0
-    for (const row of inventoryData || []) {
-      const product = (row as Record<string, unknown>).product as { purchase_price: number } | null
+    for (const row of inventoryRows) {
+      const product = row.product as { purchase_price: number } | null
       const pp = product?.purchase_price || 0
-      const qty = (row as { quantity: number }).quantity || 0
+      const qty = (row.quantity as number) || 0
       stockValue += pp * qty
     }
 
@@ -135,26 +137,30 @@ export async function getExecutiveKPI(dateFilter?: string): Promise<ExecutiveKPI
       .select('id, safety_stock')
       .eq('status', 'active')
 
-    for (const p of criticalProducts || []) {
+    const criticalRows = (criticalProducts || []) as unknown as Array<Record<string, unknown>>
+
+    for (const p of criticalRows) {
       const { data: inv } = await supabaseAdmin
         .from('inventory')
         .select('quantity')
-        .eq('product_id', p.id)
-      const totalQty = (inv || []).reduce((s, r) => s + (r.quantity || 0), 0)
-      if (totalQty <= (p.safety_stock || 0)) criticalCount++
+        .eq('product_id', p.id as string)
+      const totalQty = (inv || []).reduce((s: number, r: Record<string, unknown>) => s + ((r.quantity as number) || 0), 0)
+      if (totalQty <= ((p.safety_stock as number) || 0)) criticalCount++
     }
 
     // ── Cash in drawers ──
     const { data: drawers } = await supabaseAdmin
       .from('cash_drawers')
       .select('current_balance')
-    const cashInDrawers = (drawers || []).reduce((s, d) => s + (d.current_balance || 0), 0)
+    const drawerRows = (drawers || []) as unknown as Array<Record<string, unknown>>
+    const cashInDrawers = drawerRows.reduce((s, d) => s + ((d.current_balance as number) || 0), 0)
 
     // ── Outstanding credit ──
     const { data: creditData } = await supabaseAdmin
       .from('customers')
       .select('credit_balance')
-    const outstandingCredit = (creditData || []).reduce((s, c) => s + ((c as Record<string, unknown>).credit_balance as number || 0), 0)
+    const creditRows = (creditData || []) as unknown as Array<Record<string, unknown>>
+    const outstandingCredit = creditRows.reduce((s, c) => s + ((c.credit_balance as number) || 0), 0)
 
     // ── Pending purchase orders ──
     const { data: pendingPOs } = await supabaseAdmin
@@ -195,7 +201,7 @@ export async function getExecutiveKPI(dateFilter?: string): Promise<ExecutiveKPI
       pending_pos: pendingPOCount,
       transfers_in_transit: inTransitCount,
       employees_clocked_in: clockedInCount,
-      total_inventory_items: inventoryData?.length || 0,
+      total_inventory_items: inventoryRows.length || 0,
       critical_stock_count: criticalCount,
     }
   } catch (error) {
@@ -233,8 +239,9 @@ export async function getBranchPerformance(): Promise<BranchPerformance[]> {
         .neq('sale_status', 'voided')
         .neq('sale_status', 'returned')
 
-      const totalSales = (sales || []).reduce((s, r) => s + (r.total || 0), 0)
-      const txCount = sales?.length || 0
+      const branchSalesRows = (sales || []) as unknown as Array<Record<string, unknown>>
+      const totalSales = branchSalesRows.reduce((s, r) => s + ((r.total as number) || 0), 0)
+      const txCount = branchSalesRows.length || 0
       grandTotal += totalSales
 
       perBranch.push({
@@ -264,6 +271,9 @@ export async function getBranchPerformance(): Promise<BranchPerformance[]> {
  */
 export async function getHourlySales(dateFilter?: string): Promise<SalesHourly[]> {
   try {
+    const auth = await authenticateServerAction()
+    if (!auth.success || !auth.profile) return []
+
     const today = dateFilter || new Date().toISOString().split('T')[0]
 
     const { data: sales } = await supabaseAdmin
@@ -276,9 +286,11 @@ export async function getHourlySales(dateFilter?: string): Promise<SalesHourly[]
     const hourly: Record<number, { sales: number; tx: number }> = {}
     for (let h = 0; h < 24; h++) hourly[h] = { sales: 0, tx: 0 }
 
-    for (const s of sales || []) {
-      const hour = new Date(s.created_at).getHours()
-      hourly[hour].sales += s.total || 0
+    const hourlySalesRows = (sales || []) as unknown as Array<Record<string, unknown>>
+
+    for (const s of hourlySalesRows) {
+      const hour = new Date(s.created_at as string).getHours()
+      hourly[hour].sales += (s.total as number) || 0
       hourly[hour].tx++
     }
 
@@ -298,6 +310,9 @@ export async function getHourlySales(dateFilter?: string): Promise<SalesHourly[]
  */
 export async function getTopProducts(limit = 10, dateFilter?: string): Promise<TopProduct[]> {
   try {
+    const auth = await authenticateServerAction()
+    if (!auth.success || !auth.profile) return []
+
     const today = dateFilter || new Date().toISOString().split('T')[0]
 
     const { data: items } = await supabaseAdmin
@@ -366,8 +381,11 @@ export async function getAIInsights(): Promise<AIInsight[]> {
       .lte('created_at', `${yesterday}T23:59:59`)
       .neq('sale_status', 'voided')
 
-    const todayRev = (todaySales || []).reduce((s, r) => s + (r.total || 0), 0)
-    const yesterdayRev = (yesterdaySales || []).reduce((s, r) => s + (r.total || 0), 0)
+    const todaySalesRows = (todaySales || []) as unknown as Array<Record<string, unknown>>
+    const yesterdaySalesRows = (yesterdaySales || []) as unknown as Array<Record<string, unknown>>
+
+    const todayRev = todaySalesRows.reduce((s, r) => s + ((r.total as number) || 0), 0)
+    const yesterdayRev = yesterdaySalesRows.reduce((s, r) => s + ((r.total as number) || 0), 0)
 
     if (yesterdayRev > 0) {
       const change = Math.round(((todayRev - yesterdayRev) / yesterdayRev) * 10000) / 100
@@ -386,15 +404,16 @@ export async function getAIInsights(): Promise<AIInsight[]> {
       .select('id, name, safety_stock')
       .eq('status', 'active')
 
+    const criticalItemRows = (criticalItems || []) as unknown as Array<Record<string, unknown>>
     let criticalList: Array<{ name: string; available: number }> = []
-    for (const p of criticalItems || []) {
+    for (const p of criticalItemRows) {
       const { data: inv } = await supabaseAdmin
         .from('inventory')
         .select('quantity')
-        .eq('product_id', p.id)
-      const total = (inv || []).reduce((s, r) => s + (r.quantity || 0), 0)
-      if (total <= (p.safety_stock || 0) && total <= 5) {
-        criticalList.push({ name: p.name, available: total })
+        .eq('product_id', p.id as string)
+      const total = (inv || []).reduce((s: number, r: Record<string, unknown>) => s + ((r.quantity as number) || 0), 0)
+      if (total <= ((p.safety_stock as number) || 0) && total <= 5) {
+        criticalList.push({ name: p.name as string, available: total })
       }
     }
     if (criticalList.length > 0) {
@@ -414,7 +433,8 @@ export async function getAIInsights(): Promise<AIInsight[]> {
       .gte('created_at', `${today}T00:00:00`)
       .lte('created_at', `${today}T23:59:59`)
 
-    const refundTotal = (refunds || []).reduce((s, r) => s + (r.total || 0), 0)
+    const refundRows = (refunds || []) as unknown as Array<Record<string, unknown>>
+    const refundTotal = refundRows.reduce((s, r) => s + ((r.total as number) || 0), 0)
     if (refundTotal > 0 && todayRev > 0) {
       const refundPct = Math.round((refundTotal / todayRev) * 10000) / 100
       if (refundPct > 10) {
@@ -441,7 +461,7 @@ export async function getAIInsights(): Promise<AIInsight[]> {
     }
 
     // Average basket
-    const txCount = (todaySales || []).length
+    const txCount = todaySalesRows.length
     const avgBasket = txCount > 0 ? Math.round(todayRev / txCount) : 0
     if (avgBasket > 0) {
       insights.push({

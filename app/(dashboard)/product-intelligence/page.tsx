@@ -29,6 +29,7 @@ import {
   XCircle,
   ArrowLeft,
 } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 import {
   searchProducts,
   getProductIntelligence,
@@ -53,8 +54,8 @@ const activityIcons: Record<string, React.ReactNode> = {
   returned: <History className="h-4 w-4 text-orange-500" />,
   adjusted: <BarChart3 className="h-4 w-4 text-red-500" />,
   cycle_counted: <Layers className="h-4 w-4 text-indigo-500" />,
-  expired: <XCircle className="h-4 w-4 text-gray-500" />,
-  archived: <Archive className="h-4 w-4 text-gray-500" />,
+  expired: <XCircle className="h-4 w-4 text-muted-foreground" />,
+  archived: <Archive className="h-4 w-4 text-muted-foreground" />,
   status_changed: <AlertTriangle className="h-4 w-4 text-yellow-500" />,
 }
 
@@ -91,7 +92,7 @@ export default function ProductIntelligencePage() {
     setSearching(true)
     try {
       const results = await searchProducts(searchQuery.trim())
-      setSearchResults(results)
+      setSearchResults(results as any)
     } catch {
       toast({ title: 'Error', description: 'Search failed', variant: 'destructive' })
     } finally {
@@ -545,15 +546,11 @@ export default function ProductIntelligencePage() {
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg">Activity Timeline</CardTitle>
-                  <CardDescription>Every event in this product's lifecycle</CardDescription>
+                  <CardDescription>Every event in this product&apos;s lifecycle</CardDescription>
                 </CardHeader>
                 <CardContent>
                   {activity.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <History className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                      <p>No activity recorded yet</p>
-                      <p className="text-sm">Activity will appear as products are purchased, sold, transferred, etc.</p>
-                    </div>
+                    <EmptyState icon={History} title="No activity recorded yet" description="Activity will appear as products are purchased, sold, transferred, etc." compact />
                   ) : (
                     <div className="relative">
                       <div className="absolute left-4 top-0 bottom-0 w-px bg-border" />

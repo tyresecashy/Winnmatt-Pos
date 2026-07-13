@@ -2,6 +2,7 @@
 
 import { logger } from '@/lib/logger'
 import { pointsToKSh } from '@/lib/currency'
+import { authenticateServerAction } from '@/lib/auth-helpers'
 import { supabaseAdmin } from '@/lib/supabase-server'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -56,6 +57,9 @@ export interface CustomerSaleItem {
 
 export async function getCustomerCRMDetail(customerId: string): Promise<CustomerCRMDetail | null> {
   try {
+    const auth = await authenticateServerAction()
+    if (!auth.success || !auth.profile) return null
+
     // Get customer base info
     const { data: customer, error: custError } = await supabaseAdmin
       .from('customers')
@@ -98,7 +102,7 @@ export async function getCustomerCRMDetail(customerId: string): Promise<Customer
 
     // Get total visits (unique dates)
     const visitDates = new Set(
-      (completedSales || []).map(s => new Date(s.created_at).toISOString().split('T')[0])
+      (completedSales || []).map(s => new Date(s.created_at ?? '').toISOString().split('T')[0])
     )
 
     // Get segments
@@ -109,9 +113,9 @@ export async function getCustomerCRMDetail(customerId: string): Promise<Customer
         .select('segment:segment_id(name)')
         .eq('customer_id', customerId)
 
-      segmentNames = (segData || [])
-        .map((s: any) => s.segment?.name)
-        .filter(Boolean)
+      segmentNames = ((segData || []) as unknown as Array<Record<string, unknown>>)
+        .map((s) => (s.segment as unknown as Record<string, unknown>)?.name as string | undefined)
+        .filter((n): n is string => !!n)
     } catch {
       // segments table may not exist
     }
@@ -132,7 +136,7 @@ export async function getCustomerCRMDetail(customerId: string): Promise<Customer
       days_since_last_purchase: daysSinceLastPurchase,
       total_returned_cents: totalReturnedCents,
       segment_names: segmentNames,
-    }
+    } as unknown as CustomerCRMDetail
   } catch (error) {
     logger.error('[CRM] Failed to load customer detail:', error)
     return null
@@ -144,6 +148,9 @@ export async function getCustomerActivity(
   limit = 50
 ): Promise<CustomerActivity[]> {
   try {
+    const auth = await authenticateServerAction()
+    if (!auth.success || !auth.profile) return []
+
     const { data: sales } = await supabaseAdmin
       .from('sales')
       .select('id, receipt_number, created_at, total_amount, sale_status, payment_method')
@@ -155,62 +162,62 @@ export async function getCustomerActivity(
 
     const activities: CustomerActivity[] = []
 
-    for (const sale of sales) {
+    const rawSales = sales as unknown as Array<Record<string, unknown>>
+    for (const sale of rawSales) {
       // Purchase event
       if (sale.sale_status === 'completed' || sale.sale_status === null) {
         activities.push({
-          id: `sale_${sale.id}`,
+          id: `sale_${sale.id as string}`,
           type: 'purchase',
-          description: `Purchase at ${sale.receipt_number || 'POS'}`,
+          description: `Purchase at ${(sale.receipt_number as string) || 'POS'}`,
           amount_cents: Number(sale.total_amount),
-          created_at: sale.created_at,
-          reference: sale.receipt_number,
+          created_at: sale.created_at as string,
+          reference: sale.receipt_number as string | null,
         })
       }
 
       // Return event
       if (sale.sale_status === 'returned' || sale.sale_status === 'partially_returned') {
         activities.push({
-          id: `return_${sale.id}`,
+          id: `return_${sale.id as string}`,
           type: 'return',
-          description: `Return on ${sale.receipt_number || 'sale'}`,
+          description: `Return on ${(sale.receipt_number as string) || 'sale'}`,
           amount_cents: Number(sale.total_amount),
-          created_at: sale.created_at,
-          reference: sale.receipt_number,
+          created_at: sale.created_at as string,
+          reference: sale.receipt_number as string | null,
         })
       }
     }
 
     // Get loyalty transactions
     try {
-      const { data: loyaltyTxns } = await supabaseAdmin
+      const { data: loyaltyTxnsRaw } = await supabaseAdmin
         .from('loyalty_transactions')
         .select('id, type, points, description, created_at, reference_id')
         .eq('customer_id', customerId)
         .order('created_at', { ascending: false })
         .limit(20)
 
-      if (loyaltyTxns) {
-        for (const txn of loyaltyTxns) {
-          if (txn.type === 'earn_sale' || txn.type === 'earn_admin' || txn.type === 'earn_bonus') {
-            activities.push({
-              id: `loyalty_${txn.id}`,
-              type: 'loyalty_earn',
-              description: txn.description || 'Loyalty points earned',
-              amount_cents: pointsToKSh(Number(txn.points)),
-              created_at: txn.created_at,
-              reference: txn.reference_id,
-            })
-          } else if (txn.type === 'redeem_sale' || txn.type === 'reverse_void' || txn.type === 'reverse_return') {
-            activities.push({
-              id: `redeem_${txn.id}`,
-              type: 'loyalty_redeem',
-              description: txn.description || 'Loyalty points redeemed',
-              amount_cents: -pointsToKSh(Number(txn.points)),
-              created_at: txn.created_at,
-              reference: txn.reference_id,
-            })
-          }
+      const loyaltyTxns = (loyaltyTxnsRaw || []) as unknown as Array<Record<string, unknown>>
+      for (const txn of loyaltyTxns) {
+        if (txn.type === 'earn_sale' || txn.type === 'earn_admin' || txn.type === 'earn_bonus') {
+          activities.push({
+            id: `loyalty_${txn.id as string}`,
+            type: 'loyalty_earn',
+            description: (txn.description as string) || 'Loyalty points earned',
+            amount_cents: pointsToKSh(Number(txn.points)),
+            created_at: txn.created_at as string,
+            reference: txn.reference_id as string | null,
+          })
+        } else if (txn.type === 'redeem_sale' || txn.type === 'reverse_void' || txn.type === 'reverse_return') {
+          activities.push({
+            id: `redeem_${txn.id as string}`,
+            type: 'loyalty_redeem',
+            description: (txn.description as string) || 'Loyalty points redeemed',
+            amount_cents: -pointsToKSh(Number(txn.points)),
+            created_at: txn.created_at as string,
+            reference: txn.reference_id as string | null,
+          })
         }
       }
     } catch {
@@ -234,6 +241,9 @@ export async function getCustomerSalesHistory(
   limit = 20
 ): Promise<CustomerSaleItem[]> {
   try {
+    const auth = await authenticateServerAction()
+    if (!auth.success || !auth.profile) return []
+
     const { data: sales } = await supabaseAdmin
       .from('sales')
       .select('id, receipt_number, created_at, total_amount, payment_method, discount_amount')
@@ -253,10 +263,10 @@ export async function getCustomerSalesHistory(
 
       result.push({
         id: sale.id,
-        receipt_number: sale.receipt_number,
-        created_at: sale.created_at,
+        receipt_number: sale.receipt_number as string,
+        created_at: sale.created_at as string,
         total_amount: Number(sale.total_amount),
-        payment_method: sale.payment_method,
+        payment_method: sale.payment_method as string,
         item_count: count || 0,
         discount_amount: Number(sale.discount_amount || 0),
       })

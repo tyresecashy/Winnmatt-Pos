@@ -4,6 +4,7 @@ import { logger } from '@/lib/logger';
 import { Button } from '@/components/ui/button'
 import { formatKSh } from '@/lib/currency'
 import { CheckCircle2, Printer, Star, UserRound, X } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 
 export interface SaleItem {
   id: string
@@ -452,7 +453,7 @@ export function ReceiptPreview({
               ))
             ) : (
               <div className="rounded-2xl bg-slate-50 px-4 py-5 text-center text-sm text-slate-500">
-                No items
+              <EmptyState title="No items" compact />
               </div>
             )}
           </div>

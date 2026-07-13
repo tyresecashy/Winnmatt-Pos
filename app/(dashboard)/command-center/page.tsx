@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { logger } from '@/lib/logger';
+import { useState, useEffect, startTransition } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -24,18 +25,69 @@ import {
   TrendingUp,
   TrendingDown,
 } from 'lucide-react';
+import { EmptyState } from '@/components/ui/empty-state';
 import { healthCenterService } from '@/lib/enterprise/health/health-center';
 import { securityCenterService } from '@/lib/enterprise/security/security-center';
 import { incidentCenterService } from '@/lib/enterprise/incidents/incident-center';
 import { performanceLabService } from '@/lib/enterprise/performance/performance-lab';
 import { observabilityService } from '@/lib/enterprise/observability/observability-service';
 
+interface SubsystemHealth {
+  name: string;
+  status: string;
+  score: number;
+  uptime_percentage?: number;
+}
+
+interface SecurityThreat {
+  active_threats: number;
+  overall_threat_level: string;
+  blocked_ips: number;
+  failed_logins_24h: number;
+  suspicious_activities: number;
+  vulnerability_count: number;
+  last_scan: string;
+}
+
+interface ActiveIncident {
+  id: string;
+  title: string;
+  description: string;
+  severity: string;
+  owner: string;
+  status: string;
+  created_at: string;
+}
+
+interface PerformanceMetric {
+  name: string;
+  status: string;
+  value: number;
+  unit: string;
+  baseline: number;
+  deviation_percent: number;
+}
+
+interface ObservabilitySummary {
+  active_users: number;
+  active_sessions: number;
+  total_requests: number;
+  error_rate: number;
+  average_response_time: number;
+  p95_response_time: number;
+}
+
 interface CommandCenterData {
-  systemHealth: any;
-  securityThreat: any;
-  activeIncidents: any[];
-  performanceMetrics: any;
-  observabilitySummary: any;
+  systemHealth: {
+    overall_status: string;
+    overall_score: number;
+    subsystems: SubsystemHealth[];
+    uptime_24h: number;
+  } | null;
+  securityThreat: SecurityThreat | null;
+  activeIncidents: ActiveIncident[];
+  performanceMetrics: PerformanceMetric[] | null;
+  observabilitySummary: ObservabilitySummary | null;
 }
 
 export default function OperationalCommandCenter() {
@@ -49,12 +101,6 @@ export default function OperationalCommandCenter() {
   });
   const [lastRefresh, setLastRefresh] = useState(new Date());
 
-  useEffect(() => {
-    loadCommandCenterData();
-    const interval = setInterval(loadCommandCenterData, 30000); // Refresh every 30 seconds
-    return () => clearInterval(interval);
-  }, []);
-
   const loadCommandCenterData = async () => {
     try {
       const [systemHealth, securityThreat, activeIncidents, performanceMetrics, observabilitySummary] = 
@@ -67,7 +113,7 @@ export default function OperationalCommandCenter() {
         ]);
 
       setData({
-        systemHealth,
+        systemHealth: systemHealth as unknown as CommandCenterData['systemHealth'],
         securityThreat,
         activeIncidents,
         performanceMetrics,
@@ -75,13 +121,19 @@ export default function OperationalCommandCenter() {
       });
       setLastRefresh(new Date());
     } catch (error) {
-      console.error('Error loading command center data:', error);
+      logger.error('Error loading command center data:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const getStatusIcon = (status: string) => {
+  useEffect(() => {
+    startTransition(() => { loadCommandCenterData() });
+    const interval = setInterval(loadCommandCenterData, 30000); // Refresh every 30 seconds
+    return () => clearInterval(interval);
+  }, []);
+
+  const getStatusIcon = (status: string | undefined) => {
     switch (status) {
       case 'healthy':
       case 'ok':
@@ -93,11 +145,11 @@ export default function OperationalCommandCenter() {
       case 'error':
         return <XCircle className="h-5 w-5 text-red-500" />;
       default:
-        return <Clock className="h-5 w-5 text-gray-500" />;
+        return <Clock className="h-5 w-5 text-muted-foreground" />;
     }
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: string | undefined) => {
     switch (status) {
       case 'healthy':
       case 'ok':
@@ -113,7 +165,7 @@ export default function OperationalCommandCenter() {
     }
   };
 
-  const getThreatColor = (level: string) => {
+  const getThreatColor = (level: string | undefined) => {
     switch (level) {
       case 'none':
         return 'bg-green-100 text-green-800';
@@ -197,7 +249,7 @@ export default function OperationalCommandCenter() {
           <CardContent>
             <div className="text-2xl font-bold">{data.activeIncidents?.length || 0}</div>
             <p className="text-xs text-muted-foreground">
-              {data.activeIncidents?.filter((i: any) => i.severity === 'critical').length || 0} critical
+              {data.activeIncidents?.filter((i) => i.severity === 'critical').length || 0} critical
             </p>
           </CardContent>
         </Card>
@@ -234,7 +286,7 @@ export default function OperationalCommandCenter() {
             </CardHeader>
             <CardContent>
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {data.systemHealth?.subsystems?.map((subsystem: any) => (
+                {data.systemHealth?.subsystems?.map((subsystem) => (
                   <div key={subsystem.name} className="flex items-center justify-between p-3 border rounded-lg">
                     <div className="flex items-center gap-3">
                       {getStatusIcon(subsystem.status)}
@@ -307,7 +359,7 @@ export default function OperationalCommandCenter() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {data.systemHealth?.subsystems?.map((subsystem: any) => (
+                {data.systemHealth?.subsystems?.map((subsystem) => (
                   <div key={subsystem.name} className="flex items-center justify-between p-4 border rounded-lg">
                     <div className="flex items-center gap-4">
                       {getStatusIcon(subsystem.status)}
@@ -392,7 +444,7 @@ export default function OperationalCommandCenter() {
             </CardHeader>
             <CardContent>
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {data.performanceMetrics?.map((metric: any) => (
+                {data.performanceMetrics?.map((metric) => (
                   <div key={metric.name} className="p-4 border rounded-lg">
                     <div className="flex items-center justify-between mb-2">
                       <span className="font-medium">{metric.name}</span>
@@ -421,14 +473,10 @@ export default function OperationalCommandCenter() {
             </CardHeader>
             <CardContent>
               {data.activeIncidents?.length === 0 ? (
-                <div className="text-center py-8">
-                  <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
-                  <p className="text-lg font-medium">No Active Incidents</p>
-                  <p className="text-muted-foreground">All systems operating normally</p>
-                </div>
+                <EmptyState icon={CheckCircle} title="No Active Incidents" description="All systems operating normally" />
               ) : (
                 <div className="space-y-4">
-                  {data.activeIncidents?.map((incident: any) => (
+                  {data.activeIncidents?.map((incident) => (
                     <div key={incident.id} className="p-4 border rounded-lg">
                       <div className="flex items-center justify-between mb-2">
                         <span className="font-medium">{incident.title}</span>

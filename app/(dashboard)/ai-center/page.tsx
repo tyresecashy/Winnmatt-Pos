@@ -1,10 +1,10 @@
 'use client'
 
+import { logger } from '@/lib/logger'
 import { useCallback, useEffect, useState } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
@@ -16,12 +16,14 @@ import { createClient } from '@supabase/supabase-js'
 import {
   analyzeSalesIntelligence, analyzeInventoryIntelligence, aiChat,
   type AIInsight, type AISalesAnalysis, type AIInventoryAnalysis,
-} from '@/lib/ai-actions'
+} from '@/lib/modules/ai'
+import { AIAssistantInterface } from '@/components/ui/ai-assistant-interface'
 import {
   Brain, TrendingUp, TrendingDown, ShoppingCart, Package, Users,
   DollarSign, BarChart3, RefreshCw, AlertTriangle, Zap, Target,
-  Clock, Star, Boxes, Sparkles, Send, Lightbulb, Shield,
+  Clock, Star, Boxes, Sparkles, Lightbulb, Shield,
 } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 
 // ─── Supabase Client ──────────────────────────────────────────────────────────
 
@@ -93,8 +95,8 @@ export default function AICenterPage() {
       setLowStockCount(products.filter(p => (p.stock_quantity || 0) > 0 && (p.stock_quantity || 0) <= (p.reorder_level || 10)).length)
       setOutOfStockCount(products.filter(p => (p.stock_quantity || 0) <= 0).length)
       setTotalInventoryValue(products.reduce((sum, p) => sum + (p.stock_quantity || 0) * (p.purchase_price || 0), 0))
-    } catch (err: any) {
-      console.error('Error loading raw data:', err)
+    } catch (err: unknown) {
+      logger.error('Error loading raw data:', err)
     }
   }, [])
 
@@ -104,8 +106,8 @@ export default function AICenterPage() {
     try {
       const result = await analyzeSalesIntelligence()
       setSalesAnalysis(result)
-    } catch (err: any) {
-      toast({ title: 'AI Error', description: err.message, variant: 'destructive' })
+    } catch (err: unknown) {
+      toast({ title: 'AI Error', description: err instanceof Error ? err.message : 'Unknown error', variant: 'destructive' })
     } finally {
       setAnalyzingSales(false)
     }
@@ -117,8 +119,8 @@ export default function AICenterPage() {
     try {
       const result = await analyzeInventoryIntelligence()
       setInventoryAnalysis(result)
-    } catch (err: any) {
-      toast({ title: 'AI Error', description: err.message, variant: 'destructive' })
+    } catch (err: unknown) {
+      toast({ title: 'AI Error', description: err instanceof Error ? err.message : 'Unknown error', variant: 'destructive' })
     } finally {
       setAnalyzingInventory(false)
     }
@@ -136,8 +138,8 @@ export default function AICenterPage() {
       const context = `Business context: ${totalTransactions} sales (30d), KES ${totalRevenue.toLocaleString()} revenue, ${totalProducts} products, ${lowStockCount} low stock items.`
       const response = await aiChat(userMsg, context)
       setChatMessages(prev => [...prev, { role: 'assistant', content: response }])
-    } catch (err: any) {
-      setChatMessages(prev => [...prev, { role: 'assistant', content: `Error: ${err.message}` }])
+    } catch (err: unknown) {
+      setChatMessages(prev => [...prev, { role: 'assistant', content: `Error: ${err instanceof Error ? err.message : 'Unknown error'}` }])
     } finally {
       setChatLoading(false)
     }
@@ -363,7 +365,7 @@ export default function AICenterPage() {
             <Card className="flex items-center justify-center min-h-[200px]">
               <div className="text-center text-muted-foreground">
                 <Brain className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                <p className="font-medium">Click "Run AI Analysis" to get started</p>
+                <p className="font-medium">Click &quot;Run AI Analysis&quot; to get started</p>
                 <p className="text-sm">AI will analyze your sales data and provide insights</p>
               </div>
             </Card>
@@ -510,7 +512,7 @@ export default function AICenterPage() {
             <Card className="flex items-center justify-center min-h-[200px]">
               <div className="text-center text-muted-foreground">
                 <Brain className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                <p className="font-medium">Click "Run AI Analysis" to get started</p>
+                <p className="font-medium">Click &quot;Run AI Analysis&quot; to get started</p>
                 <p className="text-sm">AI will analyze your inventory and provide recommendations</p>
               </div>
             </Card>
@@ -519,58 +521,56 @@ export default function AICenterPage() {
 
         {/* ─── AI Chat Tab ─────────────────────────────────────────── */}
         <TabsContent value="chat" className="space-y-4">
-          <Card className="h-[500px] flex flex-col">
+          {/* AI Assistant Interface — hero input with suggestions */}
+          <AIAssistantInterface
+            onSendMessage={(msg) => {
+              setChatInput(msg)
+              // Trigger the AI chat on next tick so the input is set first
+              setTimeout(() => {
+                const input = msg
+                setChatInput('')
+                setChatMessages(prev => [...prev, { role: 'user', content: input }])
+                setChatLoading(true)
+                const context = `Business context: ${totalTransactions} sales (30d), KES ${totalRevenue.toLocaleString()} revenue, ${totalProducts} products, ${lowStockCount} low stock items.`
+                aiChat(input, context)
+                  .then(response => setChatMessages(prev => [...prev, { role: 'assistant', content: response }]))
+                  .catch((err: unknown) => setChatMessages(prev => [...prev, { role: 'assistant', content: `Error: ${err instanceof Error ? err.message : 'Unknown error'}` }]))
+                  .finally(() => setChatLoading(false))
+              }, 0)
+            }}
+            disabled={chatLoading}
+            placeholder="Ask about your business — sales, inventory, customers, finances..."
+          />
+
+          {/* Chat history */}
+          <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-lg flex items-center gap-2">
                 <Sparkles className="h-5 w-5 text-primary" />
-                AI Business Assistant
+                Conversation
               </CardTitle>
-              <CardDescription>
-                Ask questions about your business data — sales, inventory, customers, finances
-              </CardDescription>
             </CardHeader>
-            <CardContent className="flex-1 overflow-y-auto space-y-4">
-              {chatMessages.length === 0 && (
-                <div className="text-center text-muted-foreground py-8">
-                  <Brain className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                  <p className="font-medium">Ask me anything about your business</p>
-                  <div className="flex flex-wrap gap-2 justify-center mt-4">
-                    {[
-                      'What are my best selling products?',
-                      'Which products need restocking?',
-                      'How is my cash flow?',
-                      'What promotions should I run?',
-                    ].map((q) => (
-                      <Button
-                        key={q}
-                        variant="outline"
-                        size="sm"
-                        onClick={() => { setChatInput(q); }}
-                        className="text-xs"
-                      >
-                        {q}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {chatMessages.map((msg, i) => (
-                <div
-                  key={i}
-                  className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                >
+            <CardContent className="space-y-4 max-h-[400px] overflow-y-auto">
+              {chatMessages.length === 0 ? (
+                <EmptyState icon={Brain} title="Your conversation will appear here" description="Try asking about sales trends, inventory status, or business recommendations" compact />
+              ) : (
+                chatMessages.map((msg, i) => (
                   <div
-                    className={`max-w-[80%] rounded-lg p-3 text-sm whitespace-pre-line ${
-                      msg.role === 'user'
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted'
-                    }`}
+                    key={i}
+                    className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                   >
-                    {msg.content}
+                    <div
+                      className={`max-w-[80%] rounded-lg p-3 text-sm whitespace-pre-line ${
+                        msg.role === 'user'
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-muted'
+                      }`}
+                    >
+                      {msg.content}
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
 
               {chatLoading && (
                 <div className="flex justify-start">
@@ -580,20 +580,6 @@ export default function AICenterPage() {
                 </div>
               )}
             </CardContent>
-            <div className="p-4 border-t">
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Ask about your business..."
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleChat()}
-                  disabled={chatLoading}
-                />
-                <Button onClick={handleChat} disabled={chatLoading || !chatInput.trim()}>
-                  <Send className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
           </Card>
         </TabsContent>
       </Tabs>

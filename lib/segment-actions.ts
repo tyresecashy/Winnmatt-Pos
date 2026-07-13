@@ -24,7 +24,7 @@ export async function getSegments(): Promise<Segment[]> {
       .order('name', { ascending: true })
 
     if (error) throw error
-    return data || []
+    return (data || []) as Segment[]
   } catch (error) {
     logger.error('[SEGMENTS] Failed to fetch segments:', error)
     return []
@@ -50,7 +50,7 @@ export async function createSegment(
       .single()
 
     if (error) throw error
-    return data
+    return data as Segment | null
   } catch (error) {
     logger.error('[SEGMENTS] Failed to create segment:', error)
     return null
@@ -75,7 +75,7 @@ export async function updateSegment(
       .single()
 
     if (error) throw error
-    return data
+    return data as Segment | null
   } catch (error) {
     logger.error('[SEGMENTS] Failed to update segment:', error)
     return null
@@ -124,7 +124,7 @@ export async function getCustomerSegments(customerId: string): Promise<Segment[]
       .order('name', { ascending: true })
 
     if (segmentsError) throw segmentsError
-    return segments || []
+    return (segments || []) as Segment[]
   } catch (error) {
     logger.error('[SEGMENTS] Failed to fetch customer segments:', error)
     return []

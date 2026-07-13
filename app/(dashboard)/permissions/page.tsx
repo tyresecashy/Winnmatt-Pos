@@ -1,7 +1,7 @@
 'use client'
 import { logger } from '@/lib/logger'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, startTransition } from 'react'
 import { useAuth } from '@/contexts/auth-context'
 import { useToast } from '@/components/ui/use-toast'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -40,8 +40,9 @@ import {
   removeRolePermission,
   getUserPermissions,
   setUserPermission,
-} from '@/lib/permission-actions'
+} from '@/lib/modules/security'
 import { getUsers } from '@/lib/user-management'
+import { GrantBadge } from '@/components/permissions/grant-badge'
 import {
   Shield,
   Search,
@@ -58,6 +59,7 @@ import {
   Loader2,
   FileText,
 } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 
 interface PermissionDef {
   code: string
@@ -150,7 +152,7 @@ export default function PermissionsPage() {
     setDefsLoading(true)
     try {
       const data = await getPermissionDefinitions()
-      setDefinitions(data)
+      setDefinitions(data as unknown as PermissionDef[])
       const cats: Record<string, boolean> = {}
       for (const d of data) cats[d.category] = true
       setExpandedCategories(cats)
@@ -166,7 +168,7 @@ export default function PermissionsPage() {
     setRolePermsLoading(true)
     try {
       const data = await getRolePermissions(role)
-      setRolePerms(data)
+      setRolePerms(data as unknown as RolePermission[])
     } catch (error) {
       logger.error('Failed to load role permissions:', error)
     } finally {
@@ -185,13 +187,13 @@ export default function PermissionsPage() {
     } finally {
       setUsersLoading(false)
     }
-  }, [profile?.role])
+  }, [profile])
 
   const loadUserPerms = useCallback(async (userId: string) => {
     setUserPermsLoading(true)
     try {
       const data = await getUserPermissions(userId)
-      setUserPerms(data)
+      setUserPerms(data as unknown as UserPermission[])
     } catch (error) {
       logger.error('Failed to load user permissions:', error)
     } finally {
@@ -200,19 +202,19 @@ export default function PermissionsPage() {
   }, [])
 
   useEffect(() => {
-    void loadDefinitions()
+    startTransition(() => { void loadDefinitions() })
   }, [loadDefinitions])
 
   useEffect(() => {
-    if (activeTab === 'roles') void loadRolePerms(selectedRole)
+    startTransition(() => { if (activeTab === 'roles') void loadRolePerms(selectedRole) })
   }, [activeTab, selectedRole, loadRolePerms])
 
   useEffect(() => {
-    if (activeTab === 'users') void loadUsers()
+    startTransition(() => { if (activeTab === 'users') void loadUsers() })
   }, [activeTab, loadUsers])
 
   useEffect(() => {
-    if (selectedUserId) void loadUserPerms(selectedUserId)
+    startTransition(() => { if (selectedUserId) void loadUserPerms(selectedUserId) })
   }, [selectedUserId, loadUserPerms])
 
   const getRolePerm = (code: string): RolePermission | undefined =>
@@ -300,12 +302,6 @@ export default function PermissionsPage() {
           d.description.toLowerCase().includes(catalogSearch.toLowerCase())
       )
     : definitions
-
-  const GrantBadge = ({ grantType }: { grantType: string }) => {
-    if (grantType === 'allow') return <Badge className="gap-1 border-green-200 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-400"><CheckCircle2 className="h-3 w-3" />Allow</Badge>
-    if (grantType === 'deny') return <Badge className="gap-1 border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-400"><XCircle className="h-3 w-3" />Deny</Badge>
-    return <Badge variant="outline" className="gap-1 text-muted-foreground"><MinusCircle className="h-3 w-3" />None</Badge>
-  }
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -494,8 +490,7 @@ export default function PermissionsPage() {
           {!selectedUserId ? (
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                <User className="mb-3 h-12 w-12 opacity-20" />
-                <p className="text-sm">Select a user to view and manage their permission overrides</p>
+                <EmptyState icon={User} title="Select a user to view and manage their permission overrides" compact />
               </CardContent>
             </Card>
           ) : defsLoading ? (

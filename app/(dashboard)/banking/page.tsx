@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, startTransition } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -29,13 +29,27 @@ import {
   getBankAccounts, createBankAccount, deleteBankAccount,
   getBankTransactions, createBankTransaction, reconcileBankTransaction,
   getBankStats, getAccounts,
-  type BankAccount, type BankTransaction, type Account,
-} from '@/lib/finance-actions'
+  type BankAccount, type Account,
+} from '@/lib/modules/finance'
+
+interface BankTransaction {
+  id: string
+  bank_account_id: string
+  transaction_date: string
+  description: string
+  transaction_type: string
+  amount: number
+  reference_number: string | null
+  is_reconciled: boolean
+  balance_after: number | null
+  created_at: string
+}
 import {
   Landmark, Plus, MoreHorizontal, Search, Loader2, Edit3, Trash2,
   ArrowDownCircle, ArrowUpCircle, RefreshCw, CheckCircle, Building2,
   Wallet, TrendingUp, AlertCircle, Calendar, DollarSign, CreditCard,
 } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -73,7 +87,12 @@ export default function BankingPage() {
   // ── Data State ──
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([])
   const [chartAccounts, setChartAccounts] = useState<Account[]>([])
-  const [stats, setStats] = useState<any>(null)
+  const [stats, setStats] = useState<{
+    totalBalance: number
+    accountCount: number
+    recentTransactions: number
+    unreconciled: number
+  } | null>(null)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('accounts')
 
@@ -118,15 +137,15 @@ export default function BankingPage() {
       ])
       setBankAccounts(accountsData)
       setStats(statsData)
-      setChartAccounts(chartData.filter(a => ['1020', '1030', '1000', '1010', '2500'].includes(a.account_number)))
-    } catch (err: any) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' })
+      setChartAccounts(chartData.filter(a => ['1020', '1030', '1000', '1010', '2500'].includes(a.code)))
+    } catch (err: unknown) {
+      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Unknown error', variant: 'destructive' })
     } finally {
       setLoading(false)
     }
   }, [toast])
 
-  useEffect(() => { loadData() }, [loadData])
+  useEffect(() => { startTransition(() => { loadData() }) }, [loadData])
 
   // ── Load Transactions ──
   const loadTransactions = useCallback(async (accountId: string) => {
@@ -134,17 +153,19 @@ export default function BankingPage() {
     try {
       const txData = await getBankTransactions(accountId)
       setTransactions(txData)
-    } catch (err: any) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' })
+    } catch (err: unknown) {
+      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Unknown error', variant: 'destructive' })
     } finally {
       setLoadingTransactions(false)
     }
   }, [toast])
 
   useEffect(() => {
-    if (selectedAccount) {
-      loadTransactions(selectedAccount.id)
-    }
+    startTransition(() => {
+      if (selectedAccount) {
+        loadTransactions(selectedAccount.id)
+      }
+    })
   }, [selectedAccount, loadTransactions])
 
   // ── Filtered Accounts ──
@@ -179,8 +200,8 @@ export default function BankingPage() {
       setShowCreateAccount(false)
       setAccountForm({ bank_name: '', account_name: '', account_number: '', account_type: 'current', opening_balance: '', chart_account_id: '' })
       loadData()
-    } catch (err: any) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' })
+    } catch (err: unknown) {
+      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Unknown error', variant: 'destructive' })
     } finally {
       setSaving(false)
     }
@@ -208,8 +229,8 @@ export default function BankingPage() {
       setTxForm({ transaction_date: new Date().toISOString().split('T')[0], description: '', transaction_type: 'deposit', amount: '', reference_number: '' })
       loadTransactions(selectedAccount.id)
       loadData()
-    } catch (err: any) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' })
+    } catch (err: unknown) {
+      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Unknown error', variant: 'destructive' })
     } finally {
       setSaving(false)
     }
@@ -218,11 +239,11 @@ export default function BankingPage() {
   // ── Reconcile ──
   const handleReconcile = async (tx: BankTransaction) => {
     try {
-      await reconcileBankTransaction(tx.id)
+      await reconcileBankTransaction(tx.id, {})
       toast({ title: 'Transaction reconciled' })
       if (selectedAccount) loadTransactions(selectedAccount.id)
-    } catch (err: any) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' })
+    } catch (err: unknown) {
+      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Unknown error', variant: 'destructive' })
     }
   }
 
@@ -239,8 +260,8 @@ export default function BankingPage() {
       } else {
         toast({ title: 'Cannot delete', description: result.error, variant: 'destructive' })
       }
-    } catch (err: any) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' })
+    } catch (err: unknown) {
+      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Unknown error', variant: 'destructive' })
     }
   }
 
@@ -350,9 +371,7 @@ export default function BankingPage() {
             <CardContent className="p-0">
               <div className="divide-y max-h-[400px] overflow-y-auto">
                 {filteredAccounts.length === 0 ? (
-                  <div className="py-8 text-center text-muted-foreground text-sm">
-                    No bank accounts found
-                  </div>
+                  <EmptyState icon={Landmark} title="No bank accounts found" compact />
                 ) : (
                   filteredAccounts.map((account) => (
                     <div
@@ -367,7 +386,7 @@ export default function BankingPage() {
                           <p className="font-medium text-sm">{account.account_name}</p>
                           <p className="text-xs text-muted-foreground">{account.bank_name}</p>
                         </div>
-                        <p className="font-bold text-sm">{formatKSh(account.current_balance)}</p>
+                        <p className="font-bold text-sm">{formatKSh(account.current_balance ?? 0)}</p>
                       </div>
                       {account.account_number && (
                         <p className="text-xs text-muted-foreground mt-1 font-mono">
@@ -391,7 +410,7 @@ export default function BankingPage() {
                   <div>
                     <CardTitle className="text-lg">{selectedAccount.account_name}</CardTitle>
                     <CardDescription>
-                      {selectedAccount.bank_name} • Balance: {formatKSh(selectedAccount.current_balance)}
+                      {selectedAccount.bank_name} • Balance: {formatKSh(selectedAccount.current_balance ?? 0)}
                     </CardDescription>
                   </div>
                   <Button size="sm" onClick={() => setShowCreateTx(true)}>
@@ -422,7 +441,7 @@ export default function BankingPage() {
                       {transactions.length === 0 ? (
                         <TableRow>
                           <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                            No transactions yet
+                            <EmptyState icon={ArrowDownCircle} title="No transactions yet" compact />
                           </TableCell>
                         </TableRow>
                       ) : (
@@ -559,9 +578,11 @@ export default function BankingPage() {
                     <SelectValue placeholder="Select account" />
                   </SelectTrigger>
                   <SelectContent>
-                    {chartAccounts.map((acc) => (
+                    {chartAccounts.length === 0 ? (
+                      <SelectItem value="__none__" disabled>No eligible accounts found</SelectItem>
+                    ) : chartAccounts.map((acc) => (
                       <SelectItem key={acc.id} value={acc.id}>
-                        {acc.account_number} - {acc.name}
+                        {acc.code} - {acc.name}
                       </SelectItem>
                     ))}
                   </SelectContent>

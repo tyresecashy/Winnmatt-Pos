@@ -32,9 +32,10 @@ export type EventType =
   | 'scheduler.inventory_check'
   | 'scheduler.loyalty_expiry'
   | 'scheduler.promo_expiry'
+  | 'scheduler.batch_expiry'
   | string // allow custom events
 
-export type EventSource = 'pos' | 'inventory' | 'customer' | 'shift' | 'scheduler' | 'app' | 'api'
+export type EventSource = 'pos' | 'inventory' | 'customer' | 'shift' | 'scheduler' | 'app' | 'api' | 'ecommerce' | 'finance'
 
 export interface AutomationEvent {
   id: string
