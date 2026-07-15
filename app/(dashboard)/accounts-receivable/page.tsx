@@ -117,15 +117,16 @@ export default function AccountsReceivablePage() {
 
     setSaving(true)
     try {
-      const formData = new FormData()
-      formData.set('customer_id', selectedCustomer.customer_id)
-      formData.set('amount_cents', String(parseFloat(paymentForm.amount)))
-      formData.set('payment_date', paymentForm.payment_date)
-      formData.set('payment_method', paymentForm.payment_method)
-      if (paymentForm.reference_number) formData.set('reference_number', paymentForm.reference_number)
-      if (paymentForm.notes) formData.set('notes', paymentForm.notes)
+      const paymentData: Record<string, unknown> = {
+        customer_id: selectedCustomer.customer_id,
+        amount_cents: parseFloat(paymentForm.amount),
+        payment_date: paymentForm.payment_date,
+        payment_method: paymentForm.payment_method,
+        ...(paymentForm.reference_number ? { reference_number: paymentForm.reference_number } : {}),
+        ...(paymentForm.notes ? { notes: paymentForm.notes } : {}),
+      }
 
-      const result = await recordCreditPayment(formData as any)
+      const result = await recordCreditPayment(paymentData)
       if (result.error) {
         toast({ title: 'Error', description: result.error, variant: 'destructive' })
       } else {

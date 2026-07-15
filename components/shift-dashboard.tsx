@@ -48,7 +48,7 @@ import {
 import { AlertCircle, TrendingUp, Users, DollarSign, Clock } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
 import { formatKSh } from '@/lib/currency'
-import { getShiftHistory, reopenShift } from '@/lib/shift-actions'
+import { getShiftHistory, reopenShift } from '@/lib/modules/cash'
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/hooks/use-toast'
 

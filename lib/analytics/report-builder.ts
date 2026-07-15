@@ -303,12 +303,13 @@ export class ReportBuilderService {
             reorder_level, purchase_price
           `)
           .not('inventory.quantity', 'is', null);
+        type InventoryRow = { id: string; name: string; category_id: string | null; inventory: Array<{ quantity: number }>; reorder_level: number; purchase_price: number };
         return (data || [])
-          .filter((row: any) => {
+          .filter((row: InventoryRow) => {
             const qty = row.inventory?.[0]?.quantity ?? 0;
             return qty <= (row.reorder_level ?? 0);
           })
-          .map((row: any) => ({
+          .map((row: InventoryRow) => ({
             id: row.id,
             name: row.name,
             category_id: row.category_id,
@@ -347,7 +348,7 @@ export class ReportBuilderService {
             users!inner(full_name),
             tasks(id, status)
           `);
-        return (data || []).map((row: any) => {
+        return (data || []).map((row: Record<string, unknown> & { id?: string; staff_number?: string; position?: string; users?: { full_name?: string }; tasks?: Array<{ status?: string }> }) => {
           const tasks = row.tasks || [];
           return {
             id: row.id,
@@ -355,7 +356,7 @@ export class ReportBuilderService {
             position: row.position,
             full_name: row.users?.full_name ?? '',
             tasks_assigned: tasks.length,
-            tasks_completed: tasks.filter((t: any) => t.status === String(parameters[0] ?? 'completed')).length,
+            tasks_completed: tasks.filter((t: { status?: string }) => t.status === String(parameters[0] ?? 'completed')).length,
           };
         });
       }

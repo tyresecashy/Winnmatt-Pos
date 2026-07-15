@@ -146,7 +146,7 @@ export function ScheduledReports({ reports, templates, loading, onCreate, onDele
                   <Label>Frequency</Label>
                   <Select
                     value={formData.frequency}
-                    onValueChange={(v: string) => setFormData(prev => ({ ...prev, frequency: v as any }))}
+                    onValueChange={(v: string) => setFormData(prev => ({ ...prev, frequency: v as 'daily' | 'weekly' | 'monthly' }))}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -163,7 +163,7 @@ export function ScheduledReports({ reports, templates, loading, onCreate, onDele
                   <Label>Format</Label>
                   <Select
                     value={formData.format}
-                    onValueChange={(v: string) => setFormData(prev => ({ ...prev, format: v as any }))}
+                    onValueChange={(v: string) => setFormData(prev => ({ ...prev, format: v as 'pdf' | 'excel' | 'csv' }))}
                   >
                     <SelectTrigger>
                       <SelectValue />

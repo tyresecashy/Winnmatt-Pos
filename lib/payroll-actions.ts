@@ -57,7 +57,10 @@ export interface PayrollRun {
   total_deductions: number
   total_net: number
   employee_count: number
+  processed_by: string | null
+  created_by: string | null
   created_at: string
+  completed_at: string | null
 }
 
 export async function getPayrollRuns(): Promise<PayrollRun[]> {

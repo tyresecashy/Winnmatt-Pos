@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
           credit_balance: body.credit_balance || 0,
           notes: body.notes || null,
           tags: body.tags || null,
-        } as any)
+        })
         .select()
         .single()
 

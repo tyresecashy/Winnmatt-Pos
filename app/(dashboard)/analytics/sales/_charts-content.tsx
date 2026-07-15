@@ -32,7 +32,7 @@ export default function SalesChartContent({
         <Card><CardHeader><CardTitle>Peak Hours</CardTitle></CardHeader>
           <CardContent className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={peakHours}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="hour" /><YAxis /><Tooltip content={<CustomTooltip currency={false} suffix=" txns" />} /><Bar dataKey="transactions" fill="#82ca9d" cursor="pointer" onClick={(data: any) => data?.hour && onDrillDown('hour', String(data.hour))} /></BarChart>
+              <BarChart data={peakHours}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="hour" /><YAxis /><Tooltip content={<CustomTooltip currency={false} suffix=" txns" />} /><Bar dataKey="transactions" fill="#82ca9d" cursor="pointer" onClick={(data) => { const d = data as unknown as Record<string, unknown>; d?.hour && onDrillDown('hour', String(d.hour)) }} /></BarChart>
             </ResponsiveContainer>
           </CardContent></Card>
       </div>

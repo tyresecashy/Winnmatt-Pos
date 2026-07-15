@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/hooks/use-toast'
-import { openShift, getActiveShift, closeShift, getShiftSummary } from '@/lib/shift-actions'
+import { openShift, getActiveShift, closeShift, getShiftSummary } from '@/lib/modules/cash'
 import { formatKSh } from '@/lib/currency'
 
 interface ShiftOperationsProps {
@@ -142,7 +142,7 @@ export function ShiftOperations({ branchId, cashierId, cashierName }: ShiftOpera
         description: result.message,
       })
 
-      setActiveShift(result.shift ?? null)
+      setActiveShift((result.shift ?? null) as ShiftRow | null)
       setOpeningFloat('')
       setShowOpenDialog(false)
     } catch (error) {

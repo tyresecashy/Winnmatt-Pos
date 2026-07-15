@@ -5,7 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -14,7 +14,7 @@ export interface APIContext {
   userId: string
   branchId: string | null
   role: string
-  supabase: ReturnType<typeof createClient>
+  supabase: SupabaseClient
 }
 
 export interface APIError {
@@ -66,7 +66,7 @@ async function authenticate(request: NextRequest): Promise<APIContext | null> {
     userId: user.id,
     branchId: profile.branch_id,
     role: profile.role,
-    supabase: supabase as any,
+    supabase: supabase,
   }
 }
 

@@ -2,7 +2,7 @@
 import { logger } from '@/lib/logger';
 
 import { createCashSaveTimingTracker } from '@/lib/cash-save-timing'
-import type { SaleItem, SaleReceiptSeed, PaymentSplit } from '@/lib/sales-actions'
+import type { SaleInputItem as SaleItem, SaleReceiptSeed, PaymentSplit } from '@/lib/modules/sales'
 import type { SaleDetailsData } from '@/components/receipt-preview'
 import {
   getAuthenticatedServerActionUser,
@@ -13,7 +13,7 @@ import {
 import { supabaseAdmin } from '@/lib/supabase-server'
 import { getRedemptionEligibility, redeemLoyaltyPoints } from '@/lib/modules/customers'
 import { buildReceiptPayload, type RawSaleData, type RawItem } from '@/lib/receipt-builder'
-import { createSaleWithContext, getSaleByIdForAuthorizedContext } from '@/lib/sales-actions'
+import { createSaleWithContext, getSaleByIdForAuthorizedContext } from '@/lib/modules/sales'
 import { applyPromotionToSale } from '@/lib/modules/promotions'
 import { syncCashSaleEvent } from '@/lib/shift-cash-sync'
 import { emitEvent } from '@/lib/automation'

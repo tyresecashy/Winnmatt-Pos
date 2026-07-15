@@ -3,6 +3,7 @@
 import { authenticateServerAction } from '@/lib/auth-helpers'
 import { supabaseAdmin } from '@/lib/supabase-server'
 import { logger } from '@/lib/logger'
+import type { Json } from '@/lib/types/database'
 
 export interface ProductSummary {
   id: string
@@ -311,7 +312,7 @@ export async function logProductActivity(
         product_id: productId,
         activity_type: activityType,
         description,
-        changes_json: (changesJson || null) as any,
+        changes_json: (changesJson || null) as Json,
         performed_by: performedBy || null,
         reference_type: referenceType || null,
         reference_id: referenceId || null,

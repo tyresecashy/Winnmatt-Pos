@@ -239,7 +239,7 @@ export class DisasterRecoveryService {
 
   async testDRPlan(planId: string): Promise<Record<string, unknown>> {
     const plan = this.plans.find(p => p.id === planId);
-    if (!plan) return null as any;
+    if (!plan) return null as unknown as Record<string, unknown>;
 
     const startTime = Date.now();
     

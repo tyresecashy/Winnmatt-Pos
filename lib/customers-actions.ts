@@ -108,7 +108,7 @@ export async function getCustomerById(customerId: string) {
 
     // Get purchase stats from sales
     const { data: stats, error: statsError } = await supabaseAdmin
-      .rpc('get_customer_stats' as any, { p_customer_id: customerId } as any)
+      .rpc('get_customer_stats' as never, { p_customer_id: customerId } as never)
 
     if (!statsError && stats) {
       const statsArr = (stats || []) as unknown as Array<{ total_purchases: number; purchase_count: number; last_visit: string | null }>
@@ -159,25 +159,6 @@ export async function searchCustomers(query: string) {
     return data || []
   } catch (error) {
     logger.error('Error searching customers:', error)
-    return []
-  }
-}
-
-/**
- * Get customers filtered by type
- */
-export async function getCustomersByType(type: 'retail' | 'wholesale' | 'business') {
-  try {
-    const { data, error } = await supabaseAdmin
-      .from('customers')
-      .select('*')
-      .eq('type', type)
-      .order('name')
-
-    if (error) throw error
-    return data || []
-  } catch (error) {
-    logger.error('Error fetching customers by type:', error)
     return []
   }
 }
@@ -455,27 +436,4 @@ export async function getCustomerPurchases(customerId: string, limit: number = 1
   }
 }
 
-/**
- * Get customer count by type
- */
-export async function getCustomerCounts() {
-  try {
-    const { data, error } = await supabaseAdmin
-      .from('customers')
-      .select('type')
 
-    if (error) throw error
-
-    const counts = {
-      total: data?.length || 0,
-      retail: data?.filter((c) => c.type === 'retail').length || 0,
-      wholesale: data?.filter((c) => c.type === 'wholesale').length || 0,
-      business: data?.filter((c) => c.type === 'business').length || 0,
-    }
-
-    return counts
-  } catch (error) {
-    logger.error('Error getting customer counts:', error)
-    return { total: 0, retail: 0, wholesale: 0, business: 0 }
-  }
-}

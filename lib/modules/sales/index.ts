@@ -257,24 +257,26 @@ export async function searchSales(
 export async function holdSale(
   branchId: string,
   cashierId: string,
+  items: Array<{ productId: string; name?: string; sku?: string; quantity: number; unitPrice: number; discountPercent?: number; sellingPrice?: number }>,
   customerId: string | null,
-  items: Array<{ productId: string; quantity: number; unitPrice: number }>,
-  notes?: string
-): Promise<{ success: boolean; sale_id?: string; error?: string }> {
+  subtotal: number,
+  discountAmount: number,
+  totalAmount: number,
+  holdNotes?: string
+): Promise<{ success: boolean; sale_id?: string; receiptNumber?: string; error?: string }> {
   try {
     const mappedItems = items.map((i) => ({
       productId: i.productId,
-      name: '',
-      sku: '',
+      name: i.name || '',
+      sku: i.sku || '',
       quantity: i.quantity,
       unitPrice: i.unitPrice,
-      discountPercent: 0,
-      sellingPrice: i.unitPrice,
+      discountPercent: i.discountPercent || 0,
+      sellingPrice: i.sellingPrice || i.unitPrice,
     }))
-    const subtotal = items.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0)
-    const result = await salesHoldSale(branchId, cashierId, mappedItems, customerId, subtotal, 0, subtotal, notes)
+    const result = await salesHoldSale(branchId, cashierId, mappedItems, customerId, subtotal, discountAmount, totalAmount, holdNotes)
     if (!result.success) return { success: false, error: result.error }
-    return { success: true, sale_id: result.saleId }
+    return { success: true, sale_id: result.saleId, receiptNumber: result.receiptNumber }
   } catch (error) {
     logger.error('[Sales Module] holdSale failed', error instanceof Error ? error.message : String(error))
     return { success: false, error: 'Operation failed. Please try again.' }
@@ -345,6 +347,10 @@ export async function getSaleById(saleId: string): Promise<SaleByIdResult> {
 // ─── Type Re-exports ─────────────────────────────────────────────────────────
 export type { PaymentSplit, SaleReceiptSeed, HeldSale, SearchSalesParams, SearchSalesResult } from '@/lib/sales-actions'
 
+/** Input sale item type (camelCase fields: productId, quantity, unitPrice, discountPercent).
+ *  Use for creating sales. Compare with SaleItem (persisted, snake_case). */
+export type { SaleItem as SaleInputItem } from '@/lib/sales-actions'
+
 // ─── Backward-Compatible Re-exports ──────────────────────────────────────────
 // These preserve original signatures for callers migrating to the module layer.
 
@@ -356,3 +362,12 @@ export { returnSale }
 // Void sale actions
 export { serverVoidSale } from '@/lib/void-sale-actions'
 export { serverGetSaleAuditTrail } from '@/lib/void-sale-actions'
+
+// Raw sales-actions function re-exports for internal composability
+export { createSaleWithContext, getSaleByIdForAuthorizedContext } from '@/lib/sales-actions'
+
+// POS helper actions (convenience functions for the POS page)
+export { convertCartToQuote, emailSaleReceipt, smsSaleReceipt } from '@/lib/pos-actions'
+
+// M-Pesa action re-exports (for API routes)
+export { createMpesaTransaction, updateMpesaTransactionCallback, getMpesaTransactionByCheckoutId, getMpesaTransactionBySaleId, finalizeMpesaSale, failMpesaSale } from '@/lib/mpesa-actions'

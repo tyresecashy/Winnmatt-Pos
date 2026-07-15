@@ -203,7 +203,7 @@ export default function CampaignsPage() {
                       <div className="space-y-2 text-sm">
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">Multiplier</span>
-                          <span className="font-semibold text-lg">{(campaign as any).multiplier}x</span>
+                          <span className="font-semibold text-lg">{(campaign as unknown as { multiplier?: number }).multiplier}x</span>
                         </div>
                         {campaign.description && (
                           <p className="text-muted-foreground text-xs">{campaign.description}</p>

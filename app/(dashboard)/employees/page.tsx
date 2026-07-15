@@ -25,7 +25,7 @@ import {
 } from '@/components/ui/select'
 import { useToast } from '@/components/ui/use-toast'
 import { logger } from '@/lib/logger'
-import { getEmployees } from '@/lib/employee-actions'
+import { getEmployeesLegacy as getEmployees } from '@/lib/modules/workforce'
 import {
   getEmployee as getEmployeeById,
   getDepartments,

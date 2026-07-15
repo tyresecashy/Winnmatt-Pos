@@ -70,10 +70,10 @@ export default function LaunchReadinessPage() {
     }
     setLoading(true)
     try {
-      const data = await getLaunchReadiness(branchId) as any
+      const data = await getLaunchReadiness(branchId) as { items?: Record<string, boolean>; status?: string; last_checked_at?: string } | null
       if (data) {
-        setChecklist(data.items)
-        setStatus(data.status)
+        setChecklist(data.items ?? null)
+        setStatus(data.status ?? '')
         setLastCheckedAt(data.last_checked_at || null)
       }
     } catch (error) {
@@ -110,10 +110,10 @@ export default function LaunchReadinessPage() {
     if (!branchId || runningCheck) return
     setRunningCheck(true)
     try {
-      const data = await getLaunchReadiness(branchId) as any
+      const data = await getLaunchReadiness(branchId) as { items?: Record<string, boolean>; status?: string; last_checked_at?: string } | null
       if (data) {
-        setChecklist(data.items)
-        setStatus(data.status)
+        setChecklist(data.items ?? null)
+        setStatus(data.status ?? '')
         setLastCheckedAt(data.last_checked_at || null)
       }
     } catch (error) {

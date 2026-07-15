@@ -19,7 +19,7 @@ import {
   failMpesaSale,
   getMpesaTransactionByCheckoutId,
   getMpesaTransactionBySaleId,
-} from '@/lib/mpesa-actions'
+} from '@/lib/modules/sales'
 import { supabaseAdmin } from '@/lib/supabase-server'
 import { logger } from '@/lib/logger'
 import { mpesaCallbackBodySchema } from '@/lib/api-schemas'

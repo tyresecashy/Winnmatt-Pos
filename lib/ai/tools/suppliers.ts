@@ -29,8 +29,8 @@ export const supplierTools: ToolDefinition[] = [
       const email = args.email as string | undefined
       const paymentTerms = (args.payment_terms as string) || 'Net 30'
 
-      const { createSupplier } = await import('@/lib/suppliers-actions')
-      const result = await createSupplier(name, contactPerson, phone, email, paymentTerms)
+      const { createSupplier } = await import('@/lib/modules/suppliers')
+      const result = await createSupplier({ name, contact_person: contactPerson, phone, email, payment_terms: paymentTerms })
 
       if (result.success) {
         return {

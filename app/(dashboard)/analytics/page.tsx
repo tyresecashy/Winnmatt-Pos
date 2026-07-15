@@ -370,7 +370,7 @@ export default function AnalyticsDashboard() {
                         cx="50%"
                         cy="50%"
                         labelLine={false}
-                        label={({ name, percent }: any) => `${name} (${((percent ?? 0) * 100).toFixed(0)}%)`}
+                        label={({ name, percent }: { name?: string; percent?: number }) => `${name} (${((percent ?? 0) * 100).toFixed(0)}%)`}
                         outerRadius={100}
                         fill="#8884d8"
                         dataKey="revenue"
@@ -524,7 +524,7 @@ export default function AnalyticsDashboard() {
                         data={metrics?.financial?.expenseBreakdown || []}
                         cx="50%" cy="50%"
                         labelLine={false}
-                        label={({ category, percent }: any) => `${category} (${((percent ?? 0) * 100).toFixed(0)}%)`}
+                        label={({ category, percent }: { category?: string; percent?: number }) => `${category} (${((percent ?? 0) * 100).toFixed(0)}%)`}
                         outerRadius={100}
                         fill="#8884d8"
                         dataKey="amount"

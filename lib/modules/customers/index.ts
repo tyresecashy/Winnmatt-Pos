@@ -12,7 +12,7 @@ import { getCustomerById, getCustomers as realGetCustomers, getCustomersWithStat
 import { awardLoyaltyPoints as realAwardLoyaltyPoints, redeemLoyaltyPoints as realRedeemLoyaltyPoints, getLoyaltyHistory as realGetLoyaltyHistory, getRedemptionEligibility as realGetRedemptionEligibility, getLoyaltySettings as realGetLoyaltySettings, updateLoyaltySettings as realUpdateLoyaltySettings } from '@/lib/loyalty-actions'
 import type { LoyaltySettings } from '@/lib/loyalty-actions'
 import type { CustomerWithStats as CustomerWithStatsType, Customer as _CustomerRow } from '@/lib/customers-actions'
-import { supabaseAdmin } from '@/lib/supabase-server'
+import { customerRepo } from './repository'
 
 // ─── Type helpers ─────────────────────────────────────────────────────────────
 type CustomerWithStatsResult = Awaited<ReturnType<typeof getCustomerById>>
@@ -223,34 +223,7 @@ export async function getLoyaltyBalance(customerId: string): Promise<{
   lifetime_points: number
 }> {
   try {
-    const [customerResult, txResult] = await Promise.all([
-      supabaseAdmin
-        .from('customers')
-        .select('loyalty_points, tier')
-        .eq('id', customerId)
-        .single(),
-      supabaseAdmin
-        .from('loyalty_transactions')
-        .select('points_delta')
-        .eq('customer_id', customerId)
-        .gt('points_delta', 0),
-    ])
-
-    const customer = customerResult.data
-    if (!customer) {
-      return { points: 0, tier: 'bronze', lifetime_points: 0 }
-    }
-
-    const lifetimePoints = (txResult.data || []).reduce(
-      (sum: number, t: { points_delta: number }) => sum + t.points_delta,
-      0
-    )
-
-    return {
-      points: customer.loyalty_points ?? 0,
-      tier: customer.tier ?? 'bronze',
-      lifetime_points: lifetimePoints,
-    }
+    return await customerRepo.getLoyaltyBalance(customerId)
   } catch (error) {
     logger.error('[Customers Module] getLoyaltyBalance failed', error instanceof Error ? error.message : String(error))
     return { points: 0, tier: 'bronze', lifetime_points: 0 }
@@ -392,3 +365,6 @@ export async function createCustomer(data: Record<string, unknown>): Promise<{ s
     return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
+
+// ─── Loyalty reverse/restore re-exports (for sales-actions and other internal callers) ──
+export { reverseLoyaltyPoints, restoreRedeemedPoints } from '@/lib/loyalty-actions'

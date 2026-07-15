@@ -60,13 +60,13 @@ import {
   createPurchaseOrder,
   getPurchaseStats,
   type PurchaseOrderItem,
-} from '@/lib/purchase-actions'
+} from '@/lib/modules/purchases'
 import {
-  updatePurchaseOrderStatus,
-  receivePurchaseOrder,
   getPurchaseReceipts,
   getPurchaseReceiptById,
-} from '@/lib/procurement-actions'
+  receivePurchaseOrder,
+  updatePurchaseOrderStatus,
+} from '@/lib/modules/procurement'
 import { getSuppliers } from '@/lib/modules/suppliers'
 import { getProductsForPOS } from '@/lib/modules/inventory'
 import { formatKSh } from '@/lib/currency'
@@ -1222,7 +1222,7 @@ export default function PurchasesPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {receiptDetail.items?.map((item: any) => (
+                  {receiptDetail.items?.map((item: { id: string; product?: { id: string; sku: string; name: string } | null; quantity_received: number; unit_cost: number; batch_number?: string | null; expiry_date?: string | null }) => (
                     <TableRow key={item.id}>
                       <TableCell className="font-medium">{item.product?.name || 'Unknown'}</TableCell>
                       <TableCell className="text-right">{item.quantity_received}</TableCell>

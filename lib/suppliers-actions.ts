@@ -39,64 +39,6 @@ export interface Supplier {
 }
 
 /**
- * Get all suppliers
- */
-export async function getSuppliers() {
-  try {
-    const { data, error } = await supabaseAdmin
-      .from('suppliers')
-      .select('*')
-      .order('name', { ascending: true })
-
-    if (error) throw error
-    return data || []
-  } catch (error) {
-    logger.error('Error fetching suppliers:', error)
-    return []
-  }
-}
-
-/**
- * Get supplier by ID
- */
-export async function getSupplierById(supplierId: string) {
-  try {
-    const { data, error } = await supabaseAdmin
-      .from('suppliers')
-      .select('*')
-      .eq('id', supplierId)
-      .single()
-
-    if (error) throw error
-    return data
-  } catch (error) {
-    logger.error('Error fetching supplier:', error)
-    return null
-  }
-}
-
-/**
- * Search suppliers by name, contact person, or phone
- */
-export async function searchSuppliers(query: string) {
-  try {
-    if (!query.trim()) return []
-
-    const { data, error } = await supabaseAdmin
-      .from('suppliers')
-      .select('*')
-      .or(`name.ilike.%${query}%,contact_person.ilike.%${query}%,phone.ilike.%${query}%,email.ilike.%${query}%`)
-      .limit(20)
-
-    if (error) throw error
-    return data || []
-  } catch (error) {
-    logger.error('Error searching suppliers:', error)
-    return []
-  }
-}
-
-/**
  * Create a new supplier
  */
 export async function createSupplier(

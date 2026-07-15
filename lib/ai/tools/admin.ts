@@ -214,7 +214,7 @@ export const adminTools: ToolDefinition[] = [
 
       // Fallback to audit_log table
       if (error) {
-        const result = await (supabaseAdmin as any)
+        const result = await supabaseAdmin
           .from('audit_log')
           .select('*')
           .order('created_at', { ascending: false })

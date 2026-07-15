@@ -13,7 +13,7 @@ interface AIActionResultProps {
  */
 export function AIActionResult({ result }: AIActionResultProps) {
   const isSuccess = result.result.success
-  const data = result.result.data as any
+  const data = result.result.data
 
   return (
     <Card className={`border ${isSuccess ? 'border-green-200' : 'border-red-200'}`}>
@@ -35,7 +35,7 @@ export function AIActionResult({ result }: AIActionResultProps) {
             )}
 
             {/* Show data summary for read operations */}
-            {isSuccess && data && Array.isArray(data) && data.length > 0 && (
+            {isSuccess && data != null && Array.isArray(data) && data.length > 0 && (
               <div className="mt-2 text-xs text-muted-foreground">
                 <p className="font-medium mb-1 flex items-center gap-1">
                   <Info className="h-3 w-3" />
@@ -58,7 +58,7 @@ export function AIActionResult({ result }: AIActionResultProps) {
             )}
 
             {/* Show single object data */}
-            {isSuccess && data && !Array.isArray(data) && typeof data === 'object' && data !== null && (
+            {isSuccess && data != null && !Array.isArray(data) && typeof data === 'object' && (
               <div className="mt-2 text-xs text-muted-foreground bg-background rounded p-2 max-h-40 overflow-y-auto">
                 {Object.entries(data as Record<string, unknown>)
                   .filter(([_, v]) => typeof v !== 'object' || v === null)

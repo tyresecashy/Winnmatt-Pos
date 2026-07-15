@@ -65,7 +65,7 @@ export default function SupplierInvoicesPage() {
   useEffect(() => {
     if (showCreate) {
       getSuppliers().then(s => setSupplierList(s.map((sup: { id: string; name: string }) => ({ id: sup.id, name: sup.name }))))
-      getPurchaseOrders().then(orders => setPoList(orders.map((po: any) => ({ id: po.id, po_number: po.po_number ?? '', total_amount: po.total_amount }))))
+      getPurchaseOrders().then(orders => setPoList(orders.map((po: { id: string; po_number: string | null; total_amount: number | null }) => ({ id: po.id, po_number: po.po_number ?? '', total_amount: po.total_amount ?? 0 }))))
     }
   }, [showCreate])
 

@@ -144,16 +144,4 @@ export function useI18n() {
   return context
 }
 
-/**
- * Simple hook to just get translations (without locale switching).
- * 
- * Usage:
- * ```tsx
- * const t = useTranslations()
- * return <h1>{t('dashboard.title')}</h1>
- * ```
- */
-export function useTranslations() {
-  const { t } = useI18n()
-  return t
-}
+

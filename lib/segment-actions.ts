@@ -31,76 +31,6 @@ export async function getSegments(): Promise<Segment[]> {
   }
 }
 
-export async function createSegment(
-  name: string,
-  slug: string,
-  description: string | null,
-  color: string
-): Promise<Segment | null> {
-  try {
-    const authResult = await authenticateServerAction()
-    if (!authResult.success || !['super_admin', 'admin'].includes(authResult.profile?.role || '')) {
-      throw new Error('Unauthorized')
-    }
-
-    const { data, error } = await supabaseAdmin
-      .from('customer_segments')
-      .insert({ name, slug, description, color })
-      .select()
-      .single()
-
-    if (error) throw error
-    return data as Segment | null
-  } catch (error) {
-    logger.error('[SEGMENTS] Failed to create segment:', error)
-    return null
-  }
-}
-
-export async function updateSegment(
-  id: string,
-  updates: { name?: string; slug?: string; description?: string | null; color?: string }
-): Promise<Segment | null> {
-  try {
-    const authResult = await authenticateServerAction()
-    if (!authResult.success || !['super_admin', 'admin'].includes(authResult.profile?.role || '')) {
-      throw new Error('Unauthorized')
-    }
-
-    const { data, error } = await supabaseAdmin
-      .from('customer_segments')
-      .update(updates)
-      .eq('id', id)
-      .select()
-      .single()
-
-    if (error) throw error
-    return data as Segment | null
-  } catch (error) {
-    logger.error('[SEGMENTS] Failed to update segment:', error)
-    return null
-  }
-}
-
-export async function deleteSegment(id: string): Promise<boolean> {
-  try {
-    const authResult = await authenticateServerAction()
-    if (!authResult.success || !['super_admin', 'admin'].includes(authResult.profile?.role || '')) {
-      throw new Error('Unauthorized')
-    }
-
-    const { error } = await supabaseAdmin
-      .from('customer_segments')
-      .delete()
-      .eq('id', id)
-
-    if (error) throw error
-    return true
-  } catch (error) {
-    logger.error('[SEGMENTS] Failed to delete segment:', error)
-    return false
-  }
-}
 
 // ─── Membership ─────────────────────────────────────────────────────────────
 
@@ -156,28 +86,6 @@ export async function assignCustomerToSegment(
     return true
   } catch (error) {
     logger.error('[SEGMENTS] Failed to assign segment:', error)
-    return false
-  }
-}
-
-export async function unassignCustomerFromSegment(
-  customerId: string,
-  segmentId: string
-): Promise<boolean> {
-  try {
-    const authResult = await authenticateServerAction()
-    if (!authResult.success) throw new Error('Unauthorized')
-
-    const { error } = await supabaseAdmin
-      .from('customer_segment_members')
-      .delete()
-      .eq('customer_id', customerId)
-      .eq('segment_id', segmentId)
-
-    if (error) throw error
-    return true
-  } catch (error) {
-    logger.error('[SEGMENTS] Failed to unassign segment:', error)
     return false
   }
 }

@@ -63,7 +63,7 @@ export default function PurchaseOrdersPage() {
       if (supplierParam) {
         setSupplierId(supplierParam)
         try {
-          const { getSupplierById } = await import('@/lib/suppliers-actions')
+          const { getSupplierById } = await import('@/lib/modules/suppliers')
           const sup = await getSupplierById(supplierParam)
           if (sup) setSupplier(sup.name)
         } catch { /* ignore */ }
@@ -71,7 +71,7 @@ export default function PurchaseOrdersPage() {
 
       if (requisitionParam) {
         try {
-          const { getRequisitionForPO } = await import('@/lib/purchase-requisition-actions')
+          const { getRequisitionForPO } = await import('@/lib/modules/procurement')
           const reqData = await getRequisitionForPO(requisitionParam)
           if (reqData?.items?.length) {
             setItems(reqData.items.map((i: { product_name: string; quantity: number; unit_price: number }) => ({
@@ -83,7 +83,7 @@ export default function PurchaseOrdersPage() {
             if (reqData.expected_date) setExpectedDate(reqData.expected_date)
             if (reqData.supplier_id && !supplierParam) {
               setSupplierId(reqData.supplier_id)
-              const { getSupplierById } = await import('@/lib/suppliers-actions')
+              const { getSupplierById } = await import('@/lib/modules/suppliers')
               const sup = await getSupplierById(reqData.supplier_id)
               if (sup) setSupplier(sup.name)
             }
@@ -193,7 +193,7 @@ export default function PurchaseOrdersPage() {
     const po = await getPurchaseOrder(id)
     setShowDetail(po)
     // Load attachments
-    const { getPOAttachments } = await import('@/lib/attachment-actions')
+    const { getPOAttachments } = await import('@/lib/modules/procurement')
     const atts = await getPOAttachments(id)
     setPOAttachments(atts)
   }
@@ -205,11 +205,11 @@ export default function PurchaseOrdersPage() {
       const reader = new FileReader()
       reader.onload = async (e) => {
         const base64 = e.target?.result as string
-        const { uploadPOAttachment } = await import('@/lib/attachment-actions')
+        const { uploadPOAttachment } = await import('@/lib/modules/procurement')
         const result = await uploadPOAttachment(showDetail.id, file.name, file.type, base64)
         if (result.success) {
           toast({ title: 'Uploaded', description: `${file.name} attached` })
-          const { getPOAttachments } = await import('@/lib/attachment-actions')
+          const { getPOAttachments } = await import('@/lib/modules/procurement')
           setPOAttachments(await getPOAttachments(showDetail.id))
         } else {
           toast({ title: 'Error', description: result.error, variant: 'destructive' })
@@ -225,7 +225,7 @@ export default function PurchaseOrdersPage() {
 
   async function handleDeleteAttachment(id: string) {
     if (!confirm('Delete this attachment?')) return
-    const { deletePOAttachment } = await import('@/lib/attachment-actions')
+    const { deletePOAttachment } = await import('@/lib/modules/procurement')
     const result = await deletePOAttachment(id)
     if (result.success) {
       setPOAttachments(atts => atts.filter(a => a.id !== id))
@@ -236,7 +236,7 @@ export default function PurchaseOrdersPage() {
   }
 
   async function handleDownload(id: string) {
-    const { getAttachmentDownloadUrl } = await import('@/lib/attachment-actions')
+    const { getAttachmentDownloadUrl } = await import('@/lib/modules/procurement')
     const url = await getAttachmentDownloadUrl(id)
     if (url) window.open(url, '_blank')
     else toast({ title: 'Error', description: 'Could not generate download URL', variant: 'destructive' })

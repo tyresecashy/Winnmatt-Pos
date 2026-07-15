@@ -9,6 +9,7 @@
 
 import { logger } from '@/lib/logger'
 import { supabaseAdmin } from '@/lib/supabase-server'
+import type { Json } from '@/lib/types/database'
 
 /**
  * Execute an automation action.
@@ -121,9 +122,9 @@ async function executeAudit(
         payload,
         automated: true,
         timestamp: new Date().toISOString(),
-      },
+      } as Json,
       severity: 'info',
-    } as any)
+    })
 
     logger.info('[Automation] Audit log written', { action, entityType, entityId })
   } catch (err) {

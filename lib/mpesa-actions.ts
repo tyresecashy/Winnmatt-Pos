@@ -7,6 +7,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase-server'
 import { logger } from '@/lib/logger'
+import type { Json } from '@/lib/types/database'
 
 export interface MpesaTransaction {
   id: string
@@ -94,7 +95,7 @@ export async function updateMpesaTransactionCallback(
       .from('mpesa_transactions')
       .update({
         status,
-        callback_payload: callbackPayload as any,
+        callback_payload: callbackPayload as Json,
         callback_received_at: new Date().toISOString(),
         mpesa_receipt_number: mpesaReceiptNumber || null,
         error_message: resultDesc,

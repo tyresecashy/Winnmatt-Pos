@@ -197,6 +197,10 @@ export async function processPayrollRun(
   }
 }
 
+// ─── Payroll re-exports ──────────────────────────────────────────────────────
+export { getPayrollRuns, createPayrollRun, processPayroll, getPayslips, approvePayslip, markPayslipPaid } from '@/lib/payroll-actions'
+// PayrollRun type exported locally above — no re-export to avoid conflict
+
 // ─── Backward-Compatible Re-exports (external-only — not locally declared) ───
 
 // Attendance actions

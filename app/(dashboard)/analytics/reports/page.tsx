@@ -55,14 +55,15 @@ export default function ReportBuilderPage() {
     startTransition(() => { loadData() })
   }, [loadData])
 
-  const handleGenerate = useCallback(async (templateId: string, startDate: string, endDate: string): Promise<any> => {
-    return await generateReport(templateId, { startDate, endDate })
+  const handleGenerate = useCallback(async (templateId: string, startDate: string, endDate: string) => {
+    const result = await generateReport(templateId, { startDate, endDate })
+    return result as unknown as { generatedAt: string; widgets: { widget: { id: string }; data: Record<string, unknown>; error?: string }[] }
   }, [])
 
   const handleCreateScheduled = useCallback(async (data: Omit<ScheduledReport, 'id' | 'lastRun' | 'nextRun'>) => {
-    const result = await createScheduledReport(data.templateId, data as any, data.frequency)
+    const result = await createScheduledReport(data.templateId, data as unknown as Record<string, unknown>, data.frequency)
     if (result.success) {
-      setScheduledReports(prev => [...prev, data as any])
+      setScheduledReports(prev => [...prev, data as unknown as ScheduledReport])
     }
   }, [])
 

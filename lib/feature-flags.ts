@@ -63,54 +63,6 @@ async function getCachedFlag(key: string): Promise<FeatureFlag | null> {
 // ─── Core Service ───────────────────────────────────────────────────────────
 
 /**
- * Check if a feature flag is enabled for a given context.
- * Respects rollout percentage, target branches, and target roles.
- */
-export async function isFeatureEnabled(
-  key: string,
-  context: FeatureFlagContext = {}
-): Promise<boolean> {
-  try {
-    const flag = await getCachedFlag(key)
-
-    // Flag doesn't exist or is disabled globally
-    if (!flag || !flag.enabled) {
-      return false
-    }
-
-    // Check rollout percentage (deterministic based on user ID if provided)
-    if (flag.rollout_percentage < 100) {
-      const seed = context.userId || key
-      const hash = simpleHash(seed)
-      const bucket = hash % 100
-      if (bucket >= flag.rollout_percentage) {
-        return false
-      }
-    }
-
-    // Check branch targeting
-    if (flag.target_branches && flag.target_branches.length > 0 && context.branchId) {
-      if (!flag.target_branches.includes(context.branchId)) {
-        return false
-      }
-    }
-
-    // Check role targeting
-    if (flag.target_roles && flag.target_roles.length > 0 && context.role) {
-      if (!flag.target_roles.includes(context.role)) {
-        return false
-      }
-    }
-
-    return true
-  } catch (error) {
-    logger.error(`[FeatureFlags] Error checking flag "${key}":`, error)
-    // Fail closed — feature disabled on error
-    return false
-  }
-}
-
-/**
  * Get all feature flags (admin only)
  */
 export async function getAllFeatureFlags(): Promise<FeatureFlag[]> {
@@ -161,31 +113,6 @@ export async function createFeatureFlag(
     return { success: true }
   } catch (error) {
     logger.error('[FeatureFlags] Failed to create flag:', error)
-    return { success: false, error: 'Operation failed. Please try again.' }
-  }
-}
-
-/**
- * Update a feature flag
- */
-export async function updateFeatureFlag(
-  id: string,
-  updates: Partial<Pick<FeatureFlag, 'name' | 'description' | 'enabled' | 'rollout_percentage' | 'target_branches' | 'target_roles'>>
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    const { error } = await supabaseAdmin
-      .from('feature_flags')
-      .update(updates)
-      .eq('id', id)
-
-    if (error) throw error
-
-    // Refresh cache
-    await refreshCache()
-
-    return { success: true }
-  } catch (error) {
-    logger.error('[FeatureFlags] Failed to update flag:', error)
     return { success: false, error: 'Operation failed. Please try again.' }
   }
 }

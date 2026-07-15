@@ -1,6 +1,6 @@
 import { createServerActionClient } from '@/lib/supabase-server'
 import { getEmployee } from '@/lib/modules/workforce'
-import { EmployeeDetailClient } from './employee-detail-client'
+import { EmployeeDetailClient, type EmployeeData, type LeaveRequestItem } from './employee-detail-client'
 import { notFound } from 'next/navigation'
 
 export const dynamic = 'force-dynamic'
@@ -60,9 +60,19 @@ export default async function EmployeeDetailPage({
 
   return (
     <EmployeeDetailClient
-      employee={employee as any}
+      employee={employee as unknown as EmployeeData}
       clockEvents={clockEvents || []}
-      leaveRequests={leaveRequests as any}
+      leaveRequests={leaveRequests.map(l => ({
+        id: l.id,
+        leave_type: 'unknown' as const,
+        start_date: l.start_date,
+        end_date: l.end_date,
+        status: l.status,
+        reason: l.reason,
+        approved_by_name: l.approved_by_user?.full_name || null,
+        approved_at: null as string | null,
+        created_at: l.created_at,
+      })) as unknown as LeaveRequestItem[]}
     />
   )
 }

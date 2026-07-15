@@ -11,6 +11,7 @@
 
 import { logger } from '@/lib/logger'
 import { supabaseAdmin } from '@/lib/supabase-server'
+import type { Json } from '@/lib/types/database'
 
 export interface ScheduledTask {
   id: string
@@ -61,8 +62,8 @@ export async function createScheduledTask(task: {
         cron_expr: task.cron_expr,
         next_run: nextRun,
         is_active: true,
-        payload: task.payload || {},
-      } as any)
+        payload: (task.payload || {}) as Json,
+      })
       .select('id')
       .single()
 
@@ -255,11 +256,13 @@ async function runRecurringExpenses(): Promise<void> {
         description: exp.description,
         amount_cents: exp.amount_cents,
         category_id: exp.category_id,
+        branch_id: exp.branch_id,
+        created_by: exp.created_by,
         vendor: exp.vendor,
         expense_date: today,
         payment_method: exp.payment_method || 'bank_transfer',
         notes: `Auto-generated from recurring expense: ${exp.description}`,
-      } as any)
+      })
 
       // Update next_date
       const nextDate = calculateNextDate(today, exp.frequency)

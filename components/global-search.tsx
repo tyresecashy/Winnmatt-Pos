@@ -75,9 +75,9 @@ export function GlobalSearch({ open, onClose }: GlobalSearchProps) {
       }
       setLoading(true)
       try {
-        const response = await globalSearch(query, { limit: 20 } as any)
+        const response = await globalSearch(query, { limit: 20 } as Record<string, unknown>)
         if (Array.isArray(response)) {
-          setResults(response as any)
+          setResults(response)
           setSelectedIndex(0)
         }
       } catch (error) {

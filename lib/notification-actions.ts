@@ -65,26 +65,6 @@ export async function markAllAsRead(userId: string) {
   }
 }
 
-export async function createNotification(data: {
-  user_id: string
-  title: string
-  body?: string
-  event_type?: string
-  reference_type?: string
-  reference_id?: string
-  severity?: string
-  action_url?: string
-}) {
-  try {
-    const { error } = await supabaseAdmin.from('notifications').insert(data)
-    if (error) throw error
-    return { success: true }
-  } catch (error) {
-    logger.error('Error creating notification:', error)
-    return { success: false }
-  }
-}
-
 export async function getNotificationRules(branchId?: string) {
   try {
     let query = supabaseAdmin.from('notification_rules').select('*')

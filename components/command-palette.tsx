@@ -128,10 +128,10 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
 
       setLoading(true)
       try {
-        const response = await globalSearch(query, { limit: 20 } as any)
+        const response = await globalSearch(query, { limit: 20 } as Record<string, unknown>)
         // Only apply if this request is still current
         if (id === pendingRef.current && Array.isArray(response)) {
-          setResults(response as any)
+          setResults(response)
         }
       } catch {
         // Silently fail — cmdk will show empty state

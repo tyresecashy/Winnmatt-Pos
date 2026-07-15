@@ -116,11 +116,11 @@ export async function getCashSummary(branchId: string): Promise<CashSummaryResul
 
 // ─── Public API - Shifts ────────────────────────────────────────────────────
 
-export async function openShift(branchId: string, cashierId: string, openingFloat: number, registerId?: string, drawerId?: string): Promise<{ success: boolean; id?: string; error?: string }> {
+export async function openShift(branchId: string, cashierId: string, openingFloat: number, registerId?: string, drawerId?: string): Promise<{ success: boolean; id?: string; shift?: Record<string, unknown>; message?: string; error?: string }> {
   try {
     const result = await shiftActions.openShift(branchId, cashierId, openingFloat, registerId, drawerId)
     if (!result.success) return { success: false, error: result.error }
-    return { success: true, id: result.shift?.id }
+    return { success: true, id: result.shift?.id, shift: result.shift, message: result.message }
   } catch (error) {
     logger.error('[Cash Module] openShift failed', error instanceof Error ? error.message : String(error))
     return { success: false, error: 'Operation failed. Please try again.' }
@@ -136,11 +136,11 @@ export async function getActiveShift(branchId: string, cashierId: string): Promi
   }
 }
 
-export async function closeShift(shiftId: string, countedCash: number, closingNotes: string, cashierId: string): Promise<{ success: boolean; error?: string }> {
+export async function closeShift(shiftId: string, countedCash: number, closingNotes: string, cashierId: string): Promise<{ success: boolean; message?: string; error?: string }> {
   try {
     const result = await shiftActions.closeShift(shiftId, countedCash, closingNotes, cashierId)
     if (!result.success) return { success: false, error: result.error }
-    return { success: true }
+    return { success: true, message: result.message }
   } catch (error) {
     logger.error('[Cash Module] closeShift failed', error instanceof Error ? error.message : String(error))
     return { success: false, error: 'Operation failed. Please try again.' }
@@ -165,9 +165,11 @@ export async function getShiftHistory(branchId: string, limit?: number): Promise
   }
 }
 
-export async function reopenShift(shiftId: string, userId: string, reason: string): Promise<{ success: boolean; error?: string }> {
+export async function reopenShift(shiftId: string, userId: string, reason: string): Promise<{ success: boolean; message?: string; error?: string }> {
   try {
-    return await shiftActions.reopenShift(shiftId, userId, reason)
+    const result = await shiftActions.reopenShift(shiftId, userId, reason)
+    if (!result.success) return { success: false, error: result.error }
+    return { success: true, message: result.message }
   } catch (error) {
     logger.error('[Cash Module] reopenShift failed', error instanceof Error ? error.message : String(error))
     return { success: false, error: 'Operation failed. Please try again.' }

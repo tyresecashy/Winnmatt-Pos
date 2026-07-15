@@ -16,25 +16,11 @@ vi.mock('@/lib/loyalty-actions', () => ({
   redeemLoyaltyPoints: (...args: unknown[]) => mockRedeemLoyaltyPoints(...args),
 }))
 
-type QueryResult = { data: unknown; error: unknown }
-type QueryBuilder = Record<string, (...args: unknown[]) => QueryBuilder | QueryResult>
+const mockGetLoyaltyBalance = vi.fn()
 
-function queryBuilder(finalResult: QueryResult): QueryBuilder {
-  const handler: QueryBuilder = new Proxy({} as QueryBuilder, {
-    get(_target, prop: string) {
-      if (prop === 'then') {
-        const p = Promise.resolve(finalResult)
-        return p.then.bind(p)
-      }
-      return (..._args: unknown[]) => handler
-    },
-  })
-  return handler
-}
-
-vi.mock('@/lib/supabase-server', () => ({
-  supabaseAdmin: {
-    from: vi.fn(() => queryBuilder({ data: null, error: null })),
+vi.mock('@/lib/modules/customers/repository', () => ({
+  customerRepo: {
+    getLoyaltyBalance: (...args: unknown[]) => mockGetLoyaltyBalance(...args),
   },
 }))
 
@@ -124,33 +110,19 @@ describe('redeemLoyaltyPoints', () => {
   })
 })
 
-// ─── getLoyaltyBalance (uses supabase directly) ─────────────────────────────
+// ─── getLoyaltyBalance (delegates to repository) ────────────────────────────
 
 describe('getLoyaltyBalance', () => {
-  it('queries customers and loyalty_transactions', async () => {
-    const { supabaseAdmin } = await import('@/lib/supabase-server')
-    const mockFrom = supabaseAdmin.from as ReturnType<typeof vi.fn>
-
-    // First call: customers table
-    mockFrom.mockReturnValueOnce(queryBuilder({
-      data: { loyalty_points: 200, tier: 'gold' },
-      error: null,
-    }))
-    // Second call: loyalty_transactions table
-    mockFrom.mockReturnValueOnce(queryBuilder({
-      data: [{ points_delta: 100 }, { points_delta: 100 }],
-      error: null,
-    }))
+  it('delegates to customerRepo.getLoyaltyBalance', async () => {
+    mockGetLoyaltyBalance.mockResolvedValue({ points: 200, tier: 'gold', lifetime_points: 200 })
 
     const result = await getLoyaltyBalance('cust-1')
+    expect(mockGetLoyaltyBalance).toHaveBeenCalledWith('cust-1')
     expect(result).toEqual({ points: 200, tier: 'gold', lifetime_points: 200 })
   })
 
-  it('returns defaults when customer not found', async () => {
-    const { supabaseAdmin } = await import('@/lib/supabase-server')
-    const mockFrom = supabaseAdmin.from as ReturnType<typeof vi.fn>
-
-    mockFrom.mockReturnValue(queryBuilder({ data: null, error: { message: 'Not found' } }))
+  it('returns defaults on error', async () => {
+    mockGetLoyaltyBalance.mockRejectedValue(new Error('DB error'))
 
     const result = await getLoyaltyBalance('nonexistent')
     expect(result).toEqual({ points: 0, tier: 'bronze', lifetime_points: 0 })

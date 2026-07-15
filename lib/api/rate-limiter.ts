@@ -7,6 +7,7 @@
  */
 
 import { logger } from '@/lib/logger'
+import type Redis from 'ioredis'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -69,7 +70,7 @@ function createInMemoryRateLimiter() {
 
 // ─── Redis implementation ──────────────────────────────────────────────────
 
-let redisClient: any = null
+let redisClient: Redis | null = null
 let redisRateLimiter: ReturnType<typeof createInMemoryRateLimiter> | null = null
 
 async function getRedisClient() {

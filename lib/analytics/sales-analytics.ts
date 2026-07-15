@@ -153,10 +153,10 @@ export class SalesAnalyticsService {
     }
 
     sales.forEach((sale) => {
-      const hour = new Date((sale as any).created_at).getHours();
+      const hour = new Date(String((sale as { created_at?: string }).created_at ?? '')).getHours();
       const hourData = hourMap.get(hour)!;
       hourData.transactions++;
-      hourData.revenue += (sale as any).total_amount || 0;
+      hourData.revenue += Number((sale as { total_amount?: number }).total_amount ?? 0);
     });
 
     return Array.from(hourMap.entries()).map(([hour, data]) => ({
@@ -242,9 +242,9 @@ export class SalesAnalyticsService {
     const dateMap = new Map<string, { revenue: number; transactions: number }>();
 
     sales.forEach((sale) => {
-      const date = ((sale as any).created_at ?? '').split('T')[0];
+      const date = (String((sale as { created_at?: string }).created_at ?? '')).split('T')[0];
       const existing = dateMap.get(date) || { revenue: 0, transactions: 0 };
-      existing.revenue += (sale as any).total_amount || 0;
+      existing.revenue += Number((sale as { total_amount?: number }).total_amount ?? 0);
       existing.transactions++;
       dateMap.set(date, existing);
     });
@@ -270,7 +270,7 @@ export class SalesAnalyticsService {
       .select('id, name, category_id, last_sold_at')
       .lt('last_sold_at', cutoffDate.toISOString());
 
-    return (products || []) as any[];
+    return (products || []) as unknown as Record<string, unknown>[];
   }
 }
 

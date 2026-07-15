@@ -16,7 +16,7 @@ import {
   getPayrollRuns, createPayrollRun, processPayroll, getPayslips,
   approvePayslip, markPayslipPaid,
   type PayrollRun,
-} from '@/lib/payroll-actions'
+} from '@/lib/modules/workforce'
 import { calculatePAYE, calculateNHIF, calculateNSSF, calculateHousingLevy, type TaxPreview } from '@/lib/payroll-calculations'
 import { DollarSign, Calculator, Plus, RefreshCw, CheckCircle, Clock, FileText } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'

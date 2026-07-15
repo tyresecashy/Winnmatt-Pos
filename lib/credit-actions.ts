@@ -128,30 +128,6 @@ export async function getCustomerPayments(customerId: string) {
   }))
 }
 
-// ─── List all recent credit payments ───────────────────────────────────────
-
-export async function getAllCreditPayments(limit = 50) {
-  const { data, error } = await supabaseAdmin
-    .from('credit_payments')
-    .select(`
-      *,
-      customer:customers(name),
-      recorded_by_user:users!recorded_by(full_name)
-    `)
-    .order('created_at', { ascending: false })
-    .limit(limit)
-
-  if (error) {
-    if (error) logger.error('Operation failed', { error: error })
-    throw new Error('Operation failed')
-  }
-  return (data || []).map((p: { customer?: { name: string }; recorded_by_user?: { full_name: string } }) => ({
-    ...p,
-    customer_name: p.customer?.name || 'Deleted Customer',
-    recorded_by_name: p.recorded_by_user?.full_name || 'Unknown',
-  }))
-}
-
 // ─── Customer credit summaries (from view) ─────────────────────────────────
 
 export async function getCreditSummaries() {
@@ -250,19 +226,4 @@ export async function updateCreditLimit(customerId: string, newLimitCents: numbe
   }
 }
 
-// ─── Top credit customers (for dashboard cards) ────────────────────────────
 
-export async function getTopCreditCustomers(limit = 5) {
-  const { data, error } = await supabaseAdmin
-    .from('customer_credit_summary')
-    .select('*')
-    .gt('credit_balance', 0)
-    .order('credit_balance', { ascending: false })
-    .limit(limit)
-
-  if (error) {
-    if (error) logger.error('Operation failed', { error: error })
-    throw new Error('Operation failed')
-  }
-  return (data || []) as CustomerCreditSummary[]
-}

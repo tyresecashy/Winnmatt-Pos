@@ -178,15 +178,4 @@ export async function receivePurchaseOrder(
   }
 }
 
-export async function cancelPurchaseOrder(poId: string): Promise<{ success: boolean; error?: string }> {
-  try {
-    const { error } = await supabaseAdmin.from('purchase_orders')
-      .update({ status: 'cancelled', updated_at: new Date().toISOString() })
-      .eq('id', poId).in('status', ['draft'])
-    if (error) throw error
-    return { success: true }
-  } catch (error) {
-    logger.error('Operation failed', { error: error })
-    return { success: false, error: 'Operation failed. Please try again.' }
-  }
-}
+

@@ -153,8 +153,14 @@ function createDatabase(pluginId: string): PluginDatabase {
     },
     table: (name: string) => {
       // Dynamic table name — safe because table is validated at plugin registration
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let query: any = supabaseAdmin.from(name as any)
+      interface DynamicQuery {
+        eq(column: string, value: unknown): DynamicQuery
+        select(columns?: string): DynamicQuery
+        insert(data: Record<string, unknown>): { select(): Promise<{ data: unknown; error: unknown }> }
+        update(data: Record<string, unknown>): { select(): Promise<{ data: unknown; error: unknown }> }
+        delete(): Promise<{ error: unknown }>
+      }
+      let query: DynamicQuery = supabaseAdmin.from(name as never) as unknown as DynamicQuery
       let selectColumns: string | undefined
 
       const tableQuery = {

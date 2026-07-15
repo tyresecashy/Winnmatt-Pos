@@ -16,7 +16,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import {
   getMpesaTransactionByCheckoutId,
   getMpesaTransactionBySaleId,
-} from '@/lib/mpesa-actions'
+} from '@/lib/modules/sales'
 import { supabaseAdmin } from '@/lib/supabase-server'
 import { authenticateRequest, verifySaleAccess, unauthorizedResponse, forbiddenResponse } from '@/lib/auth-helpers'
 import { logger } from '@/lib/logger'

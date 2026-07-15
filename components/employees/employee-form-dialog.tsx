@@ -40,7 +40,7 @@ import {
   updateEmployeeProfile,
   checkUsernameAvailability,
   type EmployeeProfile,
-} from '@/lib/employee-actions'
+} from '@/lib/modules/workforce'
 import {
   step1Schema,
   defaultStep1,

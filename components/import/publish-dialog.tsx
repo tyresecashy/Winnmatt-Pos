@@ -73,7 +73,7 @@ export function PublishDialog({
 
       toast({
         title: 'Published!',
-        description: `${(result as any).total ?? ''} products published to live catalog`,
+        description: `${(result as unknown as { total?: number }).total ?? ''} products published to live catalog`,
       })
 
       // Close dialog after showing results

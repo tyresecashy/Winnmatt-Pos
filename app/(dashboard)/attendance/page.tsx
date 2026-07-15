@@ -35,7 +35,7 @@ import {
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/components/ui/use-toast'
-import { getEmployees } from '@/lib/employee-actions'
+import { getEmployeesLegacy as getEmployees } from '@/lib/modules/workforce'
 import {
   getAttendanceReport,
   getShiftTemplates,

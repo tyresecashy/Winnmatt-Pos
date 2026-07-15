@@ -56,7 +56,7 @@ interface EmployeeGoal {
   end_date?: string
 }
 
-interface EmployeeData {
+export interface EmployeeData {
   id: string
   user_id: string
   employee_id: string | null
@@ -90,7 +90,7 @@ interface EmployeeData {
   documents?: EmployeeDocument[]
 }
 
-interface ClockEvent {
+export interface ClockEvent {
   id: string
   event_type: string
   timestamp: string
@@ -98,7 +98,7 @@ interface ClockEvent {
   notes: string | null
 }
 
-interface LeaveRequestItem {
+export interface LeaveRequestItem {
   id: string
   leave_type: string
   start_date: string

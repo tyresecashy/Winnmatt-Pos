@@ -31,7 +31,6 @@ import {
 } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
 import {
-  searchProducts,
   getProductIntelligence,
   getProductActivity,
   getProductPriceHistory,
@@ -41,7 +40,8 @@ import {
   type ProductActivity,
   type ProductPriceHistory,
   type ProductStockAtLocation,
-} from '@/lib/product-intelligence-actions'
+} from '@/lib/modules/inventory'
+import { searchProducts } from '@/lib/product-intelligence-actions'
 import { formatKSh } from '@/lib/currency'
 
 const activityIcons: Record<string, React.ReactNode> = {
@@ -92,7 +92,7 @@ export default function ProductIntelligencePage() {
     setSearching(true)
     try {
       const results = await searchProducts(searchQuery.trim())
-      setSearchResults(results as any)
+      setSearchResults(results as unknown as typeof searchResults)
     } catch {
       toast({ title: 'Error', description: 'Search failed', variant: 'destructive' })
     } finally {

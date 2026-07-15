@@ -1,402 +1,199 @@
-# WINNMATT POS System - Complete Implementation
+# WINNMATT POS — Production Retail Management System
 
-## 📊 Project Overview
-
-WINNMATT is a comprehensive Point-of-Sale (POS) management system designed for multi-branch retail businesses. It includes real-time inventory tracking, sales analytics, customer management, and supplier integration.
+A comprehensive Point-of-Sale (POS) and retail management system for multi-branch Kenyan businesses. Built with Next.js 16 + Supabase, featuring real-time inventory, analytics, AI assistant, and M-Pesa integration.
 
 **Tech Stack:**
-- Frontend: Next.js 16 + React 19 + TypeScript
-- Backend: Supabase (PostgreSQL + Auth + Real-time)
-- Database: PostgreSQL with 12 core tables
-- UI: Radix UI + Tailwind CSS
-- State: React Hooks + Server Actions
+- **Frontend:** Next.js 16 + React 19 + TypeScript + Tailwind CSS + shadcn/ui
+- **Backend:** Supabase (PostgreSQL + Auth + Real-time + Storage)
+- **Database:** PostgreSQL — ~147 tables across 40+ managed migrations
+- **State:** React Hooks + Server Actions + Supabase subscriptions
+- **Automation:** Redis Pub/Sub event bus (in-memory fallback)
+- **AI:** OpenRouter-powered functional assistant (free tier)
+- **Payments:** M-Pesa Daraja API (STK Push) + Card (Stripe) + Cash + Bank Transfer
+- **Notifications:** Email (Resend) + SMS (Africa's Talking) + in-app + FCM push
 
 ---
 
-## 🚀 Quick Start
+## Getting Started
 
 ### Prerequisites
-1. Node.js 18+ installed
-2. Supabase account (free tier available)
-3. Git installed
+- Node.js 18+
+- Supabase project (free tier works)
+- Git
 
-### Installation Steps
+### Quick Setup
 
-#### 1. Setup Supabase Project
 ```bash
-# Visit https://supabase.com and create new project
-# Project name: winnmatt-pos
-# Save the database password
-```
-
-#### 2. Get Credentials
-- Go to Settings → API
-- Copy Project URL and Anon Public Key
-- Also save Service Role Secret
-
-#### 3. Create .env.local
-```bash
-cp .env.local.example .env.local
-# Edit .env.local with your Supabase credentials
-```
-
-#### 4. Setup Database
-```bash
-# 1. Go to Supabase → SQL Editor
-# 2. Create new query
-# 3. Copy contents of db-migrations.sql and run
-# 4. Create another query
-# 5. Copy contents of db-seed.sql and run
-```
-
-#### 5. Create Auth Users
-In Supabase Authentication:
-- Add user: `demo@winnmatt.com` / password: `demo123`
-- Add user: `admin@winnmatt.com` / password: `admin123`
-
-#### 6. Link Auth Users to Database
-```sql
--- In Supabase SQL Editor, run this:
-INSERT INTO users (id, email, full_name, branch_id, role) VALUES
-  ('USER_ID_FROM_AUTH_1', 'demo@winnmatt.com', 'Demo Cashier', (SELECT id FROM branches WHERE code = 'MAIN-001'), 'cashier'),
-  ('USER_ID_FROM_AUTH_2', 'admin@winnmatt.com', 'Admin User', (SELECT id FROM branches WHERE code = 'MAIN-001'), 'admin');
--- Replace USER_ID_FROM_AUTH_1 and USER_ID_FROM_AUTH_2 with actual UUIDs from Supabase Users table
-```
-
-#### 7. Install Dependencies & Run
-```bash
+# 1. Install dependencies
 npm install
+
+# 2. Copy environment variables
+cp .env.local.example .env.local
+# Edit with your Supabase URL, anon key, and service role key
+
+# 3. Run database migrations against your Supabase project
+# Copy contents of supabase/migrations/ to Supabase SQL Editor
+# or use the Supabase CLI: npx supabase migration up
+
+# 4. Start dev server
 npm run dev
+# → http://localhost:3000
 ```
 
-Visit http://localhost:3000
+> For detailed setup, see [`docs/INDEX.md`](docs/INDEX.md).
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 winnmatt-pos/
-├── app/                          # Next.js app directory
-│   ├── layout.tsx               # Root layout with Auth + Theme
-│   ├── page.tsx                 # Home redirect
-│   ├── login/page.tsx           # Login page
-│   └── (dashboard)/
-│       ├── layout.tsx           # Protected dashboard layout
-│       ├── dashboard/page.tsx   # Sales dashboard
-│       ├── pos/page.tsx         # POS terminal
-│       ├── products/page.tsx    # Product catalog
-│       ├── inventory/page.tsx   # Stock management
-│       ├── customers/page.tsx   # Customer records
-│       ├── suppliers/page.tsx   # Supplier records
-│       ├── purchases/page.tsx   # Purchase orders
-│       ├── sales-history/page.tsx # Transaction log
-│       ├── reports/page.tsx     # Analytics & reports
-│       ├── transfers/page.tsx   # Branch transfers
-│       ├── business-accounts/page.tsx # B2B accounts
-│       ├── users/page.tsx       # User management
-│       └── settings/page.tsx    # System settings
-│
-├── components/
-│   ├── ui/                      # Radix UI components
-│   ├── dashboard/               # Dashboard specific components
-│   ├── pos/                     # POS terminal components
-│   ├── app-sidebar.tsx          # Navigation sidebar
-│   ├── theme-provider.tsx       # Dark mode support
-│   └── protected-route.tsx      # Auth guard component
-│
-├── contexts/
-│   └── auth-context.tsx         # Authentication state
-│
+├── app/                          # Next.js App Router
+│   ├── (dashboard)/              # Protected dashboard routes (13+ pages)
+│   ├── api/                      # API routes (19 routes)
+│   └── login/                    # Authentication UI
+├── components/                   # React components
+│   ├── ui/                       # shadcn/ui primitives
+│   ├── pos/                      # POS terminal components
+│   └── ai/                       # AI assistant chat & command palette
 ├── lib/
-│   ├── supabase.ts              # Client Supabase instance
-│   ├── supabase-server.ts       # Server Supabase instance
-│   ├── db.types.ts              # TypeScript types
-│   ├── actions.ts               # Server Actions
-│   ├── mock-data.ts             # Sample data
-│   └── utils.ts                 # Utilities
-│
-├── public/                      # Static assets
-├── styles/                      # Global styles
-│
-├── db-migrations.sql            # Database schema
-├── db-seed.sql                  # Sample data
-├── IMPLEMENTATION_GUIDE.md      # Detailed setup guide
-└── README.md                    # This file
+│   ├── modules/                  # Layer adapter (25 modules)
+│   │   ├── sales/                # Sales domain
+│   │   ├── inventory/            # Inventory management
+│   │   ├── procurement/          # Purchase orders & receipts
+│   │   ├── finance/              # Financial tracking
+│   │   ├── customers/            # Customer management
+│   │   ├── workforce/            # HR & payroll
+│   │   └── core/                 # Shared infrastructure (7 files)
+│   ├── ai/                       # AI assistant (executor, tools, prompts)
+│   ├── realtime/                 # Event bus (Redis Pub/Sub / in-memory)
+│   ├── analytics/                # Analytical services (6 services)
+│   ├── enterprise/               # Enterprise features (12 sub-systems)
+│   └── *-actions.ts              # Server actions (domain files)
+├── hooks/                        # Custom React hooks
+├── docs/                         # Developer & AI documentation
+├── supabase/migrations/          # 40 managed database migrations
+├── tests/                        # Test suites (28+ unit, Vitest + jsdom)
+└── graphify-out/                 # Codebase knowledge graph
 ```
 
 ---
 
-## 🗄️ Database Schema
-
-### Core Tables
-
-**Users**
-- id (UUID), email, full_name, branch_id, role, timestamps
-
-**Branches**
-- id (UUID), name, code, location, is_main
-
-**Products**
-- id (UUID), sku, name, description, category_id, purchase_price, selling_price, reorder_level
-
-**Inventory**
-- id (UUID), product_id, branch_id, quantity, last_counted_at, timestamps
-
-**Customers**
-- id (UUID), name, phone, email, type (retail/wholesale/business), loyalty_points, credit_limit, credit_balance
-
-**Suppliers**
-- id (UUID), name, contact_person, phone, email, payment_terms, balance
-
-**Sales**
-- id (UUID), branch_id, cashier_id, customer_id, amounts, payment_method, payment_status, receipt_number, timestamps
-
-**SaleItems**
-- FK to Sales & Products, quantity, unit_price, discount_percent, line_total
-
-**StockMovements**
-- Tracks all inventory changes (sales, receipts, transfers, adjustments, damage)
-
-**PurchaseOrders & Items**
-- Supplier orders with line items and receipt tracking
-
-**StockTransfers & Items**
-- Branch-to-branch transfer tracking
-
----
-
-## 🔐 Authentication
-
-Uses Supabase Auth (passwordless & email/password supported):
-
-```typescript
-// Login
-const { error } = await supabase.auth.signInWithPassword({
-  email: 'user@example.com',
-  password: 'password123',
-})
-
-// Logout
-await supabase.auth.signOut()
-
-// Check current user
-const { data: { user } } = await supabase.auth.getUser()
-```
-
-All pages in `/dashboard` are protected and redirect to `/login` if not authenticated.
-
----
-
-## 📱 Key Features
+## Key Features
 
 ### POS Terminal
-- Real-time product search
-- Multi-item cart with discounts
-- Multiple payment methods (Cash, Card, Bank Transfer, Cheque, Credit)
-- Customer lookup & selection
-- Loyalty points integration
-- Receipt printing/export
+- Real-time product search & multi-item cart
+- Multiple payment methods (Cash, M-Pesa, Card, Bank Transfer, Cheque, Credit)
+- Shift-enforced cashier accountability (open/close with float reconciliation)
+- Customer lookup with loyalty points
+- Mobile-optimized responsive layout
+- Receipt printing, email, and SMS
 
 ### Inventory Management
-- Real-time stock level tracking per branch
-- Low stock alerts
-- Stock movement history
-- Branch-to-branch transfers
-- Purchase order management
-- Goods receiving
+- Real-time stock tracking per branch with low-stock alerts
+- Purchase order lifecycle (draft → pending → approved → received)
+- Goods Received Note (GRN) automation with batch/lot tracking
+- Branch-to-branch transfers with backorder support
+- Supplier returns & stock adjustments
 
-### Sales Dashboard
-- Daily/Monthly sales trends
-- Top products by revenue
-- Payment method breakdown
-- Branch comparison
-- Cashier performance metrics
-- Customer spending analysis
+### Analytics & Reporting
+- 6 analytical services: sales, inventory, customers, workforce, finance, reports
+- Daily/monthly sales trends, top products, payment breakdowns
+- Cashier performance metrics & branch comparison
+- Custom date-range reporting with export
+
+### AI Functional Assistant
+- Natural-language querying of sales, inventory, customers, and more
+- 31+ tools across 8 domains (products, sales, inventory, finance, etc.)
+- Write tools require user confirmation before execution
+- Command palette (Cmd+K) for quick access
+- Page-specific suggestions on 10 dashboard routes
 
 ### Customer Management
-- Customer profiles with history
-- Loyalty points tracking
-- Credit account management for wholesale
-- Purchase history
+- Customer profiles with purchase history
+- Loyalty points & credit account management (retail/wholesale/business)
+- Credit limit enforcement & balance tracking
 
-### Reporting
-- Sales reports by date range
-- Product velocity analysis
-- Supplier performance
-- Inventory value reports
-- Cashier reconciliation
+### Real-Time & Events
+- Generic SSE stream (`/api/events/stream`) with type filtering
+- 15 event types across POS, inventory, finance, and automation
+- Redis Pub/Sub with automatic in-memory fallback
+- Device heartbeat (30s) + auto-registration for POS terminals
 
----
-
-## 🔄 Server Actions
-
-All database operations use Next.js Server Actions (type-safe, no API routes needed):
-
-```typescript
-// From lib/actions.ts
-export async function getProducts()
-export async function getInventory(branchId)
-export async function createSale(saleData)
-export async function reduceInventory(productId, branchId, quantity)
-export async function recordStockMovement(movement)
-// ... more functions
-```
+### Enterprise Features
+- Shift management with audit trails
+- Purchase requisition workflow
+- Multi-role RBAC (cashier, admin, manager, super_admin)
+- Rate limiting, audit logging, disaster recovery, scenario simulation
+- Payment gateway abstraction (M-Pesa + Stripe)
 
 ---
 
-## 🛠️ Development
+## Development
 
-### Run Dev Server
 ```bash
-npm run dev
-# Runs on http://localhost:3000
+npm run dev          # Dev server on http://localhost:3000
+npm run build        # Production build
+npm run test         # Run test suites (28+ unit tests)
+npm run test:run     # Test runner (single run)
+npm run typecheck    # Full TypeScript check (requires NODE_OPTIONS="--max-old-space-size=4096")
+npm run lint         # ESLint
 ```
 
-### Build for Production
-```bash
-npm run build
-npm start
-```
-
-### Linting
-```bash
-npm run lint
-```
+### Database
+- Migrations: `supabase/migrations/` (40 managed files)
+- Archived: `db/archived-migrations/` (33 legacy SQL files)
+- Health: `GET /api/health` reports DB + event bus status
 
 ---
 
-## 📊 Sample Data
+## Deployment
 
-Database comes pre-seeded with:
-- ✅ 3 branches (Main, Westlands, Karen)
-- ✅ 10 product categories
-- ✅ 18 products with realistic pricing
-- ✅ 6 customers (retail, wholesale, business)
-- ✅ 5 suppliers with payment terms
-- ✅ Complete inventory per branch
-
----
-
-## 🔑 Demo Credentials
-
-**Login Page:** http://localhost:3000/login
-
-```
-Email:    demo@winnmatt.com
-Password: demo123
-Branch:   Main Store
-
-OR
-
-Email:    admin@winnmatt.com
-Password: admin123
-Branch:   Main Store
-```
-
----
-
-## 🚀 Deployment
-
-### Deploy to Vercel
+### Vercel
 ```bash
-# Connect your GitHub repo to Vercel
-# Environment variables will need to be set in Vercel dashboard:
-# - NEXT_PUBLIC_SUPABASE_URL
-# - NEXT_PUBLIC_SUPABASE_ANON_KEY
-# - SUPABASE_SERVICE_ROLE_KEY
+# Connect GitHub repo to Vercel
+# Required environment variables:
+#   NEXT_PUBLIC_SUPABASE_URL
+#   NEXT_PUBLIC_SUPABASE_ANON_KEY
+#   SUPABASE_SERVICE_ROLE_KEY
 ```
 
 ### Production Checklist
-- [ ] Update Supabase URL to production instance
-- [ ] Enable aggressive RLS policies
-- [ ] Set up SSL certificates
-- [ ] Configure backup strategy
-- [ ] Setup monitoring/alerting
-- [ ] Enable API rate limiting
-- [ ] Configure CORS properly
+See [PRODUCTION_READINESS_CHECKLIST.md](./PRODUCTION_READINESS_CHECKLIST.md) (25 domains, 837 items)
+and [FINAL_PRODUCTION_SIGNOFF.md](./docs/FINAL_PRODUCTION_SIGNOFF.md) for current go-live status.
 
 ---
 
-## 🐛 Troubleshooting
+## Architecture
 
-### "NEXT_PUBLIC_SUPABASE_URL not found"
-- Verify `.env.local` exists
-- Check all 3 environment variables are present
-- Restart dev server after adding env vars
-
-### Login page doesn't work
-- Check user exists in Supabase Authentication
-- Verify user record exists in `users` table
-- Check branch record exists
-- Check RLS policies aren't blocking access
-
-### Database queries returning empty
-- Verify RLS policies allow authenticated users
-- Check data exists in Supabase
-- Look at browser Network tab → check auth token
-
-### Build errors after changes
-```bash
-rm -rf .next node_modules
-npm install
-npm run build
-```
+- **Module layer:** 25 adapters (`lib/modules/*/index.ts`) wrap domain-specific server actions. Pages import only module interfaces, never action files directly.
+- **Event bus:** Factory pattern selects Redis or in-memory at module load time. Channel `pos:events` for Pub/Sub.
+- **Shift enforcement:** `useShiftGuard()` polls every 30s. `shiftId` required through `AuthorizedSaleContext` → `completePaymentAction`.
+- **AI assistant:** OpenRouter JSON prompting. 8 tool files registered via singleton tool-registry. Read tools auto-execute, write tools require confirmation.
 
 ---
 
-## 📚 Resources
+## Documentation
 
-- [Supabase Documentation](https://supabase.com/docs)
-- [Next.js Documentation](https://nextjs.org/docs)
-- [Radix UI Components](https://radix-ui.com)
-- [Tailwind CSS](https://tailwindcss.com)
+All developer and AI documentation begins at:
 
----
+> **[`docs/INDEX.md`](docs/INDEX.md)** — bootloader, navigation map, and AI loading rules
 
-## 📝 License
+Key supporting resources:
 
-Proprietary - WINNMATT POS System
+| Resource | Purpose |
+|----------|---------|
+| [`AGENTS.md`](AGENTS.md) | Sprint-by-sprint implementation guide |
+| [`supabase/migrations/`](supabase/migrations/) | Database schema (40 managed migrations) |
+| [`PRODUCTION_READINESS_CHECKLIST.md`](PRODUCTION_READINESS_CHECKLIST.md) | 25-domain, 837-item checklist |
+| [`docs/FINAL_PRODUCTION_SIGNOFF.md`](docs/FINAL_PRODUCTION_SIGNOFF.md) | Current go-live status |
+| [`docs/event-catalog.md`](docs/event-catalog.md) | Event type definitions |
 
----
+### External
 
-## 🤝 Support
-
-For issues or questions:
-1. Check IMPLEMENTATION_GUIDE.md
-2. Review database schema in db-migrations.sql
-3. Check auth context in contexts/auth-context.tsx
-4. Verify environment variables in .env.local
+- [Supabase Docs](https://supabase.com/docs) · [Next.js Docs](https://nextjs.org/docs)
+- [shadcn/ui](https://ui.shadcn.com) · [Tailwind CSS](https://tailwindcss.com)
 
 ---
 
-## ✅ Implementation Status
-
-### Phase 1: Foundation ✅ COMPLETE
-- [x] Database schema created
-- [x] Seed data prepared
-- [x] Authentication system built
-- [x] Server Actions setup
-- [x] Protected routes configured
-
-### Phase 2: Setup & Configuration ⏳ IN PROGRESS
-- [ ] Supabase project created
-- [ ] Environment variables configured
-- [ ] Database migrations run
-- [ ] Seed data loaded
-- [ ] Demo users created
-
-### Phase 3-8: Integration & Features ⏳ PENDING
-- [ ] Database queries integrated
-- [ ] POS checkout logic
-- [ ] Inventory management
-- [ ] Analytics & reports
-- [ ] Business features
-- [ ] Testing & polish
-
----
-
-**Next Step:** Follow IMPLEMENTATION_GUIDE.md to complete Supabase setup!
-#   W i n n m a t t - P o s  
- #   W i n n m a t t - P o s  
- 
+**License:** Proprietary — WINNMATT POS System

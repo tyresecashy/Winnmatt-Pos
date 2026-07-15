@@ -23,7 +23,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/use-toast'
-import { createDepartment } from '@/lib/employee-actions'
+import { createDepartment } from '@/lib/modules/workforce'
 import { Building2, Loader2 } from 'lucide-react'
 
 const departmentSchema = z.object({

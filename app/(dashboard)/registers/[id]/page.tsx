@@ -93,7 +93,7 @@ export default function RegisterDetailPage() {
       setLoading(true)
       try {
         const reg = await getRegisterById(params.id as string)
-        setRegister(reg as any)
+        setRegister(reg as Register)
         if (reg) {
           const [drs, evts] = await Promise.all([
             getCashDrawers((reg as unknown as Register).branch_id),

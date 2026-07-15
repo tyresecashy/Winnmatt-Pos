@@ -158,7 +158,7 @@ export default function ChartOfAccountsPage() {
     if (searchTerm) {
       const term = searchTerm.toLowerCase()
       result = result.filter(a => {
-        const acct = a as any
+        const acct = a as unknown as { account_number?: string; code?: string }
         return (
           (acct.account_number || acct.code || '').toLowerCase().includes(term) ||
           a.name.toLowerCase().includes(term) ||
@@ -201,7 +201,7 @@ export default function ChartOfAccountsPage() {
 
   // ── Open Edit Dialog ──
   const openEdit = (account: Account) => {
-    const acct = account as any
+    const acct = account as unknown as { account_number?: string; code?: string; account_subtype?: string; normal_balance?: string }
     setEditing(account)
     setForm({
       account_number: acct.account_number || acct.code || '',
@@ -250,7 +250,7 @@ export default function ChartOfAccountsPage() {
 
   // ── Delete Account ──
   const handleDelete = async (account: Account) => {
-    if (!confirm(`Delete account ${(account as any).account_number || account.code} - ${account.name}?`)) return
+    if (!confirm(`Delete account ${(account as unknown as { account_number?: string }).account_number || account.code} - ${account.name}?`)) return
 
     try {
       const result = await deleteAccount(account.id)
@@ -394,7 +394,7 @@ export default function ChartOfAccountsPage() {
                   const balance = getBalance(account.id)
                   return (
                     <TableRow key={account.id} className="group">
-                      <TableCell className="font-mono font-medium">{(account as any).account_number || account.code}</TableCell>
+                      <TableCell className="font-mono font-medium">{(account as unknown as { account_number?: string }).account_number || account.code}</TableCell>
                       <TableCell>
                         <div>
                           <p className="font-medium">{account.name}</p>
@@ -412,13 +412,13 @@ export default function ChartOfAccountsPage() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground capitalize">
-                        {((account as any).account_subtype || '').replace(/_/g, ' ')}
+                        {((account as unknown as { account_subtype?: string }).account_subtype || '').replace(/_/g, ' ')}
                       </TableCell>
                       <TableCell className={`text-right font-medium ${balance >= 0 ? '' : 'text-red-600'}`}>
                         {formatKSh(Math.abs(balance))}
                       </TableCell>
                       <TableCell>
-                        {(account as any).is_system ? (
+                        {(account as unknown as { is_system?: boolean }).is_system ? (
                           <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
                             System
                           </Badge>
@@ -444,7 +444,7 @@ export default function ChartOfAccountsPage() {
                               <Edit3 className="h-4 w-4 mr-2" />
                               Edit
                             </DropdownMenuItem>
-                            {!((account as any).is_system) && (
+                            {!((account as unknown as { is_system?: boolean }).is_system) && (
                               <>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem

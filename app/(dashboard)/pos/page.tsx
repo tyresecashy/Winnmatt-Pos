@@ -30,23 +30,23 @@ import { useToast } from '@/components/ui/use-toast'
 import { getProductsForPOS, createProduct } from '@/lib/modules/inventory'
 import { getRedemptionEligibility } from '@/lib/modules/customers'
 import { verifySupervisorRole } from '@/lib/auth-helpers'
-import { holdSale } from '@/lib/sales-actions'
-import { createSale, getSaleById, getHeldSales, resumeHeldSale, cancelHeldSale } from '@/lib/modules/sales'
+import { holdSale, createSale, getSaleById, getHeldSales, resumeHeldSale, cancelHeldSale } from '@/lib/modules/sales'
 import { completePaymentAction, type CompletePaymentPromotion } from '@/lib/actions/complete-payment-action'
 import { type AppliedPromotion } from '@/components/pos/promotion-panel'
 import { QuickActionBar } from '@/components/pos/quick-action-bar'
-import { convertCartToQuote, emailSaleReceipt, smsSaleReceipt } from '@/lib/pos-actions'
-import { applyPromotionToSale } from '@/lib/promotion-actions'
+import { convertCartToQuote, emailSaleReceipt, smsSaleReceipt } from '@/lib/modules/sales'
+import { applyPromotionToSale } from '@/lib/modules/promotions'
 import { useReceiptSettings } from '@/hooks/use-receipt-settings'
 import { useDeviceHeartbeat } from '@/hooks/use-device-heartbeat'
 import { registerDevice } from '@/lib/modules/devices'
 import { useShiftGuard } from '@/hooks/use-shift-guard'
 import { QuickShiftDialog } from '@/components/pos/quick-shift-dialog'
-import { useIsMobile } from '@/hooks/use-is-mobile'
+import { useIsMobile } from '@/hooks/use-mobile'
 import { getRegisters } from '@/lib/modules/cash'
 import { ensureRegisterForBranch } from '@/lib/shift-cash-sync'
-import type { SaleItem, HeldSale } from '@/lib/sales-actions'
+import type { SaleInputItem as SaleItem, HeldSale } from '@/lib/modules/sales'
 import type { SaleDetailsData } from '@/components/receipt-preview'
+import type { Shift } from '@/lib/types/database'
 
 // ── Dynamic imports (lazy load heavy components with framer-motion / Stripe) ──
 const PaymentPanel = dynamic(() => import('@/components/pos/payment-panel').then(mod => mod.PaymentPanel), {
@@ -1301,7 +1301,16 @@ export default function POSPage() {
             }}
             promotionDiscount={promotionDiscountCents}
             onCompletePayment={async (receiptNumber, paymentMethod, opts) => {
-              const options = opts as any
+              const options = opts as unknown as {
+                skipSaleCreation?: boolean
+                saleId?: string
+                onSaleCreated?: (saleId: string, receiptNumber: string) => void
+                onCheckoutId?: (checkoutRequestId: string) => void
+                onPaymentConfirmed?: () => void
+                mpesaPhone?: string
+                splits?: Array<{ method: string; amount: number }>
+                redemption?: { pointsToRedeem: number; discountApplied: number }
+              } | undefined
               if (paymentMethod === 'mpesa' && options?.skipSaleCreation && options?.saleId) {
                 const fullSale = await getSaleById(options.saleId as string) as unknown as SaleDetailsData
 
@@ -1409,7 +1418,7 @@ export default function POSPage() {
                     cartDiscount,
                     'POS Sale',
                     'pending'
-                  ) as any
+                  ) as unknown as { success: boolean; sale?: { id: string; receipt_number?: string }; receiptNumber?: string; error?: string }
 
                   if (!createResult.success || !createResult.sale?.id) {
                     throw new Error(createResult.error || 'Failed to create pending M-Pesa sale')
@@ -1417,7 +1426,7 @@ export default function POSPage() {
 
                   options?.onSaleCreated?.(
                     createResult.sale.id,
-                    createResult.receiptNumber || createResult.sale.receipt_number
+                    createResult.receiptNumber || createResult.sale.receipt_number || receiptNumber
                   )
 
                   const stkResponse = await fetch('/api/mpesa/stk-push', {
@@ -1458,7 +1467,7 @@ export default function POSPage() {
                     cartDiscount,
                     'POS Sale',
                     'pending'
-                  ) as any
+                  ) as unknown as { success: boolean; sale?: { id: string; receipt_number?: string }; receiptNumber?: string; error?: string }
 
                   if (!createResult.success || !createResult.sale?.id) {
                     throw new Error(createResult.error || 'Failed to create pending card sale')
@@ -1466,7 +1475,7 @@ export default function POSPage() {
 
                   options?.onSaleCreated?.(
                     createResult.sale.id,
-                    createResult.receiptNumber || createResult.sale.receipt_number
+                    createResult.receiptNumber || createResult.sale.receipt_number || receiptNumber
                   )
 
                   return
@@ -1673,7 +1682,7 @@ export default function POSPage() {
             setShiftGateOpen(false)
           }
         }}
-        onOpenShift={openNewShift as any}
+        onOpenShift={openNewShift}
         onCloseShift={closeActiveShift}
         registers={registers}
         onCreateRegister={handleCreateRegister}

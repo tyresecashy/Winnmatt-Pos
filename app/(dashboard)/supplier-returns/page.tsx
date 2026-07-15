@@ -70,7 +70,7 @@ export default function SupplierReturnsPage() {
   async function searchProducts(query: string) {
     setProductSearch(query)
     if (query.length < 2) { setProductResults([]); return }
-    const { getAllProducts } = await import('@/lib/products-actions')
+    const { getAllProducts } = await import('@/lib/modules/inventory')
     const all = await getAllProducts()
     const filtered = all.filter((p: { name: string; sku?: string | null }) =>
       p.name.toLowerCase().includes(query.toLowerCase()) ||
@@ -115,7 +115,7 @@ export default function SupplierReturnsPage() {
     })
     setSaving(false)
     if (result.success) {
-      toast({ title: 'Created', description: `Return ${(result as any).return_number ?? ''} submitted` })
+      toast({ title: 'Created', description: `Return submitted${result.id ? ` (ID: ${result.id})` : ''}` })
       setShowCreate(false)
       setSupplierId(''); setReason(''); setNotes(''); setReplacementRequired(false)
       setReturnItems([])

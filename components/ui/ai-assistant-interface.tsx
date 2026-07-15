@@ -91,7 +91,7 @@ export function AIAssistantInterface({
 
   const handleSendMessage = () => {
     if (inputValue.trim() && !disabled) {
-      logger.info('[AI] Sending message:', inputValue as any)
+      logger.info('[AI] Sending message:', { message: inputValue })
       onSendMessage?.(inputValue)
       setInputValue('')
     }

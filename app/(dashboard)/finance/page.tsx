@@ -70,12 +70,30 @@ export default function FinanceDashboard() {
   const loadData = async () => {
     setLoading(true)
     try {
-        const [statsData, balancesData] = await Promise.all([
+        const [statsResult, balancesResult] = await Promise.all([
           getFinanceStats(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(), new Date().toISOString()),
           getAccountBalances(),
         ])
-        setStats(statsData as any)
-        setBalances(balancesData as any)
+        setStats({
+          totalRevenue: statsResult.totalRevenue,
+          totalExpenses: statsResult.totalExpenses,
+          netProfit: statsResult.netIncome,
+          cashPosition: statsResult.cashBalance,
+          accountsReceivable: statsResult.accountReceivable,
+          accountsPayable: statsResult.accountPayable,
+          inventoryValue: 0,
+          monthlyEntries: 0,
+        })
+        setBalances(balancesResult.map(b => ({
+          account_id: b.id,
+          account_number: b.code,
+          account_name: b.name,
+          account_type: b.account_type,
+          normal_balance: 'debit',
+          total_debit: 0,
+          total_credit: 0,
+          balance: b.balance,
+        })))
     } catch (error) {
       logger.error('Failed to load finance data:', error)
     } finally {
@@ -270,7 +288,7 @@ export default function FinanceDashboard() {
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={((value: number) => `KSh ${value.toLocaleString()}`) as any} />
+                    <Tooltip formatter={(value: unknown) => `KSh ${(Number(value ?? 0)).toLocaleString()}`} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>

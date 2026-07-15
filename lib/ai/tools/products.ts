@@ -50,7 +50,7 @@ export const productTools: ToolDefinition[] = [
       }
 
       // Call existing createProduct function
-      const { createProduct } = await import('@/lib/products-actions')
+      const { createProduct } = await import('@/lib/modules/inventory')
       const result = await createProduct(
         sku,
         name,
@@ -66,7 +66,7 @@ export const productTools: ToolDefinition[] = [
       if (result.success) {
         return {
           success: true,
-          data: result as any,
+          data: result,
           summary: `Product "${name}" (SKU: ${sku}) created successfully at KSh ${sellingPrice}. ${initialStock > 0 ? `Stock: ${initialStock} units.` : ''}`,
         }
       }
@@ -133,7 +133,7 @@ export const productTools: ToolDefinition[] = [
       const query = args.query as string
       const limit = (args.limit as number) || 20
 
-      const { searchProducts } = await import('@/lib/products-actions')
+      const { searchProducts } = await import('@/lib/modules/inventory')
       const results = await searchProducts(query)
 
       const limited = results.slice(0, limit)

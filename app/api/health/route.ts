@@ -12,7 +12,7 @@ export async function GET() {
   let dbError: string | null = null
 
   try {
-    const { error } = await (supabaseAdmin as any).from('health_check').select('id').limit(1).maybeSingle()
+    const { error } = await supabaseAdmin.from('health_check').select('id').limit(1).maybeSingle()
     dbOk = !error
     if (error) { logger.error('[Health] DB query failed', { message: error.message }); dbError = 'Database error occurred' }
   } catch (err) {

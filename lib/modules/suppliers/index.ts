@@ -11,6 +11,7 @@ import { logger } from '@/lib/logger'
 import * as suppliers from '@/lib/suppliers-actions'
 import * as invoices from '@/lib/supplier-invoices-actions'
 import * as returns from '@/lib/supplier-returns-actions'
+import { supplierRepo } from './repository'
 
 // ─── Type helpers ─────────────────────────────────────────────────────────────
 type SupplierOrderRow = Awaited<ReturnType<typeof suppliers.getSupplierOrders>>[number]
@@ -30,7 +31,7 @@ export type { SupplierReturn, SupplierReturnItem } from '@/lib/supplier-returns-
 
 export async function getSuppliers(): Promise<suppliers.Supplier[]> {
   try {
-    return await suppliers.getSuppliers()
+    return await supplierRepo.getSuppliers() as unknown as suppliers.Supplier[]
   } catch (error) {
     logger.error('[Suppliers Module] getSuppliers failed', error instanceof Error ? error.message : String(error))
     return []
@@ -39,7 +40,7 @@ export async function getSuppliers(): Promise<suppliers.Supplier[]> {
 
 export async function getSupplierById(supplierId: string): Promise<suppliers.Supplier | null> {
   try {
-    return await suppliers.getSupplierById(supplierId)
+    return await supplierRepo.getSupplierById(supplierId) as unknown as suppliers.Supplier | null
   } catch (error) {
     logger.error('[Suppliers Module] getSupplierById failed', error instanceof Error ? error.message : String(error))
     return null
@@ -48,7 +49,7 @@ export async function getSupplierById(supplierId: string): Promise<suppliers.Sup
 
 export async function searchSuppliers(query: string): Promise<suppliers.Supplier[]> {
   try {
-    return await suppliers.searchSuppliers(query)
+    return await supplierRepo.searchSuppliers(query) as unknown as suppliers.Supplier[]
   } catch (error) {
     logger.error('[Suppliers Module] searchSuppliers failed', error instanceof Error ? error.message : String(error))
     return []
@@ -57,11 +58,11 @@ export async function searchSuppliers(query: string): Promise<suppliers.Supplier
 
 export async function createSupplier(data: {
   name: string; contact_person: string; phone: string; email?: string; payment_terms?: string
-}): Promise<{ success: boolean; id?: string; error?: string }> {
+}): Promise<{ success: boolean; id?: string; supplier?: Record<string, unknown>; message?: string; error?: string }> {
   try {
     const result = await suppliers.createSupplier(data.name, data.contact_person, data.phone, data.email, data.payment_terms)
     if (!result.success) return { success: false, error: result.error }
-    return { success: true, id: result.supplier?.id }
+    return { success: true, id: result.supplier?.id, supplier: result.supplier, message: result.message }
   } catch (error) {
     logger.error('[Suppliers Module] createSupplier failed', error instanceof Error ? error.message : String(error))
     return { success: false, error: 'Operation failed. Please try again.' }

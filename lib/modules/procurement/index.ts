@@ -9,7 +9,9 @@
 
 import { logger } from '@/lib/logger'
 import * as procurement from '@/lib/procurement-actions'
+import type { ReceiveItemInput } from '@/lib/procurement-actions'
 import * as purchaseActions from '@/lib/purchase-actions'
+import type { CreatePurchaseOrderInput } from '@/lib/purchase-actions'
 import * as purchaseOrderActions from '@/lib/purchase-order-actions'
 import * as requisitionActions from '@/lib/purchase-requisition-actions'
 
@@ -30,11 +32,23 @@ export async function getPurchaseOrders(filters?: Record<string, unknown>): Prom
   }
 }
 
-export async function receivePurchaseOrder(orderId: string, items: Record<string, unknown>[], userId: string): Promise<{ success: boolean; error?: string }> {
+export async function receivePurchaseOrder(orderId: string, items: Record<string, unknown>[], notes?: string): Promise<{ success: boolean; message?: string; error?: string }> {
   try {
-    return await procurement.receivePurchaseOrder(orderId, items as any, userId)
+    return await procurement.receivePurchaseOrder(orderId, items as unknown as ReceiveItemInput[], notes)
   } catch (error) {
     logger.error('[Procurement Module] receivePurchaseOrder failed', error instanceof Error ? error.message : String(error))
+    return { success: false, error: 'Operation failed. Please try again.' }
+  }
+}
+
+export async function updatePurchaseOrderStatus(
+  poId: string,
+  status: 'draft' | 'pending' | 'approved' | 'partially_received' | 'received' | 'cancelled'
+): Promise<{ success: boolean; purchase_order?: unknown; message?: string; error?: string }> {
+  try {
+    return await procurement.updatePurchaseOrderStatus(poId, status)
+  } catch (error) {
+    logger.error('[Procurement Module] updatePurchaseOrderStatus failed', error instanceof Error ? error.message : String(error))
     return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
@@ -70,7 +84,7 @@ export async function getBackorders(): Promise<BackorderRow[]> {
 
 export async function createPurchaseOrder(input: Record<string, unknown>): Promise<{ success: boolean; id?: string; error?: string }> {
   try {
-    return await purchaseActions.createPurchaseOrder(input as any)
+    return await purchaseActions.createPurchaseOrder(input as unknown as CreatePurchaseOrderInput)
   } catch (error) {
     logger.error('[Procurement Module] createPurchaseOrder failed', error instanceof Error ? error.message : String(error))
     return { success: false, error: 'Operation failed. Please try again.' }
@@ -100,3 +114,15 @@ export async function approvePurchaseOrder(id: string): Promise<{ success: boole
 export { getPurchaseOrder } from '@/lib/purchase-order-actions'
 export type { PurchaseOrder } from '@/lib/purchase-order-actions'
 export type { PurchaseOrderItem } from '@/lib/purchase-order-actions'
+
+// ─── Purchase Requisition re-exports ─────────────────────────────────────────
+export {
+  getRequisitions, getRequisitionById, createRequisition, submitRequisition,
+  approveRequisition, rejectRequisition, cancelRequisition, deleteRequisition,
+  getRequisitionForPO,
+} from '@/lib/purchase-requisition-actions'
+export type { PurchaseRequisition, PurchaseRequisitionItem, RequisitionStatus, RequisitionUrgency } from '@/lib/purchase-requisition-actions'
+
+// ─── Attachment re-exports ───────────────────────────────────────────────────
+export { getPOAttachments, uploadPOAttachment, deletePOAttachment, getAttachmentDownloadUrl } from '@/lib/attachment-actions'
+export type { POAttachment } from '@/lib/attachment-actions'

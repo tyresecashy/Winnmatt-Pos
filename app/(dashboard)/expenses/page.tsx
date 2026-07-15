@@ -141,15 +141,15 @@ export default function ExpensesPage() {
     if (!branchId) return
     setLoading(true)
     try {
-      const [cats, expResult, statsData, recData] = await Promise.all([
+      const [cats, statsData, recData] = await Promise.all([
         getExpenseCategories(),
-        getExpenses({ branchId, limit: 200 }),
         getExpenseStats(branchId),
         getRecurringExpenses(branchId),
       ])
+      const expData = await getExpenses({ branchId, limit: 200 })
       setCategories(cats)
-      setExpenses((expResult as any).data ?? expResult as any)
-      setTotalCount((expResult as any).total ?? 0)
+      setExpenses(expData)
+      setTotalCount(expData.length)
       setStats(statsData)
       setRecurring(recData)
     } catch (err) {

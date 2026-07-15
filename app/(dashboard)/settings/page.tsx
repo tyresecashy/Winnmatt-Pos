@@ -264,9 +264,9 @@ export default function SettingsPage() {
     setLoyaltySaveState("idle")
 
     try {
-      const result = await updateLoyaltySettings(loyaltyForm as any)
+      const result = await updateLoyaltySettings(loyaltyForm as Record<string, unknown>)
       if (result.success) {
-        setLoyaltySettings(loyaltyForm as any)
+        setLoyaltySettings(loyaltyForm as LoyaltySettings)
         setLoyaltyForm(loyaltyForm)
       }
       setLoyaltySaveState("success")

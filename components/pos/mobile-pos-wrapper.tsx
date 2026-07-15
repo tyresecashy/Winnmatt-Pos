@@ -5,6 +5,7 @@ import { MobilePOS } from '@/components/pos/mobile-pos'
 import { type SaleItem, createSaleTransaction } from '@/lib/modules/sales'
 import { completePaymentAction } from '@/lib/actions/complete-payment-action'
 import { QuickShiftDialog } from '@/components/pos/quick-shift-dialog'
+import type { Shift } from '@/lib/types/database'
 import { useShiftGuard } from '@/hooks/use-shift-guard'
 import { useToast } from '@/hooks/use-toast'
 import { useReceiptSettings } from '@/hooks/use-receipt-settings'
@@ -108,7 +109,7 @@ export function MobilePOSWrapper({
         quantity: item.quantity,
         unitPrice: item.unit_price,
         discountPercent: 0,
-      })) as any[]
+      }))
 
       const subtotal = items.reduce((sum, item) => sum + item.total, 0)
 
@@ -152,7 +153,7 @@ export function MobilePOSWrapper({
         branchId: profile.branch_id,
         cashierId: profile.id,
         shiftId: activeShift?.id,
-        items: saleItems as any,
+        items: saleItems,
         paymentMethod: paymentMethod as 'cash' | 'card' | 'bank_transfer' | 'cheque' | 'credit',
         customerId: undefined,
         cartDiscount: 0,
@@ -210,7 +211,7 @@ export function MobilePOSWrapper({
         mode={shiftDialogMode}
         activeShift={activeShift ?? null}
         cashierName={profile?.full_name || 'Cashier'}
-        onOpenShift={openNewShift as any}
+        onOpenShift={openNewShift}
         onCloseShift={closeActiveShift}
       />
     </>

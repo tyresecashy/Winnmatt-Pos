@@ -68,18 +68,19 @@ interface AuditEntry {
   details: Record<string, unknown> | null
 }
 
+type AuditLogDbRow = Awaited<ReturnType<typeof getSystemAuditLog>>[number]
+
 /** Map a system_audit_log row to the client-side AuditEntry shape. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapAuditRow(row: any): AuditEntry {
+function mapAuditRow(row: AuditLogDbRow): AuditEntry {
   return {
-    id: row.id as string,
-    timestamp: new Date(row.created_at),
-    user: (row.user?.full_name as string) || 'System',
-    action: row.action as string,
-    entityType: (row.entity_type as string) || '',
-    entityBadge: badgeFromEntityType((row.entity_type as string) || ''),
+    id: row.id,
+    timestamp: new Date(row.created_at ?? ''),
+    user: (row.user?.full_name) || 'System',
+    action: row.action,
+    entityType: (row.entity_type) || '',
+    entityBadge: badgeFromEntityType((row.entity_type) || ''),
     severity: (row.severity as Severity) || 'info',
-    ipAddress: (row.ip_address as string) || '',
+    ipAddress: (row.ip_address) || '',
     details: (row.details as Record<string, unknown>) || null,
   }
 }

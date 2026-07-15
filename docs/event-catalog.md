@@ -1,5 +1,11 @@
 # WINNMATT Event Catalog
 
+> **⚠️ DEPRECATED — Superseded by D-11**
+>
+> This document is no longer maintained. It contains factual inaccuracies (claims some events are actively emitted when they are not).
+>
+> **Use [`11_EVENT_CATALOG.md`](11_EVENT_CATALOG.md) (D-11) instead** — the authoritative Brain document based on systematic code audit.
+
 Every significant operation in WINNMATT emits an event. This document catalogs all events, their payloads, and which actions emit them.
 
 ## Events by Domain

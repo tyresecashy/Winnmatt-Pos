@@ -6,6 +6,7 @@ import { supplierTools } from './suppliers'
 import { employeeTools } from './employees'
 import { financeTools } from './finance'
 import { adminTools } from './admin'
+import { productIntelligenceTools } from './product-intelligence'
 import type { ToolDefinition } from '../types'
 
 /**
@@ -20,4 +21,5 @@ export const allTools: ToolDefinition[] = [
   ...employeeTools,
   ...financeTools,
   ...adminTools,
+  ...productIntelligenceTools,
 ]

@@ -1121,25 +1121,6 @@ export async function searchSales(params: SearchSalesParams): Promise<SearchSale
   }
 }
 
-export async function getSalesByDateRange(branchId: string, startDate: string, endDate: string) {
-  try {
-    const { data, error } = await supabaseAdmin
-      .from('sales')
-      .select('*')
-      .eq('branch_id', branchId)
-      .neq('payment_status', 'failed') // Exclude voided sales from reports
-      .gte('created_at', startDate)
-      .lte('created_at', endDate)
-      .order('created_at', { ascending: false })
-
-    if (error) throw error
-    return data || []
-  } catch (error) {
-    logger.error('Error fetching sales by date range', error)
-    return []
-  }
-}
-
 export async function getTodaySalesStats(branchId: string) {
   try {
     const { start, end } = getNairobiDayRange()
@@ -1148,7 +1129,7 @@ export async function getTodaySalesStats(branchId: string) {
       .from('sales')
       .select('id, total_amount, payment_method')
       .eq('branch_id', branchId)
-      .neq('payment_status', 'failed') // Exclude voided sales from stats
+      .neq('payment_status', 'failed')
       .gte('created_at', start.toISOString())
       .lt('created_at', end.toISOString())
 

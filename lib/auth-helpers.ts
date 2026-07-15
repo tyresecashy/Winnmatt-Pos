@@ -101,15 +101,6 @@ export async function getAuthenticatedSupabaseUser(request: Request): Promise<{
   }
 }
 
-/**
- * Load user profile by verified Supabase auth user ID.
- * Returns full profile with branch info, or null if not found.
- */
-export async function loadUserProfile(userId: string): Promise<UserProfile | null> {
-  const result = await loadUserProfileResult(userId)
-  return result.profile
-}
-
 export async function loadUserProfileResult(userId: string): Promise<{
   profile: UserProfile | null
   reason?: 'missing' | 'inactive'
@@ -532,21 +523,6 @@ export function authorizeInventoryControlProfile(profile: UserProfile): {
       authorized: false,
       error: 'Access denied: Only super admins, admins, and managers can manage inventory',
     }
-  }
-
-  return { authorized: true }
-}
-
-/**
- * Verify a profile is allowed to manage branch transfers.
- */
-export function authorizeTransferProfile(profile: UserProfile): {
-  authorized: boolean
-  error?: string
-} {
-  const inventoryAccess = authorizeInventoryControlProfile(profile)
-  if (!inventoryAccess.authorized) {
-    return inventoryAccess
   }
 
   return { authorized: true }

@@ -144,12 +144,15 @@ export default function AccountsPayablePage() {
 
     setSaving(true)
     try {
-      const { recordSupplierPayment } = await import('@/lib/suppliers-actions')
-      const result = await recordSupplierPayment(
-        selectedSupplier.id, parseFloat(paymentForm.amount),
-        paymentForm.payment_date, paymentForm.payment_method,
-        paymentForm.reference_number, paymentForm.notes,
-      )
+      const { recordSupplierPayment } = await import('@/lib/modules/suppliers')
+      const result = await recordSupplierPayment({
+        supplierId: selectedSupplier.id,
+        amountKSh: parseFloat(paymentForm.amount),
+        paymentDate: paymentForm.payment_date,
+        paymentMethod: paymentForm.payment_method,
+        referenceNumber: paymentForm.reference_number || undefined,
+        notes: paymentForm.notes || undefined,
+      })
 
       if (!result.success) throw new Error(result.error || 'Payment failed')
 

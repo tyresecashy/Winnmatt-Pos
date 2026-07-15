@@ -218,3 +218,9 @@ export async function adjustStock(
     return { success: false, error: 'Operation failed. Please try again.' }
   }
 }
+
+// ─── Product Intelligence re-exports ─────────────────────────────────────────
+// Note: searchProducts is NOT re-exported here because modules/inventory already
+// exports searchProducts from lib/products-actions (different return shape).
+export { getProductIntelligence, getProductActivity, getProductPriceHistory, getProductStockLocations, logProductActivity, updateProductPricing } from '@/lib/product-intelligence-actions'
+export type { ProductSummary, ProductActivity, ProductPriceHistory, ProductStockAtLocation } from '@/lib/product-intelligence-actions'

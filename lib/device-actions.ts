@@ -33,13 +33,6 @@ export async function getDevices(branchId?: string): Promise<Device[]> {
   return (data || []) as Device[]
 }
 
-export async function getDevice(deviceId: string): Promise<Device | null> {
-  await authenticateServerAction()
-  const { data, error } = await supabaseAdmin.from('devices').select('*').eq('id', deviceId).single()
-  if (error) return null
-  return data as Device
-}
-
 export async function registerDevice(input: {
   name: string
   device_type: Device['device_type']
@@ -75,63 +68,5 @@ export async function registerDevice(input: {
   }
 }
 
-export async function updateDeviceStatus(
-  deviceId: string,
-  status: Device['status'],
-  ipAddress?: string
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    const updates: Partial<Device> = {
-      status,
-      last_seen_at: new Date().toISOString(),
-    }
-    if (ipAddress) updates.ip_address = ipAddress
 
-    const { error } = await supabaseAdmin
-      .from('devices')
-      .update(updates)
-      .eq('id', deviceId)
 
-    if (error) throw error
-
-    publish({
-      type: 'device.status',
-      source: 'system',
-      entityType: 'device',
-      entityId: deviceId,
-      payload: { deviceId, status, lastSeenAt: updates.last_seen_at },
-      timestamp: Date.now(),
-    })
-
-    return { success: true }
-  } catch (error) {
-    logger.error('Operation failed', { error: error })
-    return { success: false, error: 'Operation failed. Please try again.' }
-  }
-}
-
-export async function deactivateDevice(deviceId: string): Promise<{ success: boolean; error?: string }> {
-  try {
-    const { profile } = await authenticateServerAction()
-    if (!profile || !['super_admin', 'admin'].includes(profile.role)) {
-      return { success: false, error: 'Only admins can deactivate devices' }
-    }
-    return updateDeviceStatus(deviceId, 'offline')
-  } catch (error) {
-    logger.error('Operation failed', { error: error })
-    return { success: false, error: 'Operation failed. Please try again.' }
-  }
-}
-
-export async function getDevicesByBranch(branchId: string): Promise<{
-  online: Device[]
-  offline: Device[]
-  idle: Device[]
-}> {
-  const devices = await getDevices(branchId)
-  return {
-    online: devices.filter(d => d.status === 'online'),
-    offline: devices.filter(d => d.status === 'offline'),
-    idle: devices.filter(d => d.status === 'idle'),
-  }
-}

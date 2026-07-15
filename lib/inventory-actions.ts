@@ -62,7 +62,7 @@ export async function adjustInventoryStock(
 ) {
   try {
     // Import the function locally to avoid circular dependencies
-    const { adjustStockQuantity } = await import('@/lib/products-actions')
+    const { adjustStockQuantity } = await import('@/lib/modules/inventory')
     
     const result = await adjustStockQuantity(
       inventoryId,

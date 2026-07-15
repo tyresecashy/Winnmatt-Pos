@@ -152,7 +152,7 @@ export default function CustomerAnalyticsPage() {
           <Card><CardHeader><CardTitle>Customer Segments</CardTitle></CardHeader>
             <CardContent className="h-[350px]">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={rfm}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="segment" /><YAxis /><Tooltip content={<CustomTooltip currency={false} />} /><Bar dataKey="count" fill="#8884d8" cursor="pointer" onClick={(data: any) => data?.segment && router.push(`/customers?segment=${encodeURIComponent(String(data.segment))}`)} /></BarChart>
+                <BarChart data={rfm}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="segment" /><YAxis /><Tooltip content={<CustomTooltip currency={false} />} /><Bar dataKey="count" fill="#8884d8" cursor="pointer" onClick={(data) => { const d = data as unknown as Record<string, unknown>; d?.segment && router.push(`/customers?segment=${encodeURIComponent(String(d.segment))}`) }} /></BarChart>
               </ResponsiveContainer>
             </CardContent></Card>
         </TabsContent>
@@ -170,7 +170,7 @@ export default function CustomerAnalyticsPage() {
           <Card><CardHeader><CardTitle>Purchase Pattern Analysis</CardTitle></CardHeader>
             <CardContent className="h-[350px]">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={purchasePatterns}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="category" /><YAxis /><Tooltip content={<CustomTooltip currency={false} suffix="x" />} /><Bar dataKey="frequency" fill="#FFBB28" name="Frequency" cursor="pointer" onClick={(data: any) => data?.category && router.push(`/products?category=${encodeURIComponent(String(data.category))}`)} /><Bar dataKey="avgSpend" fill="#FF8042" name="Avg Spend" /></BarChart>
+                <BarChart data={purchasePatterns}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="category" /><YAxis /><Tooltip content={<CustomTooltip currency={false} suffix="x" />} /><Bar dataKey="frequency" fill="#FFBB28" name="Frequency" cursor="pointer" onClick={(data) => { const d = data as unknown as Record<string, unknown>; d?.category && router.push(`/products?category=${encodeURIComponent(String(d.category))}`) }} /><Bar dataKey="avgSpend" fill="#FF8042" name="Avg Spend" /></BarChart>
               </ResponsiveContainer>
             </CardContent></Card>
         </TabsContent>

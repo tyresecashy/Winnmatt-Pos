@@ -19,6 +19,7 @@ export * as finance from './finance'
 export * as customers from './customers'
 export * as workforce from './workforce'
 export * as automation from './automation'
+export * as productIntelligence from './product-intelligence'
 
 // Re-export shared contracts
 export {

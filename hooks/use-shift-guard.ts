@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, startTransition } from 'react'
 import { getActiveShift, openShift, closeShift } from '@/lib/modules/cash'
+import type { Shift } from '@/lib/types/database'
 
 interface UseShiftGuardOptions {
   branchId: string | null
@@ -11,13 +12,13 @@ interface UseShiftGuardOptions {
 
 interface UseShiftGuardReturn {
   /** The active shift, or null if none */
-  activeShift: any
+  activeShift: Shift | null
   /** True while initial load or polling */
   isLoading: boolean
   /** True when cashier has an open shift */
   hasActiveShift: boolean
   /** Open a new shift with the given float and optional register. Returns the shift or null on failure. */
-  openNewShift: (openingFloat: number, registerId?: string) => Promise<Record<string, unknown> | null>
+  openNewShift: (openingFloat: number, registerId?: string) => Promise<Shift | null>
   /** Close the active shift. Returns the result. */
   closeActiveShift: (countedCash: number, closingNotes?: string) => Promise<{ success: boolean; overShort?: number }>
   /** Manually trigger a refresh */
@@ -29,7 +30,7 @@ export function useShiftGuard({
   cashierId,
   pollInterval = 30000,
 }: UseShiftGuardOptions): UseShiftGuardReturn {
-  const [activeShift, setActiveShift] = useState<Record<string, unknown> | null>(null)
+  const [activeShift, setActiveShift] = useState<Shift | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -63,14 +64,14 @@ export function useShiftGuard({
     }
   }, [fetchActiveShift, pollInterval])
 
-  const openNewShift = useCallback(async (openingFloat: number, registerId?: string): Promise<any> => {
+  const openNewShift = useCallback(async (openingFloat: number, registerId?: string): Promise<Shift | null> => {
     if (!branchId) return null
     try {
       const result = await openShift(branchId, cashierId, openingFloat, registerId)
       if (result?.success) {
         await fetchActiveShift()
       }
-      return result
+      return (result?.shift as Shift | null) ?? null
     } catch {
       return null
     }
@@ -83,7 +84,7 @@ export function useShiftGuard({
     if (!activeShift) return { success: false }
 
     try {
-      const result = await closeShift(activeShift.id as string, countedCash, closingNotes || '', cashierId)
+      const result = await closeShift(activeShift.id, countedCash, closingNotes || '', cashierId)
       if (result.success) {
         setActiveShift(null)
         void fetchActiveShift()

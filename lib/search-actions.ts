@@ -185,18 +185,5 @@ async function fallbackSearch(
   }
 }
 
-/**
- * Get recent searches for a user (stored in localStorage client-side)
- */
-export async function getRecentSearches(): Promise<string[]> {
-  // This is handled client-side via localStorage
-  return []
-}
 
-/**
- * Get popular searches (could be implemented with analytics)
- */
-export async function getPopularSearches(): Promise<string[]> {
-  // Placeholder for future analytics
-  return ['milk', 'bread', 'sugar', 'rice', 'cooking oil']
-}
+

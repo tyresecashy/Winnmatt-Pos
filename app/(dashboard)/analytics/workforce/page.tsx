@@ -137,7 +137,7 @@ export default function WorkforceAnalyticsPage() {
         <Card><CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground">Avg Efficiency</CardTitle></CardHeader>
           <CardContent><p className="text-2xl font-bold">{(metrics?.averageEfficiencyScore || 0).toFixed(1)}</p></CardContent></Card>
         <Card><CardHeader className="pb-2"><CardTitle className="text-xs text-muted-foreground">Total Tasks</CardTitle></CardHeader>
-          <CardContent><p className="text-2xl font-bold">{(metrics as any)?.totalTasks || 0}</p></CardContent></Card>
+          <CardContent><p className="text-2xl font-bold">{(metrics as unknown as { totalTasks?: number })?.totalTasks || 0}</p></CardContent></Card>
       </div>
 
       <Tabs defaultValue="efficiency">

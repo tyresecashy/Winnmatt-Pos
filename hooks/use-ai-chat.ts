@@ -39,7 +39,7 @@ export function useAIChat(pageContext: string = '') {
 
     try {
       // Dynamic import to avoid circular dependency
-      const { aiExecute } = await import('@/lib/ai-actions')
+      const { aiExecute } = await import('@/lib/modules/ai')
 
       // Include the current message in history (React state hasn't flushed yet)
       const history = [...messages.slice(-9), userMsg]
@@ -66,7 +66,7 @@ export function useAIChat(pageContext: string = '') {
   const confirmAction = useCallback(async (toolName: string, toolArgs: Record<string, unknown>) => {
     setIsLoading(true)
     try {
-      const { aiConfirmAction } = await import('@/lib/ai-actions')
+      const { aiConfirmAction } = await import('@/lib/modules/ai')
       const result = await aiConfirmAction(toolName, toolArgs)
 
       // Update the last assistant message to include the result

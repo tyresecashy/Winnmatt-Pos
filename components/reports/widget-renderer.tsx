@@ -180,7 +180,7 @@ function ChartWidget({ data, config }: { data: unknown[] | Record<string, unknow
                 borderRadius: '6px',
                 fontSize: '12px',
               }}
-              formatter={((value: number) => [formatValue(value, 'currency'), yKey]) as any}
+              formatter={(value: unknown) => [formatValue(Number(value) || 0, 'currency'), yKey] as [string, string]}
             />
             <Line
               type="monotone"
@@ -205,7 +205,7 @@ function ChartWidget({ data, config }: { data: unknown[] | Record<string, unknow
                 borderRadius: '6px',
                 fontSize: '12px',
               }}
-              formatter={((value: number) => [formatValue(value, 'currency'), yKey]) as any}
+              formatter={(value: unknown) => [formatValue(Number(value) || 0, 'currency'), yKey] as [string, string]}
             />
             <Area
               type="monotone"

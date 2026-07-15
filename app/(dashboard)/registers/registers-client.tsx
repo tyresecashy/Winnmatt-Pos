@@ -33,7 +33,7 @@ import { useToast } from '@/components/ui/use-toast'
 import { EmptyState } from '@/components/ui/empty-state'
 import { createRegister, updateRegister } from '@/lib/modules/cash'
 
-interface Register {
+export interface Register {
   id: string
   register_name: string
   serial_number: string | null
@@ -55,7 +55,7 @@ interface Register {
   current_cashier?: { id: string; full_name: string } | null
 }
 
-interface Drawer {
+export interface Drawer {
   id: string
   drawer_name: string
   register_id: string | null

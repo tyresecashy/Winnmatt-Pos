@@ -10,6 +10,7 @@
 import { logger } from '@/lib/logger'
 import * as expenseActions from '@/lib/expenses-actions'
 import * as invoiceActions from '@/lib/invoice-actions'
+import { expenseRepo } from './repository'
 import type { Expense, ExpenseCategory, ExpenseStats, RecurringExpense } from '@/lib/expenses-actions'
 
 // ─── Type helpers ─────────────────────────────────────────────────────────────
@@ -25,7 +26,7 @@ type NullableInvoiceStatsResult = InvoiceStatsResult | null
 
 export async function getExpenseCategories(): Promise<ExpenseCategory[]> {
   try {
-    return await expenseActions.getExpenseCategories()
+    return await expenseRepo.getExpenseCategories() as unknown as ExpenseCategory[]
   } catch (error) {
     logger.error('[Expenses Module] getExpenseCategories failed', error instanceof Error ? error.message : String(error))
     return []
@@ -67,17 +68,26 @@ export async function deleteExpenseCategory(id: string): Promise<{ success: bool
 
 export async function getExpenses(filters?: Record<string, unknown>): Promise<Expense[]> {
   try {
-    const result = await expenseActions.getExpenses(filters as unknown as Parameters<typeof expenseActions.getExpenses>[0])
-    return result.data ?? []
+    const result = await expenseRepo.getExpenses(filters as Record<string, unknown> & { branchId?: string; limit?: number; offset?: number })
+    return result.data as unknown as Expense[]
   } catch (error) {
     logger.error('[Expenses Module] getExpenses failed', error instanceof Error ? error.message : String(error))
     return []
   }
 }
 
+export async function getExpensesPaginated(filters?: Record<string, unknown>): Promise<{ data: Expense[]; total: number }> {
+  try {
+    return await expenseRepo.getExpenses(filters as Record<string, unknown> & { branchId?: string; limit?: number; offset?: number }) as unknown as { data: Expense[]; total: number }
+  } catch (error) {
+    logger.error('[Expenses Module] getExpensesPaginated failed', error instanceof Error ? error.message : String(error))
+    return { data: [], total: 0 }
+  }
+}
+
 export async function getExpenseById(id: string): Promise<Expense | null> {
   try {
-    return await expenseActions.getExpenseById(id)
+    return await expenseRepo.getExpenseById(id) as unknown as Expense | null
   } catch (error) {
     logger.error('[Expenses Module] getExpenseById failed', error instanceof Error ? error.message : String(error))
     return null
@@ -133,7 +143,7 @@ export async function getExpenseStats(branchId: string, months?: number): Promis
 
 export async function getRecurringExpenses(branchId: string): Promise<RecurringExpense[]> {
   try {
-    return await expenseActions.getRecurringExpenses(branchId)
+    return await expenseRepo.getRecurringExpenses(branchId) as unknown as RecurringExpense[]
   } catch (error) {
     logger.error('[Expenses Module] getRecurringExpenses failed', error instanceof Error ? error.message : String(error))
     return []

@@ -19,7 +19,7 @@ import {
   getRequisitionForPO,
   type PurchaseRequisition,
   type RequisitionUrgency,
-} from '@/lib/purchase-requisition-actions'
+} from '@/lib/modules/procurement'
 import { getSuppliers } from '@/lib/modules/suppliers'
 import { searchProducts } from '@/lib/modules/inventory'
 import { useRouter } from 'next/navigation'

@@ -133,7 +133,7 @@ export default function InventoryAnalyticsPage() {
           <Card><CardHeader><CardTitle>Stock Turnover by Category</CardTitle></CardHeader>
             <CardContent className="h-[350px]">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={turnover}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="category" /><YAxis /><Tooltip content={<CustomTooltip currency={false} suffix="x" />} />                <Bar dataKey="turnover" fill="#8884d8" cursor="pointer" onClick={(data: any) => data?.category && router.push(`/products?category=${encodeURIComponent(String(data.category))}`)} /></BarChart>
+                <BarChart data={turnover}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="category" /><YAxis /><Tooltip content={<CustomTooltip currency={false} suffix="x" />} />                <Bar dataKey="turnover" fill="#8884d8" cursor="pointer" onClick={(data) => { const d = data as unknown as Record<string, unknown>; d?.category && router.push(`/products?category=${encodeURIComponent(String(d.category))}`) }} /></BarChart>
               </ResponsiveContainer>
             </CardContent></Card>
         </TabsContent>

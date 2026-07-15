@@ -9,6 +9,7 @@
 
 import { logger } from '@/lib/logger'
 import * as taxActions from '@/lib/tax-actions'
+import { taxRepo } from './repository'
 
 // ─── Type helpers ─────────────────────────────────────────────────────────────
 type TaxRateRow = Awaited<ReturnType<typeof taxActions.getTaxRates>>[number]
@@ -21,7 +22,7 @@ type DefaultTaxRateResult = Awaited<ReturnType<typeof taxActions.getDefaultTaxRa
 
 export async function getTaxRates(includeInactive?: boolean): Promise<TaxRateRow[]> {
   try {
-    return await taxActions.getTaxRates(includeInactive)
+    return await taxRepo.getTaxRates(includeInactive) as unknown as TaxRateRow[]
   } catch (error) {
     logger.error('[Tax Module] getTaxRates failed', error instanceof Error ? error.message : String(error))
     return []
@@ -59,7 +60,7 @@ export async function deleteTaxRate(id: string): Promise<{ success: boolean; err
 
 export async function getTaxGroups(): Promise<TaxGroupRow[]> {
   try {
-    return await taxActions.getTaxGroups()
+    return await taxRepo.getTaxGroups() as unknown as TaxGroupRow[]
   } catch (error) {
     logger.error('[Tax Module] getTaxGroups failed', error instanceof Error ? error.message : String(error))
     return []
@@ -97,7 +98,7 @@ export async function deleteTaxGroup(id: string): Promise<{ success: boolean; er
 
 export async function getCategoryTaxAssignments(): Promise<CategoryAssignmentRow[]> {
   try {
-    return await taxActions.getCategoryTaxAssignments()
+    return await taxRepo.getCategoryTaxAssignments() as unknown as CategoryAssignmentRow[]
   } catch (error) {
     logger.error('[Tax Module] getCategoryTaxAssignments failed', error instanceof Error ? error.message : String(error))
     return []
@@ -124,7 +125,7 @@ export async function removeCategoryTaxAssignment(categoryId: string, taxRateId:
 
 export async function getProductCategories(): Promise<ProductCategoryRow[]> {
   try {
-    return await taxActions.getProductCategories()
+    return await taxRepo.getProductCategories() as unknown as ProductCategoryRow[]
   } catch (error) {
     logger.error('[Tax Module] getProductCategories failed', error instanceof Error ? error.message : String(error))
     return []
@@ -133,9 +134,30 @@ export async function getProductCategories(): Promise<ProductCategoryRow[]> {
 
 export async function getDefaultTaxRate(): Promise<DefaultTaxRateResult> {
   try {
-    return await taxActions.getDefaultTaxRate()
+    return await taxRepo.getDefaultTaxRate() as unknown as DefaultTaxRateResult
   } catch (error) {
     logger.error('[Tax Module] getDefaultTaxRate failed', error instanceof Error ? error.message : String(error))
     return null
+  }
+}
+
+export async function getTaxForCategory(categoryId: string): Promise<{
+  group_id: string | null
+  group_name: string | null
+  is_tax_inclusive: boolean
+  combined_percentage: number
+  rates: { rate_id: string; rate_name: string; percentage: number; tax_type: string }[]
+}> {
+  try {
+    return await taxRepo.getTaxForCategory(categoryId) as unknown as {
+      group_id: string | null
+      group_name: string | null
+      is_tax_inclusive: boolean
+      combined_percentage: number
+      rates: { rate_id: string; rate_name: string; percentage: number; tax_type: string }[]
+    }
+  } catch (error) {
+    logger.error('[Tax Module] getTaxForCategory failed', error instanceof Error ? error.message : String(error))
+    return { group_id: null, group_name: null, is_tax_inclusive: true, combined_percentage: 0, rates: [] }
   }
 }

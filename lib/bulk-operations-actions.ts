@@ -65,7 +65,7 @@ export async function getBulkOperationData(): Promise<BulkOperationData> {
       supabaseAdmin.from('inventory').select('product_id, branch_id, quantity'),
     ])
 
-    const products: BulkProduct[] = ((productsRes.data || []) as any[]).map((p) => ({
+    const products: BulkProduct[] = ((productsRes.data || []) as unknown as Array<{ id: string; sku: string; name: string; selling_price: number; purchase_price: number; category_id: string | null; barcode: string | null; reorder_level: number }>).map((p) => ({
       ...p,
       category_name: null,
     })) as BulkProduct[]

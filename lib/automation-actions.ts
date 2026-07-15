@@ -8,6 +8,7 @@
 import { logger } from '@/lib/logger'
 import { supabaseAdmin } from '@/lib/supabase-server'
 import { authenticateServerAction } from '@/lib/auth-helpers'
+import type { Json } from '@/lib/types/database'
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -327,10 +328,10 @@ export async function upsertAction(action: {
         .from('automation_actions')
         .update({
           action_type: action.action_type,
-          params: action.params || {},
+          params: (action.params || {}) as Json,
           sort_order: action.sort_order || 0,
           is_async: action.is_async || false,
-        } as any)
+        })
         .eq('id', action.id)
 
       if (error) throw error
@@ -341,10 +342,10 @@ export async function upsertAction(action: {
         .insert({
           rule_id: action.rule_id,
           action_type: action.action_type,
-          params: action.params || {},
+          params: (action.params || {}) as Json,
           sort_order: action.sort_order || 0,
           is_async: action.is_async || false,
-        } as any)
+        })
         .select('id')
         .single()
 

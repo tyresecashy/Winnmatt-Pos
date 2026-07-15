@@ -4,40 +4,37 @@
  * Manages stock transfers between branches and transfer wizards.
  * Other modules should ONLY import from this file.
  *
- * Implementation: Delegates to lib/transfer-actions.ts and lib/transfer-wizard-actions.ts.
+ * Reads are served from TransferRepository (enterprise core data access).
+ * Writes delegate to lib/transfer-actions.ts and lib/transfer-wizard-actions.ts.
  */
 
 import { logger } from '@/lib/logger'
 import * as transferActions from '@/lib/transfer-actions'
 import * as wizardActions from '@/lib/transfer-wizard-actions'
+import { transferRepo } from './repository'
+import type { StockTransferRow, TransferWizardRow, LegacyTransferRow, ProductWithStock } from './repository'
 
-// ─── Type helpers ─────────────────────────────────────────────────────────────
-type StockTransferRow = Awaited<ReturnType<typeof transferActions.getStockTransfers>>[number]
-type StockTransferResult = Awaited<ReturnType<typeof transferActions.getStockTransfer>>
-type BranchRow = Awaited<ReturnType<typeof transferActions.getAllBranches>>[number]
-type ProductAtBranchRow = Awaited<ReturnType<typeof transferActions.getProductsAtBranch>>[number]
-type TransferWizardRow = Awaited<ReturnType<typeof wizardActions.getTransferWizards>>[number]
-type LegacyTransferResult = Awaited<ReturnType<typeof wizardActions.getLegacyTransfers>>
-
-// ─── Public API - Stock Transfers ───────────────────────────────────────────
+// ─── Public API - Stock Transfers (reads via repository) ────────────────────
 
 export async function getStockTransfers(fromBranchId?: string, status?: string): Promise<StockTransferRow[]> {
   try {
-    return await transferActions.getStockTransfers(fromBranchId, status)
+    return await transferRepo.getStockTransfers(fromBranchId, status)
   } catch (error) {
     logger.error('[Transfers Module] getStockTransfers failed', error instanceof Error ? error.message : String(error))
     return []
   }
 }
 
-export async function getStockTransfer(id: string): Promise<StockTransferResult> {
+export async function getStockTransfer(id: string): Promise<StockTransferRow | null> {
   try {
-    return await transferActions.getStockTransfer(id)
+    return await transferRepo.getStockTransfer(id)
   } catch (error) {
     logger.error('[Transfers Module] getStockTransfer failed', error instanceof Error ? error.message : String(error))
     return null
   }
 }
+
+// ─── Public API - Stock Transfers (writes — delegates to action file) ───────
 
 export async function createStockTransfer(data: Record<string, unknown>): Promise<{ success: boolean; id?: string; error?: string }> {
   try {
@@ -66,7 +63,7 @@ export async function markInTransit(id: string): Promise<{ success: boolean; err
   }
 }
 
-export async function receiveStockTransfer(id: string, items: Record<string, unknown>[], userId: string): Promise<{ success: boolean; error?: string }> {
+export async function receiveStockTransfer(id: string, items: Record<string, unknown>[], _userId?: string): Promise<{ success: boolean; error?: string }> {
   try {
     return await transferActions.receiveStockTransfer(id, items as Parameters<typeof transferActions.receiveStockTransfer>[1])
   } catch (error) {
@@ -84,43 +81,47 @@ export async function cancelStockTransfer(id: string): Promise<{ success: boolea
   }
 }
 
-export async function getAllBranches(): Promise<BranchRow[]> {
+// ─── Public API - Convenience Reads (via repository) ────────────────────────
+
+export async function getAllBranches(): Promise<Array<{ id: string; name: string; code: string }>> {
   try {
-    return await transferActions.getAllBranches()
+    return await transferRepo.getAllBranches()
   } catch (error) {
     logger.error('[Transfers Module] getAllBranches failed', error instanceof Error ? error.message : String(error))
     return []
   }
 }
 
-export async function getProductsAtBranch(branchId: string): Promise<ProductAtBranchRow[]> {
+export async function getProductsAtBranch(branchId: string): Promise<ProductWithStock[]> {
   try {
-    return await transferActions.getProductsAtBranch(branchId)
+    return await transferRepo.getProductsAtBranch(branchId)
   } catch (error) {
     logger.error('[Transfers Module] getProductsAtBranch failed', error instanceof Error ? error.message : String(error))
     return []
   }
 }
 
-// ─── Public API - Transfer Wizards ──────────────────────────────────────────
+// ─── Public API - Transfer Wizards (reads via repository) ───────────────────
 
 export async function getTransferWizards(): Promise<TransferWizardRow[]> {
   try {
-    return await wizardActions.getTransferWizards()
+    return await transferRepo.getTransferWizards()
   } catch (error) {
     logger.error('[Transfers Module] getTransferWizards failed', error instanceof Error ? error.message : String(error))
     return []
   }
 }
 
-export async function getLegacyTransfers(limit?: number): Promise<LegacyTransferResult> {
+export async function getLegacyTransfers(limit?: number): Promise<{ transfers: LegacyTransferRow[]; mode: 'legacy' | 'empty' }> {
   try {
-    return await wizardActions.getLegacyTransfers(limit)
+    return await transferRepo.getLegacyTransfers(limit)
   } catch (error) {
     logger.error('[Transfers Module] getLegacyTransfers failed', error instanceof Error ? error.message : String(error))
-    return [] as any
+    return { transfers: [], mode: 'legacy' }
   }
 }
+
+// ─── Public API - Transfer Wizards (writes — delegates to action file) ──────
 
 export async function createTransferWizard(data: Record<string, unknown>): Promise<{ success: boolean; id?: string; error?: string }> {
   try {

@@ -183,9 +183,9 @@ export default function PromotionsPage() {
       let result: Promotion | null
 
       if (editing) {
-        result = await updatePromotion(editing.id, payload) as any
+        result = await updatePromotion(editing.id, payload) as unknown as Promotion | null
       } else {
-        result = await createPromotion(payload) as any
+        result = await createPromotion(payload) as unknown as Promotion | null
       }
 
       if (!result) throw new Error('Failed to save promotion')
@@ -227,7 +227,7 @@ export default function PromotionsPage() {
     const limit = parseInt(newCouponLimit) || 0
     const result = await createCoupon(couponPromotion.id, newCouponCode.trim(), limit)
     if (result) {
-      setCoupons((prev) => [...prev, result as any])
+      setCoupons((prev) => [...prev, result as unknown as PromotionCoupon])
       setNewCouponCode('')
       setNewCouponLimit('0')
       toast({ title: 'Coupon added' })

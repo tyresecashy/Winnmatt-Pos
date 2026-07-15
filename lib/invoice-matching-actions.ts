@@ -23,61 +23,6 @@ export interface InvoiceMatchItem {
   receipt_item?: { id: string; receipt_id: string } | null
 }
 
-export async function getInvoiceMatchItems(invoiceId: string): Promise<InvoiceMatchItem[]> {
-  try {
-    const auth = await authenticateServerAction()
-    if (!auth.success || !auth.profile) return []
-    const { data, error } = await supabaseAdmin
-      .from('invoice_match_items')
-      .select('*, po_item:purchase_order_items(id, purchase_order_id), receipt_item:purchase_receipt_items(id, receipt_id)')
-      .eq('invoice_id', invoiceId)
-      .order('created_at', { ascending: true })
-    if (error) throw error
-    return (data as unknown as InvoiceMatchItem[]) || []
-  } catch (error) {
-    logger.error('Error fetching invoice match items:', error)
-    return []
-  }
-}
-
-export async function getInvoiceMatchById(id: string): Promise<InvoiceMatchItem | null> {
-  try {
-    const auth = await authenticateServerAction()
-    if (!auth.success || !auth.profile) return null
-    const { data, error } = await supabaseAdmin
-      .from('invoice_match_items')
-      .select('*')
-      .eq('id', id)
-      .single()
-    if (error) throw error
-    return data as InvoiceMatchItem
-  } catch (error) {
-    logger.error('Error fetching invoice match item:', error)
-    return null
-  }
-}
-
-export async function updateInvoiceMatchItem(
-  id: string,
-  updates: Partial<InvoiceMatchItem>
-): Promise<InvoiceMatchItem | null> {
-  try {
-    const auth = await authenticateServerAction()
-    if (!auth.success || !auth.profile) return null
-    const { data, error } = await supabaseAdmin
-      .from('invoice_match_items')
-      .update({ ...updates, updated_at: new Date().toISOString() })
-      .eq('id', id)
-      .select()
-      .single()
-    if (error) throw error
-    return data as InvoiceMatchItem
-  } catch (error) {
-    logger.error('Error updating invoice match item:', error)
-    return null
-  }
-}
-
 export async function getMatchesByStatus(status: string): Promise<any[]> {
   try {
     const auth = await authenticateServerAction()

@@ -60,7 +60,7 @@ export default function FinanceChartContent({
             <CardContent className="h-[300px]">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={expenseBreakdown} cx="50%" cy="50%" labelLine={false} label={({ category, percent }: any) => `${category} (${((percent ?? 0) * 100).toFixed(0)}%)`} outerRadius={100} dataKey="amount" nameKey="category">
+                  <Pie data={expenseBreakdown} cx="50%" cy="50%" labelLine={false} label={({ category, percent }: { category?: string; percent?: number }) => `${category} (${((percent ?? 0) * 100).toFixed(0)}%)`} outerRadius={100} dataKey="amount" nameKey="category">
                     {expenseBreakdown.map((_, i: number) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                   </Pie><Tooltip content={<CustomTooltip />} />
                 </PieChart>

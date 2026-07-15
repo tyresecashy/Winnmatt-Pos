@@ -258,6 +258,68 @@ export interface Database extends AutoDatabase {
         Update: Record<string, unknown>
         Relationships: []
       }
+      ecommerce_orders: {
+        Row: {
+          id: string; order_number: string; store_id: string
+          customer_id: string | null; status: string
+          subtotal: number; tax_amount: number; shipping_amount: number
+          discount_amount: number; total_amount: number; currency: string
+          payment_method: string | null; payment_status: string
+          payment_reference: string | null
+          shipping_address: Record<string, unknown> | null
+          billing_address: Record<string, unknown> | null
+          notes: string | null; created_at: string; updated_at: string
+          confirmed_at: string | null; shipped_at: string | null
+          delivered_at: string | null; cancelled_at: string | null
+        }
+        Insert: {
+          store_id: string; subtotal: number; tax_amount: number
+          shipping_amount: number; total_amount: number
+          customer_id?: string | null; discount_amount?: number
+          currency?: string; payment_method?: string | null
+          payment_status?: string; payment_reference?: string | null
+          shipping_address?: Record<string, unknown> | null
+          billing_address?: Record<string, unknown> | null
+          notes?: string | null
+        }
+        Update: Record<string, unknown>
+        Relationships: []
+      }
+      ecommerce_product_sync: {
+        Row: {
+          id: string; product_id: string; store_id: string
+          sync_status: string; last_synced_at: string | null
+          online_data: Record<string, unknown> | null
+          created_at: string; updated_at: string
+        }
+        Insert: {
+          product_id: string; store_id: string
+          sync_status?: string; last_synced_at?: string | null
+          online_data?: Record<string, unknown> | null
+        }
+        Update: Record<string, unknown>
+        Relationships: []
+      }
+      audit_log: {
+        Row: {
+          id: string; action: string; table_name: string | null
+          record_id: string | null; actor_id: string | null
+          entity_type: string | null; entity_id: string | null
+          user_id: string | null; description: string | null
+          details: Record<string, unknown> | null; created_at: string
+        }
+        Insert: Record<string, unknown>
+        Update: Record<string, unknown>
+        Relationships: []
+      }
+      health_check: {
+        Row: {
+          id: string; status: string; checked_at: string
+        }
+        Insert: Record<string, unknown>
+        Update: Record<string, unknown>
+        Relationships: []
+      }
     }
     Functions: AutoDatabase['public']['Functions'] & {
       receive_stock_transfer: {

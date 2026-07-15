@@ -38,20 +38,6 @@ export async function getCampaigns(status?: string): Promise<Campaign[]> {
   }
 }
 
-export async function getCampaignById(id: string): Promise<Campaign | null> {
-  try {
-    const auth = await authenticateServerAction()
-    if (!auth.success || !auth.profile) return null
-
-    const { data, error } = await supabaseAdmin.from('campaigns').select('*').eq('id', id).single()
-    if (error) throw error
-    return data as unknown as Campaign
-  } catch (error) {
-    logger.error('Error fetching campaign:', error)
-    return null
-  }
-}
-
 export async function createCampaign(data: {
   name: string
   description?: string

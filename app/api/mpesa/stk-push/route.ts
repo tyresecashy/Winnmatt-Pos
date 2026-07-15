@@ -17,7 +17,7 @@ import MpesaService from '@/lib/mpesa-service'
 import {
   createMpesaTransaction,
   failMpesaSale,
-} from '@/lib/mpesa-actions'
+} from '@/lib/modules/sales'
 import { supabaseAdmin } from '@/lib/supabase-server'
 import { authenticateRequest, verifySaleAccess, unauthorizedResponse, forbiddenResponse } from '@/lib/auth-helpers'
 import { logger } from '@/lib/logger'

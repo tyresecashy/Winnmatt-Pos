@@ -3,8 +3,9 @@
 import { authenticateServerAction } from '@/lib/auth-helpers'
 import { supabaseAdmin } from '@/lib/supabase-server'
 import { logger } from '@/lib/logger'
-import { getTaxForCategory } from '@/lib/tax-actions'
+import { getTaxForCategory } from '@/lib/modules/tax'
 import { calculateTax } from '@/lib/tax-utils'
+import type { Json } from '@/lib/types/database'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -314,9 +315,9 @@ export async function createOrder(
     const totalAmount = subtotal + taxAmount + shippingAmount
 
     // Create order
-    const { data: order, error: orderError } = await (supabaseAdmin
-      .from('ecommerce_orders') as any)
-      .insert({
+    const db = supabaseAdmin.from('ecommerce_orders')
+    const { data: order, error: orderError } = await (db.insert as (values: Record<string, unknown>) => ReturnType<typeof db.insert>)(
+      {
         store_id: storeId,
         customer_id: options.customerId || null,
         subtotal,
@@ -327,7 +328,8 @@ export async function createOrder(
         shipping_address: options.shippingAddress || null,
         billing_address: options.billingAddress || null,
         notes: options.notes || null,
-      })
+      },
+    )
       .select()
       .single()
 
@@ -590,15 +592,16 @@ export async function syncProduct(
     // Sync logic would go here (integrate with Shopify, WooCommerce, etc.)
     // For now, just update the sync status
 
-    const { error } = await (supabaseAdmin
-      .from('ecommerce_product_sync') as any)
-      .upsert({
+    const syncDb = supabaseAdmin.from('ecommerce_product_sync')
+    const { error } = await (syncDb.upsert as (values: Record<string, unknown>) => ReturnType<typeof syncDb.upsert>)(
+      {
         product_id: productId,
         store_id: storeId,
         sync_status: 'synced',
         last_synced_at: new Date().toISOString(),
-        online_data: product,
-      })
+        online_data: product as unknown as Json,
+      },
+    )
 
     if (error) throw error
     return { success: true }

@@ -168,7 +168,7 @@ export default function SalesAnalyticsPage() {
         <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Avg Order Value</CardTitle></CardHeader>
           <CardContent><p className="text-2xl font-bold">{fmt(metrics?.averageOrderValue || 0)}</p></CardContent></Card>
         <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Items Sold</CardTitle></CardHeader>
-          <CardContent><p className="text-2xl font-bold">{(metrics as any)?.totalItemsSold || 0}</p></CardContent></Card>
+          <CardContent><p className="text-2xl font-bold">{(metrics as unknown as { totalItemsSold?: number })?.totalItemsSold || 0}</p></CardContent></Card>
       </div>
 
       <SalesChartContent

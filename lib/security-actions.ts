@@ -61,29 +61,6 @@ export async function getLoginHistory(options?: { limit?: number; offset?: numbe
 }
 
 /**
- * Record a login attempt (called from login server action / auth callback).
- */
-export async function recordLoginAttempt(params: {
-  userId: string
-  ipAddress?: string
-  userAgent?: string
-  deviceInfo?: string
-  location?: string
-  status: 'success' | 'failed'
-  failureReason?: string
-}) {
-  await supabaseAdmin.from('login_history').insert({
-    user_id: params.userId,
-    ip_address: params.ipAddress || null,
-    user_agent: params.userAgent || null,
-    device_info: params.deviceInfo || null,
-    location: params.location || null,
-    status: params.status,
-    failure_reason: params.failureReason || null,
-  })
-}
-
-/**
  * Update password policy settings for the user (stored in user_settings).
  * Note: Requires the user_settings table. Falls back silently if table is missing.
  */

@@ -338,7 +338,7 @@ export class ScenarioSimulatorService {
     result.metrics.transactions_processed = Math.floor(Math.random() * 1000) + 500;
     result.metrics.average_response_time_ms = Math.floor(Math.random() * 2000) + 500;
     result.metrics.error_rate = Math.random() * 0.05;
-    result.metrics.peak_concurrent_users = params.concurrent_users as any;
+    result.metrics.peak_concurrent_users = params.concurrent_users as number;
     result.metrics.user_impact = 'Slightly slower checkout times';
 
     // Identify issues
@@ -425,7 +425,7 @@ export class ScenarioSimulatorService {
   private async simulateMassRefund(result: ScenarioResult, config: ScenarioConfig) {
     const params = config.parameters;
     
-    result.metrics.transactions_processed = params.refund_count as any;
+    result.metrics.transactions_processed = params.refund_count as number;
     result.metrics.average_response_time_ms = 800;
     result.metrics.error_rate = 0.02;
     result.metrics.user_impact = 'Refund processing delayed';

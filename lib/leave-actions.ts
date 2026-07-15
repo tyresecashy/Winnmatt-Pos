@@ -235,30 +235,4 @@ export async function getLeaveStats() {
   }
 }
 
-// ─── Get current user's pending leave ──────────────────────────────────────
 
-export async function getMyPendingLeaves() {
-  try {
-    const auth = await authenticateServerAction()
-    if (!auth.success || !auth.profile) return []
-
-    const { data: profile } = await supabaseAdmin
-      .from('employee_profiles')
-      .select('id')
-      .eq('user_id', auth.profile.id)
-      .single()
-
-    if (!profile) return []
-
-    const { data } = await supabaseAdmin
-      .from('leave_requests')
-      .select('*')
-      .eq('employee_profile_id', profile.id)
-      .eq('status', 'pending')
-      .order('created_at', { ascending: false })
-
-    return (data || []) as LeaveRequest[]
-  } catch {
-    return []
-  }
-}

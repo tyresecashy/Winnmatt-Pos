@@ -65,7 +65,7 @@ export async function PUT(
         }
       }
 
-      const { data, error } = await (ctx.supabase as any)
+      const { data, error } = await ctx.supabase
         .from('products')
         .update(updateData)
         .eq('id', id)
@@ -98,7 +98,7 @@ export async function DELETE(
       }
 
       // Soft delete — set status to inactive
-      const { error } = await (ctx.supabase as any)
+      const { error } = await (ctx.supabase as unknown as typeof ctx.supabase)
         .from('products')
         .update({ status: 'inactive', updated_at: new Date().toISOString() })
         .eq('id', id)

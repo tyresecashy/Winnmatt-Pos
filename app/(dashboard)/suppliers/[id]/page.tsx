@@ -243,7 +243,7 @@ export default function SupplierDetailPage() {
                         <td className="p-3"><Badge variant="outline">{po.status}</Badge></td>
                         <td className="p-3 text-right">{(po.items || []).length}</td>
                         <td className="p-3 text-right font-medium">{formatKSh(po.total_amount)}</td>
-                        <td className="p-3 text-right">{(po.items || []).filter((i: any) => i.received_quantity > 0).length} / {(po.items || []).length}</td>
+                        <td className="p-3 text-right">{(po.items || []).filter((i: { received_quantity?: number }) => (i.received_quantity ?? 0) > 0).length} / {(po.items || []).length}</td>
                       </tr>
                     ))}
                   </tbody>

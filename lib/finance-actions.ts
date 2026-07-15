@@ -866,25 +866,6 @@ export async function createBankAccount(data: {
   return { success: true, data: bankAccount }
 }
 
-export async function updateBankAccount(id: string, data: {
-  bank_name?: string
-  account_name?: string
-  account_number?: string
-  is_active?: boolean
-}) {
-  await authenticateServerAction()
-
-  const { error } = await supabaseAdmin
-    .from('bank_accounts')
-    .update({ ...data, updated_at: new Date().toISOString() })
-    .eq('id', id)
-
-  if (error) {
-      if (error) logger.error('Operation failed', { error: error })
-      throw new Error('Operation failed')
-    }
-  return { success: true }
-}
 
 export async function deleteBankAccount(id: string) {
   await authenticateServerAction()
