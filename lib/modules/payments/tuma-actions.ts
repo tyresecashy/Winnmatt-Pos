@@ -191,7 +191,7 @@ export async function finalizePaymentSale(saleId: string) {
   try {
     const { error: saleError } = await supabaseAdmin
       .from('sales')
-      .update({ payment_status: 'completed' })
+      .update({ payment_status: 'completed', sale_status: 'completed' })
       .eq('id', saleId)
 
     if (saleError) throw saleError

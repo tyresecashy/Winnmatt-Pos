@@ -156,55 +156,24 @@ export function PaymentPanel({
     let cancelled = false
     let isPolling = false
 
-    // ── SSE subscription ────────────────────────────────────────────
-    let eventSource: EventSource | null = null
-    try {
-      eventSource = new EventSource(
-        `/api/mpesa/stream?checkoutRequestId=${encodeURIComponent(checkoutRequestId)}`
-      )
+    // ── SSE subscription (Tuma uses polling only) ──────────────────
+    // Tuma Payments uses HTTP polling via /api/payments/tuma/status
+    // SSE is not needed since the polling loop below handles everything
 
-      eventSource.addEventListener('payment.confirmed', async () => {
-        if (cancelled) return
-        setIsMpesaFinalizing(true)
-        setPaymentStatus("Payment confirmed via SSE. Opening receipt...")
-        await onCompletePaymentRef.current(receiptNumber, "mpesa", {
-          skipSaleCreation: true,
-          saleId: pendingSaleId,
-        })
-      })
-
-      eventSource.addEventListener('payment.failed', (e) => {
-        if (cancelled) return
-        const data = JSON.parse(e.data)
-        setIsProcessing(false)
-        setIsMpesaFinalizing(false)
-        setCheckoutRequestId(null)
-        setPendingSaleId(null)
-        setPaymentStatus("")
-        setPaymentError(data.errorMessage || "M-Pesa payment was not completed.")
-      })
-
-      eventSource.onerror = () => {
-        eventSource?.close()
-      }
-    } catch {
-      // SSE not available — polling fallback handles it
-    }
-
-    // ── Polling fallback ────────────────────────────────────────────
+    // ── Polling (Tuma / M-Pesa status check) ───────────────────────
     const pollStatus = async () => {
       if (cancelled || isPolling || isMpesaFinalizing) return
 
       isPolling = true
       try {
         const response = await fetch(
-          `/api/mpesa/status?checkoutRequestId=${encodeURIComponent(checkoutRequestId)}&saleId=${encodeURIComponent(pendingSaleId)}`,
+          `/api/payments/tuma/status?checkoutRequestId=${encodeURIComponent(checkoutRequestId)}&saleId=${encodeURIComponent(pendingSaleId)}`,
           { method: "GET", credentials: "include" }
         )
 
         if (!response.ok) {
           const errData = await response.json().catch(() => ({}))
-          throw new Error(errData.error || "Unable to check M-Pesa status")
+          throw new Error(errData.error || "Unable to check payment status")
         }
 
         const statusResult = await response.json()
@@ -226,15 +195,15 @@ export function PaymentPanel({
           setCheckoutRequestId(null)
           setPendingSaleId(null)
           setPaymentStatus("")
-          setPaymentError(statusResult.errorMessage || "M-Pesa payment was not completed.")
+          setPaymentError(statusResult.errorMessage || "Payment was not completed.")
           return
         }
 
         setPaymentStatus("Waiting for customer to enter M-Pesa PIN on phone...")
       } catch (error) {
         if (!cancelled) {
-          logger.warn("[PAYMENT] Failed to poll M-Pesa status:", { error })
-          setPaymentStatus("Checking M-Pesa payment status...")
+          logger.warn("[PAYMENT] Failed to poll payment status:", { error })
+          setPaymentStatus("Checking payment status...")
         }
       } finally {
         isPolling = false
@@ -247,7 +216,6 @@ export function PaymentPanel({
     return () => {
       cancelled = true
       window.clearInterval(intervalId)
-      eventSource?.close()
     }
   }, [
     checkoutRequestId,

@@ -27,6 +27,10 @@ import { piCache, forecastKey, revenueForecastKey, seasonalityKey } from '../cac
 import { PICache } from '../cache'
 import { resilientCall } from '../reliability'
 
+// Helper: Product Intelligence tables are not in auto-generated Supabase types.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const piDb = supabaseAdmin as any
+
 // ─── Row-to-Type Mappers ───────────────────────────────────────────
 
 interface ProductForecastRow {
@@ -59,7 +63,7 @@ function rowToForecastResult(row: ProductForecastRow): ForecastResult {
     method: row.method as ForecastMethod,
     accuracy: row.accuracy,
     seasonality: row.seasonality
-      ? { pattern: row.seasonality.pattern as ForecastResult['seasonality']['pattern'], factors: row.seasonality.factors }
+      ? { pattern: row.seasonality.pattern as unknown as NonNullable<ForecastResult['seasonality']>['pattern'], factors: row.seasonality.factors }
       : null,
     predictionHorizon: row.prediction_horizon,
     dataPoints: row.data_points,
@@ -99,7 +103,7 @@ function rowToRevenueForecast(row: RevenueForecastRow): RevenueForecast {
     method: row.method as ForecastMethod,
     accuracy: row.accuracy,
     seasonality: row.seasonality
-      ? { pattern: row.seasonality.pattern as RevenueForecast['seasonality']['pattern'], factors: row.seasonality.factors }
+      ? { pattern: row.seasonality.pattern as unknown as NonNullable<RevenueForecast['seasonality']>['pattern'], factors: row.seasonality.factors }
       : null,
     projectedTotal: row.projected_total,
     currentPeriodTotal: row.current_period_total,
@@ -158,7 +162,7 @@ export class ForecastRepository {
 
   async insertForecast(forecast: ForecastResult): Promise<void> {
     await resilientCall(async () => {
-      const { error } = await supabaseAdmin.from('product_forecasts').upsert(
+      const { error } = await piDb.from('product_forecasts').upsert(
         {
           product_id: forecast.productId,
           branch_id: forecast.branchId,
@@ -193,7 +197,7 @@ export class ForecastRepository {
     if (cached) return cached
 
     const data = await resilientCall(async () => {
-      let query = supabaseAdmin
+      let query = piDb
         .from('product_forecasts')
         .select(PRODUCT_FORECAST_COLUMNS)
         .eq('product_id', productId)
@@ -216,8 +220,8 @@ export class ForecastRepository {
   }
 
   async queryForecasts(query: ForecastQuery): Promise<ForecastResult[]> {
-    return resilientCall(async () => {
-      let dbQuery = supabaseAdmin
+    return (await resilientCall(async () => {
+      let dbQuery = piDb
         .from('product_forecasts')
         .select(PRODUCT_FORECAST_COLUMNS)
         .order('computed_at', { ascending: false })
@@ -231,13 +235,13 @@ export class ForecastRepository {
       const { data, error } = await dbQuery
       if (error) throw new Error(`Failed to query forecasts: ${error.message}`)
       return (data ?? []).map((row: unknown) => rowToForecastResult(row as ProductForecastRow))
-    }, { label: 'forecast.queryForecasts', timeoutMs: 10000 }) ?? []
+    }, { label: 'forecast.queryForecasts', timeoutMs: 10000 })) ?? []
   }
 
   async getStaleForecasts(hoursBeforeExpiry: number): Promise<ForecastResult[]> {
-    return resilientCall(async () => {
+    return (await resilientCall(async () => {
       const threshold = new Date(Date.now() + hoursBeforeExpiry * 3_600_000).toISOString()
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await piDb
         .from('product_forecasts')
         .select(PRODUCT_FORECAST_COLUMNS)
         .lt('expires_at', threshold)
@@ -246,12 +250,12 @@ export class ForecastRepository {
 
       if (error) throw new Error(`Failed to get stale forecasts: ${error.message}`)
       return (data ?? []).map((row: unknown) => rowToForecastResult(row as ProductForecastRow))
-    }, { label: 'forecast.getStaleForecasts', timeoutMs: 10000 }) ?? []
+    }, { label: 'forecast.getStaleForecasts', timeoutMs: 10000 })) ?? []
   }
 
   async deleteProductForecasts(productId: string, branchId?: string): Promise<void> {
     await resilientCall(async () => {
-      let query = supabaseAdmin
+      let query = piDb
         .from('product_forecasts')
         .delete()
         .eq('product_id', productId)
@@ -267,7 +271,7 @@ export class ForecastRepository {
 
   async pruneExpiredForecasts(): Promise<number> {
     return resilientCall(async () => {
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await piDb
         .from('product_forecasts')
         .delete()
         .lt('expires_at', new Date().toISOString())
@@ -287,7 +291,7 @@ export class ForecastRepository {
 
   async insertRevenueForecast(forecast: RevenueForecast): Promise<void> {
     await resilientCall(async () => {
-      const { error } = await supabaseAdmin.from('revenue_forecasts').upsert(
+      const { error } = await piDb.from('revenue_forecasts').upsert(
         {
           branch_id: forecast.branchId,
           period: forecast.period,
@@ -321,7 +325,7 @@ export class ForecastRepository {
     if (cached) return cached
 
     const data = await resilientCall(async () => {
-      let query = supabaseAdmin
+      let query = piDb
         .from('revenue_forecasts')
         .select(REVENUE_FORECAST_COLUMNS)
         .order('computed_at', { ascending: false })
@@ -342,7 +346,7 @@ export class ForecastRepository {
 
   async deleteStaleRevenueForecasts(): Promise<number> {
     return resilientCall(async () => {
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await piDb
         .from('revenue_forecasts')
         .delete()
         .lt('expires_at', new Date().toISOString())
@@ -367,7 +371,7 @@ export class ForecastRepository {
     confidence: number,
   ): Promise<void> {
     await resilientCall(async () => {
-      const { error } = await supabaseAdmin.from('seasonality_patterns').upsert(
+      const { error } = await piDb.from('seasonality_patterns').upsert(
         { product_id: productId, branch_id: branchId, pattern, factors, strength, period, confidence },
         { onConflict: 'product_id, branch_id' },
       )
@@ -396,7 +400,7 @@ export class ForecastRepository {
     if (cached) return cached
 
     const data = await resilientCall(async () => {
-      let query = supabaseAdmin
+      let query = piDb
         .from('seasonality_patterns')
         .select(SEASONALITY_COLUMNS)
         .eq('product_id', productId)
@@ -428,8 +432,8 @@ export class ForecastRepository {
     strength: number
     period: number
   }>> {
-    return resilientCall(async () => {
-      let query = supabaseAdmin
+    return (await resilientCall(async () => {
+      let query = piDb
         .from('seasonality_patterns')
         .select('product_id, pattern, strength, period')
         .order('strength', { ascending: false })
@@ -443,14 +447,14 @@ export class ForecastRepository {
         const r = row as { product_id: string; pattern: string; strength: number; period: number }
         return { productId: r.product_id, pattern: r.pattern, strength: r.strength, period: r.period }
       })
-    }, { label: 'forecast.querySeasonality', timeoutMs: 10000 }) ?? []
+    }, { label: 'forecast.querySeasonality', timeoutMs: 10000 })) ?? []
   }
 
   // ── Forecast Accuracy Log ──────────────────────────────────────
 
   async insertAccuracyLog(log: Omit<ForecastAccuracyLog, 'id' | 'evaluatedAt'>): Promise<void> {
     await resilientCall(async () => {
-      const { error } = await supabaseAdmin.from('forecast_accuracy_log').insert({
+      const { error } = await piDb.from('forecast_accuracy_log').insert({
         product_id: log.productId,
         branch_id: log.branchId,
         method: log.method,
@@ -466,8 +470,8 @@ export class ForecastRepository {
   }
 
   async queryAccuracyLogs(productId?: string, method?: ForecastMethod, limit?: number): Promise<ForecastAccuracyLog[]> {
-    return resilientCall(async () => {
-      let query = supabaseAdmin
+    return (await resilientCall(async () => {
+      let query = piDb
         .from('forecast_accuracy_log')
         .select(ACCURACY_LOG_COLUMNS)
         .order('evaluated_at', { ascending: false })
@@ -479,12 +483,12 @@ export class ForecastRepository {
       const { data, error } = await query
       if (error) throw new Error(`Failed to query accuracy logs: ${error.message}`)
       return (data ?? []).map((row: unknown) => rowToAccuracyLog(row as AccuracyLogRow))
-    }, { label: 'forecast.queryAccuracyLogs', timeoutMs: 10000 }) ?? []
+    }, { label: 'forecast.queryAccuracyLogs', timeoutMs: 10000 })) ?? []
   }
 
   async getMethodAccuracy(productId?: string): Promise<Array<{ method: string; avgMape: number; count: number }>> {
-    return resilientCall(async () => {
-      let query = supabaseAdmin
+    return (await resilientCall(async () => {
+      let query = piDb
         .from('forecast_accuracy_log')
         .select('method, mape')
         .order('evaluated_at', { ascending: false })
@@ -510,7 +514,7 @@ export class ForecastRepository {
           count: stats.count,
         }))
         .sort((a, b) => a.avgMape - b.avgMape)
-    }, { label: 'forecast.getMethodAccuracy', timeoutMs: 10000 }) ?? []
+    }, { label: 'forecast.getMethodAccuracy', timeoutMs: 10000 })) ?? []
   }
 }
 

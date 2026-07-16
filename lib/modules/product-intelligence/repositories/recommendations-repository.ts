@@ -19,6 +19,10 @@ import { piCache, affinityKey, reorderKey } from '../cache'
 import { PICache } from '../cache'
 import { resilientCall } from '../reliability'
 
+// Helper: Product Intelligence tables are not in auto-generated Supabase types.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const piDb = supabaseAdmin as any
+
 // ─── Row Mappers ──────────────────────────────────────────────────
 
 interface AffinityRow {
@@ -94,7 +98,7 @@ export class RecommendationsRepository {
 
   async upsertAffinity(affinity: Omit<ProductAffinity, 'computedAt'> & { branchId?: string | null }): Promise<void> {
     await resilientCall(async () => {
-      const { error } = await supabaseAdmin
+      const { error } = await piDb
         .from('product_affinities')
         .upsert({
           product_a: affinity.productA,
@@ -148,7 +152,7 @@ export class RecommendationsRepository {
     if (cached) return cached
 
     const data = await resilientCall(async () => {
-      let query = supabaseAdmin
+      let query = piDb
         .from('product_affinities')
         .select(AFFINITY_COLUMNS)
         .eq('product_a', productId)
@@ -189,8 +193,8 @@ export class RecommendationsRepository {
       return merged.slice(0, limit)
     }
 
-    return resilientCall(async () => {
-      let query = supabaseAdmin
+    return (await resilientCall(async () => {
+      let query = piDb
         .from('product_affinities')
         .select(AFFINITY_COLUMNS)
         .in('product_a', productIds)
@@ -202,12 +206,12 @@ export class RecommendationsRepository {
       const { data, error } = await query
       if (error) throw error
       return (data as unknown as AffinityRow[] ?? []).map(mapAffinityRow)
-    }, { label: 'recommendations.getAffinitiesForProducts', timeoutMs: 10000 }) ?? []
+    }, { label: 'recommendations.getAffinitiesForProducts', timeoutMs: 10000 })) ?? []
   }
 
   async deleteStaleAffinities(beforeDate: string): Promise<number> {
     const count = await resilientCall(async () => {
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await piDb
         .from('product_affinities')
         .delete()
         .lt('computed_at', beforeDate)
@@ -223,7 +227,7 @@ export class RecommendationsRepository {
 
   async clearAffinities(branchId?: string): Promise<void> {
     await resilientCall(async () => {
-      let query = supabaseAdmin.from('product_affinities').delete()
+      let query = piDb.from('product_affinities').delete()
       if (branchId) query = query.eq('branch_id', branchId)
 
       const { error } = await query
@@ -241,7 +245,7 @@ export class RecommendationsRepository {
     suggestion: Omit<ReorderSuggestion, 'productName'> & { branchId?: string | null },
   ): Promise<void> {
     await resilientCall(async () => {
-      const { error } = await supabaseAdmin
+      const { error } = await piDb
         .from('reorder_suggestions')
         .upsert({
           product_id: suggestion.productId,
@@ -305,8 +309,8 @@ export class RecommendationsRepository {
   }
 
   async getReorderSuggestions(query: RecommendationQuery): Promise<ReorderSuggestion[]> {
-    return resilientCall(async () => {
-      let dbQuery = supabaseAdmin
+    return (await resilientCall(async () => {
+      let dbQuery = piDb
         .from('reorder_suggestions')
         .select(REORDER_COLUMNS)
         .order('days_until_stockout', { ascending: true, nullsLast: true })
@@ -319,12 +323,12 @@ export class RecommendationsRepository {
       const { data, error } = await dbQuery
       if (error) throw error
       return (data as unknown as ReorderRow[] ?? []).map(mapReorderRow)
-    }, { label: 'recommendations.getReorderSuggestions', timeoutMs: 10000 }) ?? []
+    }, { label: 'recommendations.getReorderSuggestions', timeoutMs: 10000 })) ?? []
   }
 
   async deleteResolvedReorderSuggestions(): Promise<number> {
     const count = await resilientCall(async () => {
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await piDb
         .from('reorder_suggestions')
         .delete()
         .eq('urgency', 'sufficient')
@@ -340,7 +344,7 @@ export class RecommendationsRepository {
 
   async deleteReorderSuggestion(productId: string, branchId?: string): Promise<void> {
     await resilientCall(async () => {
-      let query = supabaseAdmin.from('reorder_suggestions').delete().eq('product_id', productId)
+      let query = piDb.from('reorder_suggestions').delete().eq('product_id', productId)
       if (branchId) query = query.eq('branch_id', branchId)
 
       const { error } = await query

@@ -1429,14 +1429,14 @@ export default function POSPage() {
                     createResult.receiptNumber || createResult.sale.receipt_number || receiptNumber
                   )
 
-                  const stkResponse = await fetch('/api/mpesa/stk-push', {
+                  const stkResponse = await fetch('/api/payments/tuma/stk-push', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                       saleId: createResult.sale.id,
                       phoneNumber: options?.mpesaPhone,
                       amount: total,
-                      accountReference: createResult.receiptNumber || createResult.sale.receipt_number || receiptNumber,
+                      description: createResult.receiptNumber || createResult.sale.receipt_number || receiptNumber,
                     }),
                   })
 

@@ -24,6 +24,8 @@ export interface RetryOptions {
   baseDelayMs?: number
   /** Maximum delay in ms (default: 5000) */
   maxDelayMs?: number
+  /** Timeout in ms (default: 10000, passed to withTimeout) */
+  timeoutMs?: number
   /** Label for logging */
   label?: string
 }

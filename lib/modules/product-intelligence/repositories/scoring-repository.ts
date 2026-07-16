@@ -32,6 +32,10 @@ import { PICache } from '../cache'
 import { resilientCall } from '../reliability'
 import { timed } from '../instrumentation'
 
+// Helper: Product Intelligence tables are not in auto-generated Supabase types.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const piDb = supabaseAdmin as any
+
 // ─── Row Types (DB → PI type mappers) ──────────────────────────
 
 interface ProductScoreRow {
@@ -166,7 +170,7 @@ export class ScoringRepository {
   async upsertProductScore(score: ProductScore): Promise<void> {
     await resilientCall(
       async () => {
-        const { error } = await supabaseAdmin
+        const { error } = await piDb
           .from('product_intelligence_scores')
           .upsert(
             {
@@ -203,7 +207,7 @@ export class ScoringRepository {
 
     const data = await resilientCall(
       async () => {
-        const { data: row, error } = await supabaseAdmin
+        const { data: row, error } = await piDb
           .from('product_intelligence_scores')
           .select(PRODUCT_SCORE_COLUMNS)
           .eq('product_id', productId)
@@ -222,9 +226,9 @@ export class ScoringRepository {
   }
 
   async queryProductScores(query: ScoreQuery): Promise<ProductScore[]> {
-    return resilientCall(
+    return (await resilientCall(
       async () => {
-        let q = supabaseAdmin
+        let q = piDb
           .from('product_intelligence_scores')
           .select(PRODUCT_SCORE_COLUMNS)
           .order('composite_score', { ascending: false })
@@ -240,7 +244,7 @@ export class ScoringRepository {
         return ((data as unknown) as ProductScoreRow[] || []).map(rowToProductScore)
       },
       { label: 'scoring.queryProductScores', timeoutMs: 10000 },
-    ) ?? []
+    )) ?? []
   }
 
   async upsertProductScoresBatch(scores: ProductScore[]): Promise<void> {
@@ -270,9 +274,9 @@ export class ScoringRepository {
   }
 
   async countProductScores(category?: string): Promise<number> {
-    return resilientCall(
+    return (await resilientCall(
       async () => {
-        let q = supabaseAdmin
+        let q = piDb
           .from('product_intelligence_scores')
           .select('id', { count: 'exact', head: true })
 
@@ -283,7 +287,7 @@ export class ScoringRepository {
         return count ?? 0
       },
       { label: 'scoring.countProductScores', timeoutMs: 5000 },
-    ) ?? 0
+    )) ?? 0
   }
 
   // ─── Customer Scores ──────────────────────────────────────────
@@ -291,7 +295,7 @@ export class ScoringRepository {
   async upsertCustomerScore(score: CustomerScore): Promise<void> {
     await resilientCall(
       async () => {
-        const { error } = await supabaseAdmin
+        const { error } = await piDb
           .from('customer_intelligence_scores')
           .upsert(
             {
@@ -327,7 +331,7 @@ export class ScoringRepository {
 
     const data = await resilientCall(
       async () => {
-        const { data: row, error } = await supabaseAdmin
+        const { data: row, error } = await piDb
           .from('customer_intelligence_scores')
           .select(CUSTOMER_SCORE_COLUMNS)
           .eq('customer_id', customerId)
@@ -345,9 +349,9 @@ export class ScoringRepository {
   }
 
   async queryCustomerScores(query: ScoreQuery): Promise<CustomerScore[]> {
-    return resilientCall(
+    return (await resilientCall(
       async () => {
-        let q = supabaseAdmin
+        let q = piDb
           .from('customer_intelligence_scores')
           .select(CUSTOMER_SCORE_COLUMNS)
           .order('composite_score', { ascending: false })
@@ -363,7 +367,7 @@ export class ScoringRepository {
         return ((data as unknown) as CustomerScoreRow[] || []).map(rowToCustomerScore)
       },
       { label: 'scoring.queryCustomerScores', timeoutMs: 10000 },
-    ) ?? []
+    )) ?? []
   }
 
   async upsertCustomerScoresBatch(scores: CustomerScore[]): Promise<void> {
@@ -397,7 +401,7 @@ export class ScoringRepository {
   async upsertSupplierScore(score: SupplierScore): Promise<void> {
     await resilientCall(
       async () => {
-        const { error } = await supabaseAdmin
+        const { error } = await piDb
           .from('supplier_intelligence_scores')
           .upsert(
             {
@@ -430,7 +434,7 @@ export class ScoringRepository {
 
     const data = await resilientCall(
       async () => {
-        const { data: row, error } = await supabaseAdmin
+        const { data: row, error } = await piDb
           .from('supplier_intelligence_scores')
           .select(SUPPLIER_SCORE_COLUMNS)
           .eq('supplier_id', supplierId)
@@ -448,9 +452,9 @@ export class ScoringRepository {
   }
 
   async querySupplierScores(query: ScoreQuery): Promise<SupplierScore[]> {
-    return resilientCall(
+    return (await resilientCall(
       async () => {
-        let q = supabaseAdmin
+        let q = piDb
           .from('supplier_intelligence_scores')
           .select(SUPPLIER_SCORE_COLUMNS)
           .order('composite_score', { ascending: false })
@@ -465,7 +469,7 @@ export class ScoringRepository {
         return ((data as unknown) as SupplierScoreRow[] || []).map(rowToSupplierScore)
       },
       { label: 'scoring.querySupplierScores', timeoutMs: 10000 },
-    ) ?? []
+    )) ?? []
   }
 
   async upsertSupplierScoresBatch(scores: SupplierScore[]): Promise<void> {
@@ -496,7 +500,7 @@ export class ScoringRepository {
   async upsertBusinessHealthScore(score: BusinessHealthScore, branchId?: string): Promise<void> {
     await resilientCall(
       async () => {
-        const { error } = await supabaseAdmin
+        const { error } = await piDb
           .from('business_health_scores')
           .insert({
             branch_id: branchId ?? null,
@@ -528,7 +532,7 @@ export class ScoringRepository {
 
     const data = await resilientCall(
       async () => {
-        let q = supabaseAdmin
+        let q = piDb
           .from('business_health_scores')
           .select(BUSINESS_HEALTH_COLUMNS)
           .order('computed_at', { ascending: false })

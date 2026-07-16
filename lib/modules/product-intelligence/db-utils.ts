@@ -209,7 +209,8 @@ export async function chunkedUpsert<T>(
   for (let i = 0; i < rows.length; i += chunkSize) {
     const chunk = rows.slice(i, i + chunkSize)
     await timed(`db.batch.${label}`, async () => {
-      const { error } = await supabaseAdmin
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabaseAdmin as any)
         .from(tableName)
         .upsert(chunk, options?.onConflict ? { onConflict: options.onConflict } : undefined)
 
@@ -239,7 +240,8 @@ export async function chunkedDelete(
 
   for (let i = 0; i < ids.length; i += chunkSize) {
     const chunk = ids.slice(i, i + chunkSize)
-    const { data, error } = await supabaseAdmin
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabaseAdmin as any)
       .from(tableName)
       .delete()
       .in('id', chunk)
@@ -264,7 +266,8 @@ export async function chunkedDelete(
 export async function batchFetchProductScores(productIds: string[]): Promise<Map<string, unknown>> {
   if (productIds.length === 0) return new Map()
 
-  const { data, error } = await supabaseAdmin
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabaseAdmin as any)
     .from('product_intelligence_scores')
     .select(PRODUCT_SCORE_COLUMNS)
     .in('product_id', productIds)
@@ -287,7 +290,8 @@ export async function batchFetchProductScores(productIds: string[]): Promise<Map
 export async function batchFetchForecasts(productIds: string[]): Promise<Map<string, unknown[]>> {
   if (productIds.length === 0) return new Map()
 
-  const { data, error } = await supabaseAdmin
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabaseAdmin as any)
     .from('product_forecasts')
     .select(PRODUCT_FORECAST_COLUMNS)
     .in('product_id', productIds)

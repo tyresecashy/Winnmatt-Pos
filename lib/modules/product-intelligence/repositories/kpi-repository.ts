@@ -15,6 +15,10 @@ import { piCache, kpiKey } from '../cache'
 import { PICache } from '../cache'
 import { resilientCall } from '../reliability'
 
+// PI tables not in auto-generated Supabase types
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const piDb = supabaseAdmin as any
+
 // ─── Column Selectors ────────────────────────────────────────────
 
 const KPI_SNAPSHOT_COLUMNS = `
@@ -106,7 +110,7 @@ export class KPIRepository {
     metadata?: Record<string, unknown>
   }): Promise<KPISnapshot> {
     return resilientCall(async () => {
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await piDb
         .from('kpi_snapshots')
         .insert({
           kpi_id: params.kpiId,
@@ -138,7 +142,7 @@ export class KPIRepository {
     if (cached) return cached
 
     const data = await resilientCall(async () => {
-      const { data: row, error } = await supabaseAdmin
+      const { data: row, error } = await piDb
         .from('kpi_snapshots')
         .select(KPI_SNAPSHOT_COLUMNS)
         .eq('kpi_id', kpiId)
@@ -161,24 +165,24 @@ export class KPIRepository {
    * Query snapshots with filters.
    */
   async querySnapshots(query: KPIQuery): Promise<KPISnapshot[]> {
-    return resilientCall(async () => {
-      let dbQuery = supabaseAdmin
+    return (await resilientCall(async () => {
+      let dbQuery = piDb
         .from('kpi_snapshots')
         .select(KPI_SNAPSHOT_COLUMNS)
         .order('computed_at', { ascending: false })
 
-      if (query.kpiId) dbQuery = dbQuery.eq('kpi_id', query.kpiId)
+      if (query.kpiIds && query.kpiIds.length > 0) dbQuery = dbQuery.in('kpi_id', query.kpiIds)
       if (query.branchId) dbQuery = dbQuery.eq('branch_id', query.branchId)
       if (query.status) dbQuery = dbQuery.eq('status', query.status)
-      if (query.computedAfter) dbQuery = dbQuery.gte('computed_at', query.computedAfter)
-      if (query.computedBefore) dbQuery = dbQuery.lte('computed_at', query.computedBefore)
+      if (query.startDate) dbQuery = dbQuery.gte('computed_at', query.startDate)
+      if (query.endDate) dbQuery = dbQuery.lte('computed_at', query.endDate)
       if (query.limit) dbQuery = dbQuery.limit(query.limit)
       if (query.offset) dbQuery = dbQuery.range(query.offset, query.offset + (query.limit || 50) - 1)
 
       const { data, error } = await dbQuery
       if (error) throw error
       return (data ?? []).map((row: unknown) => rowToSnapshot(row as SnapshotRow))
-    }, { label: 'kpi.querySnapshots', timeoutMs: 10000 }) ?? []
+    }, { label: 'kpi.querySnapshots', timeoutMs: 10000 })) ?? []
   }
 
   /**
@@ -186,7 +190,7 @@ export class KPIRepository {
    */
   async upsertTarget(target: KPITarget): Promise<void> {
     await resilientCall(async () => {
-      const { error } = await supabaseAdmin
+      const { error } = await piDb
         .from('kpi_targets')
         .upsert({
           kpi_id: target.kpiId,
@@ -215,7 +219,7 @@ export class KPIRepository {
     if (cached) return cached
 
     const data = await resilientCall(async () => {
-      const { data: row, error } = await supabaseAdmin
+      const { data: row, error } = await piDb
         .from('kpi_targets')
         .select(KPI_TARGET_COLUMNS)
         .eq('kpi_id', kpiId)
@@ -236,8 +240,8 @@ export class KPIRepository {
    * Get all targets.
    */
   async getAllTargets(branchId: string | null): Promise<KPITarget[]> {
-    return resilientCall(async () => {
-      let query = supabaseAdmin
+    return (await resilientCall(async () => {
+      let query = piDb
         .from('kpi_targets')
         .select(KPI_TARGET_COLUMNS)
 
@@ -248,7 +252,7 @@ export class KPIRepository {
       const { data, error } = await query
       if (error) throw error
       return (data ?? []).map((row: unknown) => rowToTarget(row as TargetRow))
-    }, { label: 'kpi.getAllTargets', timeoutMs: 10000 }) ?? []
+    }, { label: 'kpi.getAllTargets', timeoutMs: 10000 })) ?? []
   }
 
   /**
@@ -256,7 +260,7 @@ export class KPIRepository {
    */
   async deleteTarget(kpiId: KPIId, branchId: string | null): Promise<void> {
     await resilientCall(async () => {
-      const { error } = await supabaseAdmin
+      const { error } = await piDb
         .from('kpi_targets')
         .delete()
         .eq('kpi_id', kpiId)
@@ -274,7 +278,7 @@ export class KPIRepository {
   async pruneOldSnapshots(retentionDays: number): Promise<number> {
     const cutoff = new Date(Date.now() - retentionDays * 86400000).toISOString()
     const count = await resilientCall(async () => {
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await piDb
         .from('kpi_snapshots')
         .delete()
         .lt('computed_at', cutoff)

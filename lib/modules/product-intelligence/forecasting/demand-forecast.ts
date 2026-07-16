@@ -164,7 +164,7 @@ export class DemandForecaster {
     await forecastRepository.insertForecast(result)
 
     // Step 9: Emit event
-    publish(createForecastUpdatedEvent(productId, branchId, selectedMethod, result.accuracy.mape))
+    publish(createForecastUpdatedEvent(productId, branchId ?? null, selectedMethod, result.accuracy?.mape ?? null))
 
     return result
   }

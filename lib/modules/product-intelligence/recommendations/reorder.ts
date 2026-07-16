@@ -21,6 +21,10 @@ import type { ReorderSuggestion, RecommendationQuery } from '../types'
 import { createRecommendationGeneratedEvent } from '../events'
 import { publish } from '@/lib/realtime/event-bus'
 
+// PI tables not in auto-generated Supabase types
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const piDb = supabaseAdmin as any
+
 // ─── Constants ──────────────────────────────────────────────────
 
 const DEFAULT_SETUP_COST = 50        // Fixed cost per order (KES) — configurable
@@ -316,7 +320,7 @@ export class ReorderEngine {
    * Looks up the product_supplier_lead_times table.
    */
   private async getLeadTime(productId: string): Promise<number | null> {
-    const { data } = await supabaseAdmin
+    const { data } = await piDb
       .from('product_supplier_lead_times')
       .select('lead_time_days')
       .eq('product_id', productId)

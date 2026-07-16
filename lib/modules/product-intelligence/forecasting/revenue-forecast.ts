@@ -158,7 +158,7 @@ export class RevenueForecaster {
     await forecastRepository.insertRevenueForecast(result)
 
     // Step 9: Emit event
-    publish(createForecastUpdatedEvent('__revenue__', branchId, selectedMethod, result.accuracy.mape))
+    publish(createForecastUpdatedEvent('__revenue__', branchId ?? null, selectedMethod, result.accuracy?.mape ?? null))
 
     return result
   }

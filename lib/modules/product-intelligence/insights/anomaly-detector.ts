@@ -21,6 +21,10 @@ import { kpiTracker } from '../kpi'
 import { createAnomalyDetectedEvent } from '../events'
 import type { Anomaly, KPIId } from '../types'
 
+// PI tables not in auto-generated Supabase types
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const piDb = supabaseAdmin as any
+
 // ─── Constants ──────────────────────────────────────────────────
 
 /** Z-score threshold for flagging an anomaly */
@@ -225,7 +229,7 @@ export class AnomalyDetector {
       // Query recent stock movements for unusually large changes
       const thirtyDaysAgo = new Date(Date.now() - RECENT_DAYS * 86_400_000).toISOString()
 
-      const { data: movements } = await supabaseAdmin
+      const { data: movements } = await piDb
         .from('stock_movements')
         .select('product_id, product_name, quantity_change, created_at')
         .gte('created_at', thirtyDaysAgo)
@@ -325,7 +329,7 @@ export class AnomalyDetector {
     branchId?: string,
     limit = 30,
   ): Promise<Array<{ value: number; computedAt: string }>> {
-    let query = supabaseAdmin
+    let query = piDb
       .from('kpi_snapshots')
       .select('value, computed_at')
       .eq('kpi_id', kpiId)

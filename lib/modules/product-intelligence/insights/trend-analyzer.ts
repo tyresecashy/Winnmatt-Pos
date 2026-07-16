@@ -21,6 +21,10 @@ import { kpiTracker } from '../kpi'
 import { linearRegression } from '../forecasting/math'
 import type { TrendAnalysis, KPIId } from '../types'
 
+// PI tables not in auto-generated Supabase types
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const piDb = supabaseAdmin as any
+
 // ─── Constants ──────────────────────────────────────────────────
 
 /** Minimum data points for trend analysis */
@@ -337,7 +341,7 @@ export class TrendAnalyzer {
    * Fetch KPI snapshot values over time.
    */
   private async fetchKPITimeSeries(kpiId: KPIId, since: string): Promise<number[]> {
-    const { data } = await supabaseAdmin
+    const { data } = await piDb
       .from('kpi_snapshots')
       .select('value')
       .eq('kpi_id', kpiId)
@@ -356,7 +360,7 @@ export class TrendAnalyzer {
     branchId?: string,
     since?: string,
   ): Promise<number[]> {
-    let query = supabaseAdmin
+    let query = piDb
       .from('revenue_forecasts')
       .select('projected_total, computed_at')
       .order('computed_at', { ascending: true })
