@@ -62,6 +62,7 @@ async function tumaFetch<T>(
   const lastError: HttpError = { status: 0, message: 'Unknown error' }
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const fetchStart = Date.now()
     try {
       const response = await fetch(url, {
         ...options,
@@ -70,8 +71,10 @@ async function tumaFetch<T>(
           Accept: 'application/json',
           ...options.headers,
         },
+        signal: AbortSignal.timeout(15_000),
       })
 
+      const durationMs = Date.now() - fetchStart
       const body = await response.json().catch(() => null)
 
       logger.info('[TumaFetch] Response received', {
@@ -79,11 +82,15 @@ async function tumaFetch<T>(
         endpoint,
         httpStatus: response.status,
         httpOk: response.ok,
+        durationMs,
         hasBody: body !== null && typeof body === 'object',
         attempt,
       })
 
       if (response.ok) {
+        logger.info('[TumaFetch] Request succeeded', {
+          correlationId, endpoint, durationMs, attempt,
+        })
         return body as T
       }
 
@@ -93,31 +100,44 @@ async function tumaFetch<T>(
 
       // 4xx errors are not retryable (except 429 rate limit)
       if (response.status >= 400 && response.status < 500 && response.status !== 429) {
+        logger.warn('[TumaFetch] Non-retryable HTTP error', {
+          correlationId, endpoint, httpStatus: response.status, message: lastError.message, durationMs,
+        })
         throw lastError
       }
     } catch (error) {
-      if (error && typeof error === 'object' && 'status' in error && 'message' in error) {
-        throw error // Already formatted as HttpError
-      }
+      const durationMs = Date.now() - fetchStart
 
-      lastError.message = error instanceof Error ? error.message : 'Network request failed'
+      // Explicit timeout detection
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        lastError.status = 0
+        lastError.message = `TIMEOUT after ${durationMs}ms`
+        logger.warn('[TumaFetch] TIMEOUT', {
+          correlationId, endpoint, durationMs, attempt,
+        })
+      } else if (error && typeof error === 'object' && 'status' in error && 'message' in error) {
+        // Already formatted as HttpError — re-throw immediately
+        throw error
+      } else {
+        lastError.message = error instanceof Error ? error.message : 'Network request failed'
+        logger.warn('[TumaFetch] Request error', {
+          correlationId, endpoint, message: lastError.message, durationMs, attempt,
+        })
+      }
 
       // Last attempt — throw
       if (attempt >= retriesLeft) {
         throw lastError
       }
 
-      // Exponential backoff with jitter
+      // Exponential backoff with jitter (skip for non-retryable)
       const delay = Math.min(
         BASE_RETRY_MS * Math.pow(2, attempt) + Math.random() * 500,
         MAX_RETRY_MS
       )
 
-      logger.warn('[Tuma] Retrying request', {
-        endpoint,
-        attempt: attempt + 1,
-        delayMs: delay,
-        error: lastError.message,
+      logger.warn('[TumaFetch] Retrying', {
+        correlationId, endpoint, attempt: attempt + 1, delayMs: delay, error: lastError.message,
       })
 
       await new Promise((resolve) => setTimeout(resolve, delay))

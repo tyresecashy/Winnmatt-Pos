@@ -170,7 +170,11 @@ export async function initiatePayment(
       customerMessage: stkResponse.customer_message || undefined,
     }
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Failed to initiate Tuma payment'
+    const errorMessage = error instanceof Error
+      ? error.message
+      : (error && typeof error === 'object' && 'message' in error
+        ? String((error as { message: string }).message)
+        : 'Failed to initiate Tuma payment')
     logger.error('[Tuma initiatePayment] Payment initiation failed', {
       correlationId, saleId, error: errorMessage,
     })
