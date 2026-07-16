@@ -218,14 +218,24 @@ export async function finalizePaymentSale(saleId: string) {
  */
 export async function failPaymentSale(saleId: string, errorMessage: string = 'Payment failed') {
   try {
-    const { error } = await supabaseAdmin
+    // Update sale payment_status to 'failed'
+    const { error: saleError } = await supabaseAdmin
       .from('sales')
       .update({ payment_status: 'failed' })
       .eq('id', saleId)
 
-    if (error) throw error
+    if (saleError) throw saleError
 
-    logger.info('[Tuma] Sale marked as failed', { saleId })
+    // Also update payment_transactions.status to 'failed' for consistency
+    const { error: txError } = await txDb
+      .from('payment_transactions')
+      .update({ status: 'failed', failure_reason: errorMessage })
+      .eq('sale_id', saleId)
+      .in('status', ['pending', 'processing'])
+
+    if (txError) throw txError
+
+    logger.info('[Tuma] Sale and transaction marked as failed', { saleId, errorMessage })
 
     return { success: true }
   } catch (error) {

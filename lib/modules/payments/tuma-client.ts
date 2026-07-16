@@ -84,18 +84,6 @@ async function tumaFetch<T>(
       })
 
       if (response.ok) {
-        // Log raw response structure for debugging
-        if (body !== null && typeof body === 'object') {
-          logger.info('[TumaFetch] Raw response body structure', {
-            correlationId,
-            endpoint,
-            topLevelKeys: Object.keys(body as object),
-            hasData: 'data' in body,
-            dataType: body.data !== undefined ? typeof body.data : 'undefined',
-            dataIsObject: body.data !== null && typeof body.data === 'object',
-            dataKeys: body.data !== null && typeof body.data === 'object' ? Object.keys(body.data as object) : [],
-          })
-        }
         return body as T
       }
 
@@ -279,13 +267,11 @@ export async function initiateSTKPush(
     const checkoutRequestId = apiResponse?.data?.checkout_request_id
     const customerMessage = apiResponse?.data?.customer_message
 
-    logger.info('[Tuma initiateSTKPush] Extracted response fields', {
+    logger.info('[Tuma initiateSTKPush] STK Push response extracted', {
       correlationId,
       merchantRequestId: !!merchantRequestId,
       checkoutRequestId: !!checkoutRequestId,
       customerMessage: !!customerMessage,
-      dataExists: !!apiResponse?.data,
-      topLevelKeys: Object.keys(apiResponse || {}),
     })
 
     // Build the service-layer contract from extracted data fields

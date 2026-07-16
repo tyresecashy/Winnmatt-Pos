@@ -26,7 +26,7 @@ import { z } from 'zod'
 const stkPushSchema = z.object({
   saleId: z.string().uuid(),
   phoneNumber: z.string().regex(/^(254|0|\+254)\d{9}$/, 'Phone must be a valid Safaricom number (e.g. 0712345678)'),
-  amount: z.number().int().positive().max(150000),
+  amount: z.number().positive().max(150000),
   description: z.string().max(20).optional(),
 })
 

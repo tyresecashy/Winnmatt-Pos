@@ -51,7 +51,7 @@ export async function getTodayDashboardStats(branchId: string) {
       .from('sales')
       .select('id, total_amount, customer_id')
       .eq('branch_id', authorized.branchId)
-      .neq('payment_status', 'failed')
+      .eq('payment_status', 'completed')
       .gte('created_at', start.toISOString())
       .lt('created_at', end.toISOString())
 
@@ -102,7 +102,7 @@ export async function getWeeklySalesTrend(branchId: string) {
       .from('sales')
       .select('created_at, total_amount')
       .eq('branch_id', authorized.branchId)
-      .neq('payment_status', 'failed')
+      .eq('payment_status', 'completed')
       .gte('created_at', sevenDaysAgoStart.toISOString())
       .lt('created_at', tomorrowStart.toISOString())
       .order('created_at', { ascending: true })
@@ -189,7 +189,7 @@ export async function getBranchPerformanceToday(startDate?: Date, endDate?: Date
       .from('sales')
       .select('branch_id, total_amount')
       .in('branch_id', branchIds)
-      .neq('payment_status', 'failed')
+      .eq('payment_status', 'completed')
       .gte('created_at', start)
       .lt('created_at', end)
 
@@ -249,7 +249,7 @@ export async function getTopProductsToday(branchId: string, limit: number = 5) {
       .from('sales')
       .select('id')
       .eq('branch_id', authorized.branchId)
-      .neq('payment_status', 'failed')
+      .eq('payment_status', 'completed')
       .gte('created_at', start.toISOString())
       .lt('created_at', end.toISOString())
 
@@ -315,7 +315,7 @@ export async function getPaymentBreakdownToday(branchId: string) {
       .from('sales')
       .select('payment_method, total_amount')
       .eq('branch_id', authorized.branchId)
-      .neq('payment_status', 'failed')
+      .eq('payment_status', 'completed')
       .gte('created_at', start.toISOString())
       .lt('created_at', end.toISOString())
 
@@ -425,7 +425,7 @@ export async function getRecentTransactions(branchId: string, limit: number = 5)
       .from('sales')
       .select('id, receipt_number, total_amount, payment_method, created_at, customer_id, payment_status')
       .eq('branch_id', authorized.branchId)
-      .neq('payment_status', 'failed')
+      .eq('payment_status', 'completed')
       .order('created_at', { ascending: false })
       .limit(limit)
 

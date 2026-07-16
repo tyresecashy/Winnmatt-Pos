@@ -79,14 +79,6 @@ export async function initiatePayment(
     const config = getConfig()
     const formattedPhone = tumaClient.formatPhoneNumber(phoneNumber)
 
-    logger.info('[Tuma initiatePayment] Phone normalization', {
-      correlationId,
-      saleId,
-      originalFormat: phoneNumber.startsWith('0') ? '0-prefix' : phoneNumber.startsWith('254') ? '254-prefix' : phoneNumber.startsWith('+') ? 'plus-prefix' : 'other',
-      formattedPhone_254: formattedPhone,
-      phoneLength: formattedPhone?.length,
-    })
-
     if (!formattedPhone || formattedPhone.length < 10) {
       logger.warn('[Tuma initiatePayment] Invalid phone', { correlationId, saleId })
       return { success: false, error: 'Invalid phone number. Please enter a valid Safaricom number.' }
@@ -103,13 +95,6 @@ export async function initiatePayment(
     const tumaPhone = phoneNumber.replace(/[^0-9]/g, '').startsWith('254')
       ? '0' + phoneNumber.replace(/[^0-9]/g, '').slice(3)
       : phoneNumber.replace(/[^0-9]/g, '')
-
-    logger.info('[Tuma initiatePayment] Tuma phone format', {
-      correlationId,
-      saleId,
-      tumaPhoneFormat: tumaPhone.startsWith('0') ? '0-prefix' : 'other',
-      tumaPhoneLength: tumaPhone.length,
-    })
 
     // Generate idempotency key to prevent duplicate charges
     const idempotencyKey = `tuma_${saleId}_${Date.now()}`
@@ -143,14 +128,6 @@ export async function initiatePayment(
 
     // Step 2: Initiate STK Push with Tuma
     // NOTE: Tuma rejects requests that include invoice_number — do NOT send it.
-    logger.info('[Tuma initiatePayment] Calling initiateSTKPush', {
-      correlationId,
-      saleId,
-      transactionId: createResult.transaction.id,
-      configApiUrl: config.apiUrl,
-      callbackUrlConfigured: !!config.callbackUrl,
-    })
-
     const stkResponse = await tumaClient.initiateSTKPush(config, {
       amount,
       phone: tumaPhone, // Tuma expects 0-prefix format (e.g. 0796421104)
@@ -168,14 +145,6 @@ export async function initiatePayment(
     })
 
     // Step 3: Update transaction with Tuma identifiers
-    logger.info('[Tuma initiatePayment] Updating DB with Tuma IDs', {
-      correlationId,
-      saleId,
-      transactionId: createResult.transaction.id,
-      merchantRequestId: stkResponse.merchant_request_id || '(empty)',
-      checkoutRequestId: stkResponse.checkout_request_id || '(empty)',
-    })
-
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const sb = (await import('@/lib/supabase-server')).supabaseAdmin as any
     const { error: updateError } = await sb
@@ -192,25 +161,6 @@ export async function initiatePayment(
         correlationId, saleId, transactionId: createResult.transaction.id, error: updateError,
       })
     }
-
-    // Verify IDs were persisted (not null)
-    const { data: verifyTx } = await sb
-      .from('payment_transactions')
-      .select('id, merchant_request_id, checkout_request_id, status')
-      .eq('id', createResult.transaction.id)
-      .single()
-      .catch(() => ({ data: null }))
-
-    logger.info('[Tuma initiatePayment] DB verification', {
-      correlationId,
-      saleId,
-      transactionId: createResult.transaction.id,
-      dbMerchantRequestId: !!verifyTx?.merchant_request_id,
-      dbCheckoutRequestId: !!verifyTx?.checkout_request_id,
-      dbStatus: verifyTx?.status,
-      merchantRequestIdNull: verifyTx?.merchant_request_id === null,
-      checkoutRequestIdNull: verifyTx?.checkout_request_id === null,
-    })
 
     return {
       success: true,
