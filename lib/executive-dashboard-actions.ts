@@ -86,16 +86,17 @@ export async function getExecutiveKPI(dateFilter?: string): Promise<ExecutiveKPI
     // ── Today's sales & transactions ──
     const { data: todaySales } = await supabaseAdmin
       .from('sales')
-      .select('id, subtotal, discount, tax, total, payment_method, sale_status, created_at, customer_id, items:sale_items(product_id, quantity, unit_price, discount_percent, line_total, product:products(id, purchase_price))')
+      .select('id, subtotal, discount_amount, tax_amount, total_amount, payment_method, sale_status, created_at, customer_id, items:sale_items(product_id, quantity, unit_price, discount_percent, line_total, product:products(id, purchase_price))')
+      .eq('payment_status', 'completed')
       .gte('created_at', `${today}T00:00:00`)
       .lte('created_at', `${today}T23:59:59`)
 
     const salesRows = (todaySales || []) as unknown as Array<Record<string, unknown>>
     const activeSales = salesRows.filter(s => s.sale_status !== 'voided' && s.sale_status !== 'returned')
     const refunds = salesRows.filter(s => s.sale_status === 'returned')
-    const totalRevenue = activeSales.reduce((sum, s) => sum + ((s.total as number) || 0), 0)
-    const totalRefunds = refunds.reduce((sum, s) => sum + ((s.total as number) || 0), 0)
-    const totalDiscounts = activeSales.reduce((sum, s) => sum + ((s.discount as number) || 0), 0)
+    const totalRevenue = activeSales.reduce((sum, s) => sum + ((s.total_amount as number) || 0), 0)
+    const totalRefunds = refunds.reduce((sum, s) => sum + ((s.total_amount as number) || 0), 0)
+    const totalDiscounts = activeSales.reduce((sum, s) => sum + ((s.discount_amount as number) || 0), 0)
     const totalTransactions = activeSales.length
 
     // Calculate gross profit
@@ -232,15 +233,16 @@ export async function getBranchPerformance(): Promise<BranchPerformance[]> {
     for (const branch of branches || []) {
       const { data: sales } = await supabaseAdmin
         .from('sales')
-        .select('id, total')
+        .select('id, total_amount')
         .eq('branch_id', branch.id)
+        .eq('payment_status', 'completed')
         .gte('created_at', `${today}T00:00:00`)
         .lte('created_at', `${today}T23:59:59`)
         .neq('sale_status', 'voided')
         .neq('sale_status', 'returned')
 
       const branchSalesRows = (sales || []) as unknown as Array<Record<string, unknown>>
-      const totalSales = branchSalesRows.reduce((s, r) => s + ((r.total as number) || 0), 0)
+      const totalSales = branchSalesRows.reduce((s, r) => s + ((r.total_amount as number) || 0), 0)
       const txCount = branchSalesRows.length || 0
       grandTotal += totalSales
 
@@ -278,7 +280,8 @@ export async function getHourlySales(dateFilter?: string): Promise<SalesHourly[]
 
     const { data: sales } = await supabaseAdmin
       .from('sales')
-      .select('total, created_at')
+      .select('total_amount, created_at')
+      .eq('payment_status', 'completed')
       .gte('created_at', `${today}T00:00:00`)
       .lte('created_at', `${today}T23:59:59`)
       .neq('sale_status', 'voided')
@@ -290,7 +293,7 @@ export async function getHourlySales(dateFilter?: string): Promise<SalesHourly[]
 
     for (const s of hourlySalesRows) {
       const hour = new Date(s.created_at as string).getHours()
-      hourly[hour].sales += (s.total as number) || 0
+      hourly[hour].sales += (s.total_amount as number) || 0
       hourly[hour].tx++
     }
 
@@ -319,12 +322,14 @@ export async function getTopProducts(limit = 10, dateFilter?: string): Promise<T
       .from('sale_items')
       .select(`
         quantity, unit_price, line_total, product_id,
-        sale:sales!inner(created_at, sale_status),
+        sale:sales!inner(created_at, sale_status, payment_status),
         product:products(name, sku, purchase_price)
       `)
       .gte('sale.created_at', `${today}T00:00:00`)
       .lte('sale.created_at', `${today}T23:59:59`)
       .neq('sale.sale_status', 'voided')
+      .neq('sale.sale_status', 'returned')
+      .eq('sale.payment_status', 'completed')
 
     const productMap: Record<string, { name: string; sku: string; qty: number; revenue: number; cost: number }> = {}
 
@@ -369,14 +374,16 @@ export async function getAIInsights(): Promise<AIInsight[]> {
     // Compare today vs yesterday revenue
     const { data: todaySales } = await supabaseAdmin
       .from('sales')
-      .select('total')
+      .select('total_amount')
+      .eq('payment_status', 'completed')
       .gte('created_at', `${today}T00:00:00`)
       .lte('created_at', `${today}T23:59:59`)
       .neq('sale_status', 'voided')
 
     const { data: yesterdaySales } = await supabaseAdmin
       .from('sales')
-      .select('total')
+      .select('total_amount')
+      .eq('payment_status', 'completed')
       .gte('created_at', `${yesterday}T00:00:00`)
       .lte('created_at', `${yesterday}T23:59:59`)
       .neq('sale_status', 'voided')
@@ -384,8 +391,8 @@ export async function getAIInsights(): Promise<AIInsight[]> {
     const todaySalesRows = (todaySales || []) as unknown as Array<Record<string, unknown>>
     const yesterdaySalesRows = (yesterdaySales || []) as unknown as Array<Record<string, unknown>>
 
-    const todayRev = todaySalesRows.reduce((s, r) => s + ((r.total as number) || 0), 0)
-    const yesterdayRev = yesterdaySalesRows.reduce((s, r) => s + ((r.total as number) || 0), 0)
+    const todayRev = todaySalesRows.reduce((s, r) => s + ((r.total_amount as number) || 0), 0)
+    const yesterdayRev = yesterdaySalesRows.reduce((s, r) => s + ((r.total_amount as number) || 0), 0)
 
     if (yesterdayRev > 0) {
       const change = Math.round(((todayRev - yesterdayRev) / yesterdayRev) * 10000) / 100
@@ -428,13 +435,13 @@ export async function getAIInsights(): Promise<AIInsight[]> {
     // High refund activity
     const { data: refunds } = await supabaseAdmin
       .from('sales')
-      .select('branch_id, total')
+      .select('branch_id, total_amount')
       .eq('sale_status', 'returned')
       .gte('created_at', `${today}T00:00:00`)
       .lte('created_at', `${today}T23:59:59`)
 
     const refundRows = (refunds || []) as unknown as Array<Record<string, unknown>>
-    const refundTotal = refundRows.reduce((s, r) => s + ((r.total as number) || 0), 0)
+    const refundTotal = refundRows.reduce((s, r) => s + ((r.total_amount as number) || 0), 0)
     if (refundTotal > 0 && todayRev > 0) {
       const refundPct = Math.round((refundTotal / todayRev) * 10000) / 100
       if (refundPct > 10) {
