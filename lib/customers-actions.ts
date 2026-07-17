@@ -373,6 +373,8 @@ export async function getCustomersWithStats() {
         customer_id,
         total_amount
       `)
+      .eq('payment_status', 'completed')
+      .neq('sale_status', 'returned')
 
     if (statsError) {
       // If stats unavailable, return customers without stats

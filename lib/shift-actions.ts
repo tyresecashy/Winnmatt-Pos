@@ -232,8 +232,10 @@ export async function closeShift(
       .select('id, payment_method, total_amount, sale_status')
       .eq('cashier_id', cashierId)
       .eq('branch_id', shift.branch_id)
+      .eq('payment_status', 'completed')
       .gte('created_at', shift.opened_at)
       .neq('sale_status', 'voided') // Exclude voided from counts
+      .neq('sale_status', 'returned') // Exclude returned from counts
       .lte('created_at', new Date().toISOString()) // Sales up to now
 
     if (salesError) throw salesError

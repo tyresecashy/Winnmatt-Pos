@@ -205,6 +205,7 @@ export const salesTools: ToolDefinition[] = [
         .gte('created_at', fromDate)
         .lte('created_at', toDate)
         .eq('payment_status', 'completed')
+        .neq('sale_status', 'returned')
 
       logger.error('Operation failed', { error: error })
       if (error) return { success: false, error: 'Operation failed. Please try again.' }

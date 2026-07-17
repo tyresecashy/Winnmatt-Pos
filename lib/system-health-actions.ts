@@ -31,6 +31,8 @@ export async function getSystemHealth() {
     const { data: todaySales } = await supabaseAdmin
       .from('sales')
       .select('id, total_amount, created_at')
+      .eq('payment_status', 'completed')
+      .neq('sale_status', 'returned')
       .gte('created_at', `${today}T00:00:00.000Z`)
 
     // Error rate (last 24h from audit log)

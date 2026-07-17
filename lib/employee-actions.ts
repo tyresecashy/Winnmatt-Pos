@@ -465,6 +465,8 @@ export async function getEmployeeStats(employeeProfileId: string) {
       .from('sales')
       .select('total_amount, id')
       .eq('cashier_id', userId)
+      .eq('payment_status', 'completed')
+      .neq('sale_status', 'returned')
       .gte('created_at', today)
       .lte('created_at', `${today}T23:59:59.999Z`)
 
@@ -477,9 +479,10 @@ export async function getEmployeeStats(employeeProfileId: string) {
       .from('sales')
       .select('total_amount, id, sale_status')
       .eq('cashier_id', userId)
+      .eq('payment_status', 'completed')
       .gte('created_at', `${monthStartStr}T00:00:00.000Z`)
 
-    const totalMonthSales = monthSales?.reduce((sum, s) => sum + (s.total_amount || 0), 0) || 0
+    const totalMonthSales = monthSales?.filter(s => s.sale_status !== 'returned').reduce((sum, s) => sum + (s.total_amount || 0), 0) || 0
     const refundCount = monthSales?.filter(s => s.sale_status === 'returned').length || 0
     const voidCount = monthSales?.filter(s => s.sale_status === 'voided').length || 0
 

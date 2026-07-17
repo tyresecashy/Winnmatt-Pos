@@ -55,8 +55,8 @@ export class SalesAnalyticsService {
 
     // current and previous period are independent — run in parallel
     const [{ data: currentPeriod }, { data: previousPeriod }] = await Promise.all([
-      supabaseAdmin.from('sales').select('total_amount, id').gte('created_at', startDate).lte('created_at', endDate).eq('payment_status', 'completed'),
-      supabaseAdmin.from('sales').select('total_amount, id').gte('created_at', prev_start).lte('created_at', prev_end).eq('payment_status', 'completed'),
+      supabaseAdmin.from('sales').select('total_amount, id').gte('created_at', startDate).lte('created_at', endDate).eq('payment_status', 'completed').neq('sale_status', 'returned'),
+      supabaseAdmin.from('sales').select('total_amount, id').gte('created_at', prev_start).lte('created_at', prev_end).eq('payment_status', 'completed').neq('sale_status', 'returned'),
     ]);
 
     const currentRevenue = currentPeriod?.reduce((sum, sale) => sum + (sale.total_amount || 0), 0) || 0;
@@ -142,7 +142,8 @@ export class SalesAnalyticsService {
       .select('created_at, total_amount')
       .gte('created_at', startDate)
       .lte('created_at', endDate)
-      .eq('payment_status', 'completed');
+      .eq('payment_status', 'completed')
+      .neq('sale_status', 'returned');
 
     if (!sales) return [];
 
@@ -205,7 +206,8 @@ export class SalesAnalyticsService {
       .select('payment_method, total_amount')
       .gte('created_at', startDate)
       .lte('created_at', endDate)
-      .eq('payment_status', 'completed');
+      .eq('payment_status', 'completed')
+      .neq('sale_status', 'returned');
 
     if (!sales) return [];
 
@@ -235,6 +237,7 @@ export class SalesAnalyticsService {
       .gte('created_at', startDate)
       .lte('created_at', endDate)
       .eq('payment_status', 'completed')
+      .neq('sale_status', 'returned')
       .order('created_at');
 
     if (!sales) return [];

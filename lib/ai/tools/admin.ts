@@ -149,7 +149,8 @@ export const adminTools: ToolDefinition[] = [
           .select('total_amount')
           .eq('branch_id', branchId)
           .gte('created_at', `${today}T00:00:00`)
-          .eq('payment_status', 'completed'),
+          .eq('payment_status', 'completed')
+          .neq('sale_status', 'returned'),
         supabaseAdmin
           .from('inventory')
           .select('product_id', { count: 'exact', head: true })

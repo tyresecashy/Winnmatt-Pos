@@ -88,6 +88,8 @@ export async function getExecutiveKPI(dateFilter?: string): Promise<ExecutiveKPI
       .from('sales')
       .select('id, subtotal, discount_amount, tax_amount, total_amount, payment_method, sale_status, created_at, customer_id, items:sale_items(product_id, quantity, unit_price, discount_percent, line_total, product:products(id, purchase_price))')
       .eq('payment_status', 'completed')
+      .neq('sale_status', 'voided')
+      .neq('sale_status', 'returned')
       .gte('created_at', `${today}T00:00:00`)
       .lte('created_at', `${today}T23:59:59`)
 
@@ -235,11 +237,12 @@ export async function getBranchPerformance(): Promise<BranchPerformance[]> {
         .from('sales')
         .select('id, total_amount')
         .eq('branch_id', branch.id)
-        .eq('payment_status', 'completed')
-        .gte('created_at', `${today}T00:00:00`)
-        .lte('created_at', `${today}T23:59:59`)
-        .neq('sale_status', 'voided')
-        .neq('sale_status', 'returned')
+      .eq('payment_status', 'completed')
+      .neq('sale_status', 'voided')
+      .neq('sale_status', 'returned')
+      .gte('created_at', `${today}T00:00:00`)
+      .lte('created_at', `${today}T23:59:59`)
+
 
       const branchSalesRows = (sales || []) as unknown as Array<Record<string, unknown>>
       const totalSales = branchSalesRows.reduce((s, r) => s + ((r.total_amount as number) || 0), 0)
@@ -282,9 +285,10 @@ export async function getHourlySales(dateFilter?: string): Promise<SalesHourly[]
       .from('sales')
       .select('total_amount, created_at')
       .eq('payment_status', 'completed')
+      .neq('sale_status', 'voided')
+      .neq('sale_status', 'returned')
       .gte('created_at', `${today}T00:00:00`)
       .lte('created_at', `${today}T23:59:59`)
-      .neq('sale_status', 'voided')
 
     const hourly: Record<number, { sales: number; tx: number }> = {}
     for (let h = 0; h < 24; h++) hourly[h] = { sales: 0, tx: 0 }
@@ -376,17 +380,19 @@ export async function getAIInsights(): Promise<AIInsight[]> {
       .from('sales')
       .select('total_amount')
       .eq('payment_status', 'completed')
+      .neq('sale_status', 'voided')
+      .neq('sale_status', 'returned')
       .gte('created_at', `${today}T00:00:00`)
       .lte('created_at', `${today}T23:59:59`)
-      .neq('sale_status', 'voided')
 
     const { data: yesterdaySales } = await supabaseAdmin
       .from('sales')
       .select('total_amount')
       .eq('payment_status', 'completed')
+      .neq('sale_status', 'voided')
+      .neq('sale_status', 'returned')
       .gte('created_at', `${yesterday}T00:00:00`)
       .lte('created_at', `${yesterday}T23:59:59`)
-      .neq('sale_status', 'voided')
 
     const todaySalesRows = (todaySales || []) as unknown as Array<Record<string, unknown>>
     const yesterdaySalesRows = (yesterdaySales || []) as unknown as Array<Record<string, unknown>>

@@ -52,6 +52,7 @@ export async function getTodayDashboardStats(branchId: string) {
       .select('id, total_amount, customer_id')
       .eq('branch_id', authorized.branchId)
       .eq('payment_status', 'completed')
+      .neq('sale_status', 'returned')
       .gte('created_at', start.toISOString())
       .lt('created_at', end.toISOString())
 
@@ -103,6 +104,7 @@ export async function getWeeklySalesTrend(branchId: string) {
       .select('created_at, total_amount')
       .eq('branch_id', authorized.branchId)
       .eq('payment_status', 'completed')
+      .neq('sale_status', 'returned')
       .gte('created_at', sevenDaysAgoStart.toISOString())
       .lt('created_at', tomorrowStart.toISOString())
       .order('created_at', { ascending: true })
@@ -190,6 +192,7 @@ export async function getBranchPerformanceToday(startDate?: Date, endDate?: Date
       .select('branch_id, total_amount')
       .in('branch_id', branchIds)
       .eq('payment_status', 'completed')
+      .neq('sale_status', 'returned')
       .gte('created_at', start)
       .lt('created_at', end)
 
@@ -250,6 +253,7 @@ export async function getTopProductsToday(branchId: string, limit: number = 5) {
       .select('id')
       .eq('branch_id', authorized.branchId)
       .eq('payment_status', 'completed')
+      .neq('sale_status', 'returned')
       .gte('created_at', start.toISOString())
       .lt('created_at', end.toISOString())
 
@@ -316,6 +320,7 @@ export async function getPaymentBreakdownToday(branchId: string) {
       .select('payment_method, total_amount')
       .eq('branch_id', authorized.branchId)
       .eq('payment_status', 'completed')
+      .neq('sale_status', 'returned')
       .gte('created_at', start.toISOString())
       .lt('created_at', end.toISOString())
 
@@ -426,6 +431,7 @@ export async function getRecentTransactions(branchId: string, limit: number = 5)
       .select('id, receipt_number, total_amount, payment_method, created_at, customer_id, payment_status')
       .eq('branch_id', authorized.branchId)
       .eq('payment_status', 'completed')
+      .neq('sale_status', 'returned')
       .order('created_at', { ascending: false })
       .limit(limit)
 
@@ -507,6 +513,8 @@ export async function getSeasonalInsights(branchId: string) {
       .from('sales')
       .select('id, total_amount, customer_id')
       .eq('branch_id', branchId)
+      .eq('payment_status', 'completed')
+      .neq('sale_status', 'returned')
       .gte('created_at', monthStart.toISOString())
       .lt('created_at', today.toISOString())
 
@@ -549,6 +557,8 @@ export async function getSeasonalInsights(branchId: string) {
       .from('sales')
       .select('total_amount')
       .eq('branch_id', branchId)
+      .eq('payment_status', 'completed')
+      .neq('sale_status', 'returned')
       .gte('created_at', new Date(currentYear, 0, 1).toISOString())
       .lt('created_at', new Date(currentYear + 1, 0, 1).toISOString())
 

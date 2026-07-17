@@ -411,6 +411,7 @@ export class SalesRepository extends BaseRepository<SaleRow> {
       .select('total_amount, subtotal', { count: 'exact' })
       .eq('branch_id', branchId)
       .eq('payment_status', 'completed')
+      .neq('sale_status', 'returned')
       .gte('created_at', startStr)
       .lte('created_at', endStr)
 

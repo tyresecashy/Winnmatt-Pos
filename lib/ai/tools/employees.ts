@@ -114,6 +114,8 @@ export const employeeTools: ToolDefinition[] = [
         .from('sales')
         .select('id, total_amount, created_at')
         .eq('cashier_id', userId)
+        .eq('payment_status', 'completed')
+        .neq('sale_status', 'returned')
         .gte('created_at', fromDate)
 
       const totalSales = (sales || []).reduce((sum, s) => sum + (s.total_amount || 0), 0)

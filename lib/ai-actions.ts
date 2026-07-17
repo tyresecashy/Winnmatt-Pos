@@ -138,6 +138,7 @@ async function gatherSalesData() {
       .select('id, total_amount, payment_method, payment_status, created_at, customer_id')
       .gte('created_at', thirtyDaysAgo)
       .eq('payment_status', 'completed')
+      .neq('sale_status', 'returned')
       .order('created_at', { ascending: false }),
 
     supabaseAdmin.from('sale_items')
@@ -768,7 +769,8 @@ export async function analyzeDashboardAI(): Promise<AIInsight[]> {
     supabaseAdmin.from('sales')
       .select('total_amount, payment_method, created_at')
       .gte('created_at', thirtyDaysAgo)
-      .eq('payment_status', 'completed'),
+      .eq('payment_status', 'completed')
+      .neq('sale_status', 'returned'),
     supabaseAdmin.from('products')
       .select('id, name, reorder_level'),
     supabaseAdmin.from('inventory')

@@ -64,9 +64,9 @@ export class CustomerAnalyticsService {
     ] = await Promise.all([
       supabaseAdmin.from('customers').select('*', { count: 'exact', head: true }),
       supabaseAdmin.from('customers').select('*', { count: 'exact', head: true }).gte('created_at', startDate).lte('created_at', endDate),
-      supabaseAdmin.from('sales').select('customer_id').gte('created_at', startDate).lte('created_at', endDate).eq('payment_status', 'completed').not('customer_id', 'is', null),
-      supabaseAdmin.from('sales').select('total_amount').gte('created_at', startDate).lte('created_at', endDate).eq('payment_status', 'completed'),
-      supabaseAdmin.from('sales').select('customer_id').gte('created_at', prevStartDate.toISOString()).lte('created_at', prevEndDate.toISOString()).eq('payment_status', 'completed').not('customer_id', 'is', null),
+      supabaseAdmin.from('sales').select('customer_id').gte('created_at', startDate).lte('created_at', endDate).eq('payment_status', 'completed').neq('sale_status', 'returned').not('customer_id', 'is', null),
+      supabaseAdmin.from('sales').select('total_amount').gte('created_at', startDate).lte('created_at', endDate).eq('payment_status', 'completed').neq('sale_status', 'returned'),
+      supabaseAdmin.from('sales').select('customer_id').gte('created_at', prevStartDate.toISOString()).lte('created_at', prevEndDate.toISOString()).eq('payment_status', 'completed').neq('sale_status', 'returned').not('customer_id', 'is', null),
     ]);
 
     const uniqueActiveCustomers = new Set(activeSales?.map(s => s.customer_id)).size;
@@ -101,7 +101,8 @@ export class CustomerAnalyticsService {
           .from('sales')
           .select('created_at, total_amount')
           .eq('customer_id', customer.id)
-          .eq('payment_status', 'completed');
+          .eq('payment_status', 'completed')
+          .neq('sale_status', 'returned');
 
         if (!orders || orders.length === 0) {
           return {
@@ -213,6 +214,7 @@ export class CustomerAnalyticsService {
           .select('created_at, total_amount')
           .eq('customer_id', customer.id)
           .eq('payment_status', 'completed')
+          .neq('sale_status', 'returned')
           .order('created_at');
 
         if (!orders || orders.length === 0) {
@@ -260,6 +262,7 @@ export class CustomerAnalyticsService {
       .from('sales')
       .select('customer_id, total_amount, created_at')
       .eq('payment_status', 'completed')
+      .neq('sale_status', 'returned')
       .not('customer_id', 'is', null);
 
     if (!sales) return [];
@@ -325,6 +328,7 @@ export class CustomerAnalyticsService {
           .select('created_at, total_amount')
           .eq('customer_id', customer.id)
           .eq('payment_status', 'completed')
+          .neq('sale_status', 'returned')
           .order('created_at');
 
         if (!orders || orders.length === 0) {

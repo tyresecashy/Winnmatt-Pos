@@ -60,10 +60,10 @@ export class FinancialAnalyticsService {
       { data: prevSales },
       { data: prevExpenseData },
     ] = await Promise.all([
-      supabaseAdmin.from('sales').select('total_amount').gte('created_at', startDate).lte('created_at', endDate).eq('payment_status', 'completed'),
+      supabaseAdmin.from('sales').select('total_amount').gte('created_at', startDate).lte('created_at', endDate).eq('payment_status', 'completed').neq('sale_status', 'returned'),
       supabaseAdmin.from('sale_items').select('quantity, products(purchase_price)').gte('created_at', startDate).lte('created_at', endDate),
       supabaseAdmin.from('expenses').select('amount').gte('created_at', startDate).lte('created_at', endDate).eq('status', 'approved'),
-      supabaseAdmin.from('sales').select('total_amount').gte('created_at', prev_start).lte('created_at', prev_end).eq('payment_status', 'completed'),
+      supabaseAdmin.from('sales').select('total_amount').gte('created_at', prev_start).lte('created_at', prev_end).eq('payment_status', 'completed').neq('sale_status', 'returned'),
       supabaseAdmin.from('expenses').select('amount').gte('created_at', prev_start).lte('created_at', prev_end).eq('status', 'approved'),
     ]);
 
@@ -100,7 +100,7 @@ export class FinancialAnalyticsService {
 
   async getPLTrend(startDate: string, endDate: string, interval: 'daily' | 'weekly' | 'monthly' = 'monthly'): Promise<PLTrend[]> {
     const [{ data: sales }, { data: saleItems }, { data: expenses }    ] = await Promise.all([
-      supabaseAdmin.from('sales').select('created_at, total_amount').gte('created_at', startDate).lte('created_at', endDate).eq('payment_status', 'completed'),
+      supabaseAdmin.from('sales').select('created_at, total_amount').gte('created_at', startDate).lte('created_at', endDate).eq('payment_status', 'completed').neq('sale_status', 'returned'),
       supabaseAdmin.from('sale_items').select('created_at, quantity, products(purchase_price)').gte('created_at', startDate).lte('created_at', endDate),
       supabaseAdmin.from('expenses').select('created_at, amount').gte('created_at', startDate).lte('created_at', endDate).eq('status', 'approved'),
     ]);

@@ -78,9 +78,10 @@ export async function getCustomerCRMDetail(customerId: string): Promise<Customer
       .from('sales')
       .select('total_amount, discount_amount, created_at, sale_status')
       .eq('customer_id', customerId)
+      .eq('payment_status', 'completed')
       .order('created_at', { ascending: false })
 
-    const completedSales = (salesStats || []).filter(s => s.sale_status !== 'voided')
+    const completedSales = (salesStats || []).filter(s => s.sale_status !== 'voided' && s.sale_status !== 'returned')
     const returnedSales = (salesStats || []).filter(
       s => s.sale_status === 'returned' || s.sale_status === 'partially_returned'
     )
@@ -120,8 +121,8 @@ export async function getCustomerCRMDetail(customerId: string): Promise<Customer
       // segments table may not exist
     }
 
-    // Lifetime value: total spent minus returns
-    const lifetimeValueCents = totalSpentCents - totalReturnedCents
+    // Lifetime value: total spent (returned sales already excluded)
+    const lifetimeValueCents = totalSpentCents
 
     return {
       ...customer,

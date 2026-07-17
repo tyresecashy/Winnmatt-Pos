@@ -274,6 +274,7 @@ export class ReportBuilderService {
           .from('sales')
           .select('created_at, total_amount, id')
           .eq('payment_status', String(parameters[0] ?? 'completed'))
+          .neq('sale_status', 'returned')
           .gte('created_at', startDate)
           .lte('created_at', endDate)
           .order('created_at', { ascending: true });
@@ -323,7 +324,8 @@ export class ReportBuilderService {
         const { data } = await supabase
           .from('sales')
           .select('customer_id, total_amount')
-          .eq('payment_status', String(parameters[0] ?? 'completed'));
+          .eq('payment_status', String(parameters[0] ?? 'completed'))
+          .neq('sale_status', 'returned');
         const grouped: Record<string, { orders: number; total_spent: number }> = {};
         for (const row of data || []) {
           if (!row.customer_id) continue;
