@@ -13,6 +13,22 @@ import { logger } from '@/lib/logger'
 import { supabaseAdmin } from '@/lib/supabase-server'
 import type { Json } from '@/lib/types/database'
 
+// Lazy-imported: recoverPendingPayments is only loaded when its task runs
+async function runPendingPaymentRecovery(): Promise<void> {
+  const { recoverPendingPayments } = await import('@/lib/modules/payments')
+  const result = await recoverPendingPayments()
+  if (!result.success || result.errors.length > 0) {
+    logger.warn('[Scheduler] Pending payment recovery completed with issues', {
+      recovered: result.recovered,
+      errors: result.errors,
+    })
+  } else {
+    logger.info('[Scheduler] Pending payment recovery completed', {
+      recovered: result.recovered,
+    })
+  }
+}
+
 export interface ScheduledTask {
   id: string
   name: string
@@ -205,6 +221,9 @@ async function executeScheduledTask(task: Record<string, unknown>): Promise<void
       break
     case 'Daily Batch Expiry Check':
       await runBatchExpiryCheck()
+      break
+    case 'Pending Payment Recovery':
+      await runPendingPaymentRecovery()
       break
     default:
       // Custom task — emit a scheduler event

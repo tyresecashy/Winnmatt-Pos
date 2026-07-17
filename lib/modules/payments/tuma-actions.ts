@@ -16,7 +16,6 @@ import type { Json } from '@/lib/types/database'
 // Helper: payment_transactions is a new table not yet in auto-generated Supabase types.
 // Using `as unknown` breaks the deep inference chain that causes
 // "Type instantiation is excessively deep" errors.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const txDb = supabaseAdmin as any
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -46,10 +45,6 @@ export interface PaymentTransaction {
 }
 
 // ─── Create ────────────────────────────────────────────────────────────────
-
-// Helper: typed supabase client for payment_transactions 
-// (table not yet in auto-generated types, use generic query builder)
-type PaymentTxDb = import('@supabase/supabase-js').SupabaseClient<never, 'public'>
 
 /**
  * Create a new payment transaction record.
@@ -124,10 +119,17 @@ export async function updatePaymentTransactionCallback(
         failure_reason: failureReason || null,
       })
       .eq('checkout_request_id', checkoutRequestId)
+      .is('callback_received_at', null) // atomic guard — prevents TOCTOU race
       .select()
-      .single()
+      .maybeSingle()
 
     if (error) throw error
+
+    // Zero rows matched → another callback already processed this transaction (idempotent hit)
+    if (!data) {
+      logger.info('[Tuma] Callback already processed — atomic guard prevented duplicate', { checkoutRequestId, status })
+      return { success: true, transaction: null }
+    }
 
     logger.info('[Tuma] Callback processed', { checkoutRequestId, status })
 
@@ -351,6 +353,69 @@ export async function getPendingPaymentTransactions(maxAgeMinutes: number = 60) 
     return { success: true, transactions: (data || []) as PaymentTransaction[] }
   } catch (error) {
     logger.error('[Tuma] Failed to get pending transactions', error)
+    return { success: false, error: 'Operation failed. Please try again.', transactions: [] }
+  }
+}
+
+// ─── Stuck Transactions ──────────────────────────────────────────────────
+
+/**
+ * Get stuck payment transactions that need automated recovery.
+ *
+ * Two classes of stuck transactions:
+ *   1. Pending/processing with no callback received beyond max age (timeout)
+ *   2. Callback received but sale never finalized (partial processing failure)
+ *
+ * Class 2 catches edge cases where handleCallback succeeded in updating
+ * the transaction row but finalizePaymentSale or failPaymentSale threw.
+ * These transactions have callback_received_at set but sale_finalized_at null.
+ *
+ * Results are deduplicated by id — a transaction cannot appear in both
+ * classes simultaneously (callback_received_at is mutually exclusive),
+ * but dedup guards against edge cases.
+ *
+ * Idempotent: safe to call repeatedly — only reads, never writes.
+ */
+export async function getStuckPaymentTransactions(maxAgeMinutes: number = 30) {
+  try {
+    const cutoffTime = new Date(Date.now() - maxAgeMinutes * 60 * 1000).toISOString()
+
+    // Class 1: Pending/processing with no callback — assumed timed out
+    const { data: timedOut, error: err1 } = await txDb
+      .from('payment_transactions')
+      .select('*, sale:sales(*)')
+      .in('status', ['pending', 'processing'])
+      .is('callback_received_at', null)
+      .lt('initiated_at', cutoffTime)
+      .order('initiated_at', { ascending: false })
+
+    if (err1) throw err1
+
+    // Class 2: Callback received but sale never finalized
+    const { data: notFinalized, error: err2 } = await txDb
+      .from('payment_transactions')
+      .select('*, sale:sales(*)')
+      .not('callback_received_at', 'is', null)
+      .is('sale_finalized_at', null)
+      .order('initiated_at', { ascending: false })
+
+    if (err2) throw err2
+
+    // Deduplicate by id (safety: the two classes are mutually exclusive
+    // by callback_received_at, but dedup protects against any overlap)
+    const seen = new Set<string>()
+    const combined = [
+      ...((timedOut || []) as PaymentTransaction[]),
+      ...((notFinalized || []) as PaymentTransaction[]),
+    ].filter((txn) => {
+      if (seen.has(txn.id)) return false
+      seen.add(txn.id)
+      return true
+    })
+
+    return { success: true, transactions: combined }
+  } catch (error) {
+    logger.error('[Tuma] Failed to get stuck transactions', error)
     return { success: false, error: 'Operation failed. Please try again.', transactions: [] }
   }
 }

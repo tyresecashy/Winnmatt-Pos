@@ -179,8 +179,9 @@ export async function initiatePayment(
       correlationId, saleId, error: errorMessage,
     })
 
-    // Mark sale as failed so inventory can be restored
+    // Restore inventory first (sale is still pending), then mark as failed
     if (saleId) {
+      await tumaActions.restoreInventoryForFailedPayment(saleId).catch(() => {})
       await tumaActions.failPaymentSale(saleId, errorMessage).catch(() => {})
     }
 
@@ -298,6 +299,15 @@ export async function handleCallback(
       return { success: false, error: 'Failed to update transaction' }
     }
 
+    // If no transaction was updated (atomic guard prevented duplicate), the first
+    // callback already handled Step 5. Skip to avoid re-finalizing or re-failing.
+    if (!updateResult.transaction) {
+      logger.info('[Tuma handleCallback] Duplicate callback skipped — first callback already processed', {
+        correlationId, merchantRequestId, saleId, status,
+      })
+      return { success: true }
+    }
+
     // Step 5: Finalize or fail the sale
     if (status === 'completed') {
       await tumaActions.finalizePaymentSale(saleId)
@@ -396,4 +406,101 @@ export async function getPaymentStatus(
     logger.error('[Tuma] Failed to check payment status', error)
     return { success: false, error: 'Failed to check payment status' }
   }
+}
+
+// ─── Payment Recovery ───────────────────────────────────────────────────────
+
+/**
+ * Recover stuck payment transactions.
+ *
+ * Three scenarios are handled (all idempotent):
+ *   A. Callback received, transaction completed, but sale not finalized
+ *      → Re-run finalizePaymentSale
+ *   B. Callback received, transaction failed/cancelled, but inventory
+ *      not restored and sale not marked failed
+ *      → Re-run restoreInventoryForFailedPayment + failPaymentSale
+ *   C. No callback received, transaction still pending/processing
+ *      beyond max age → Mark as timeout, restore inventory, fail sale
+ *
+ * Returns a summary of actions taken.
+ *
+ * Callers:
+ * - Automation scheduler (recurring task)
+ * - Manual trigger via admin dashboard
+ */
+export async function recoverPendingPayments(): Promise<{
+  success: boolean
+  recovered: number
+  errors: string[]
+  details: Array<{ saleId: string; status: string; action: string }>
+}> {
+  const result = {
+    success: true,
+    recovered: 0,
+    errors: [] as string[],
+    details: [] as Array<{ saleId: string; status: string; action: string }>,
+  }
+
+  const { transactions, error } = await tumaActions.getStuckPaymentTransactions()
+
+  if (error) {
+    logger.error('[Recovery] getStuckPaymentTransactions failed', { error })
+    return { ...result, success: false, errors: [error] }
+  }
+
+  for (const txn of transactions) {
+    const saleId = txn.sale_id
+    // Skip orphan transactions (no linked sale)
+    if (!saleId) continue
+
+    try {
+      // sale is the related record loaded via the Supabase join
+      const sale = (txn as unknown as { sale: { payment_status: string } | null }).sale
+      const salePaymentStatus = sale?.payment_status
+
+      // Already processed — nothing to do
+      if (salePaymentStatus === 'completed' || salePaymentStatus === 'failed') {
+        result.details.push({ saleId, status: txn.status, action: 'skipped_already_processed' })
+        continue
+      }
+
+      // ── Scenario A + B: Callback received but finalization failed ──
+      if (txn.callback_received_at && !txn.sale_finalized_at) {
+        if (txn.status === 'completed') {
+          await tumaActions.finalizePaymentSale(saleId)
+          result.details.push({ saleId, status: txn.status, action: 'finalized' })
+          result.recovered++
+          logger.info('[Recovery] Sale finalized (callback was processed)', { saleId, status: txn.status })
+        } else if (['failed', 'cancelled', 'timeout'].includes(txn.status)) {
+          await tumaActions.restoreInventoryForFailedPayment(saleId)
+          await tumaActions.failPaymentSale(saleId, txn.failure_reason || 'Payment failed (recovered)')
+          result.details.push({ saleId, status: txn.status, action: 'failed_with_restore' })
+          result.recovered++
+          logger.info('[Recovery] Sale failed + inventory restored', { saleId, status: txn.status })
+        }
+        continue
+      }
+
+      // ── Scenario C: No callback — timeout ──
+      if (!txn.callback_received_at && ['pending', 'processing'].includes(txn.status)) {
+        await tumaActions.restoreInventoryForFailedPayment(saleId)
+        await tumaActions.failPaymentSale(saleId, 'Payment timed out (recovered)')
+        result.details.push({ saleId, status: txn.status, action: 'timeout_with_restore' })
+        result.recovered++
+        logger.info('[Recovery] Sale timed out + inventory restored', { saleId, status: txn.status })
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error'
+      result.errors.push(`sale:${saleId}: ${msg}`)
+      logger.error('[Recovery] Failed to process transaction', { saleId, error: msg })
+    }
+  }
+
+  logger.info('[Recovery] Complete', {
+    recovered: result.recovered,
+    errors: result.errors.length,
+    totalChecked: transactions.length,
+  })
+
+  return result
 }

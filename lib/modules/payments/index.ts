@@ -12,7 +12,7 @@
  */
 
 // Tuma provider
-export { initiatePayment, handleCallback, getPaymentStatus, isTumaAvailable } from './tuma-service'
+export { initiatePayment, handleCallback, getPaymentStatus, isTumaAvailable, recoverPendingPayments } from './tuma-service'
 export type { InitiatePaymentResult, PaymentStatusResult, TumaCallbackPayload, TumaConfig } from './tuma-types'
 export { formatPhoneNumber } from './tuma-client'
 
@@ -26,5 +26,6 @@ export {
   failPaymentSale,
   restoreInventoryForFailedPayment,
   getPendingPaymentTransactions,
+  getStuckPaymentTransactions,
 } from './tuma-actions'
 export type { PaymentTransaction } from './tuma-actions'
