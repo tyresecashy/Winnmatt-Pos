@@ -28,7 +28,7 @@ A comprehensive Point-of-Sale (POS) and retail management system for multi-branc
 npm install
 
 # 2. Copy environment variables
-cp .env.local.example .env.local
+cp .env.example .env.local
 # Edit with your Supabase URL, anon key, and service role key
 
 # 3. Run database migrations against your Supabase project
